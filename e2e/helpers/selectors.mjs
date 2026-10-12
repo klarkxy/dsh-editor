@@ -29,7 +29,7 @@ export const S = Object.freeze({
   baseDialogOverlay: '.rt-BaseDialogOverlay',
   dropdownMenuContent: '.rt-DropdownMenuContent',
   radixThemes: 'html[data-dsh-ui] .radix-themes',
-  dshUiHtml: 'html[data-dsh-ui="dsh-official"]',
+  dshUiHtml: 'html[data-dsh-ui="dsh-yuangao"]',
   tier: '[data-tier]',
   body: 'body',
   form: 'form',

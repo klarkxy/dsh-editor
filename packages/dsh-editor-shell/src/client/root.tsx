@@ -17,6 +17,9 @@ import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, ZHIHU_SETTINGS_SLOT } from '../
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.tsx'
 import { redesignedStyles } from '../styles.ts'
+import { componentStyles, officialResourceStyles, responsiveStyles } from '../design-system/styles.ts'
+import { tokenStyles } from '../design-system/tokens.ts'
+import { collectStyles, defineStyles } from '../design-system/layers.ts'
 import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { DeepSeekWhaleMark, ShellErrorBoundary, useObservable } from './components.tsx'
@@ -30,7 +33,7 @@ import { ConfirmDialog } from './dialogs.tsx'
 import { PluginWorkspace } from './plugins-page.tsx'
 import { SettingsDialog, type SettingsRenderSlot } from './settings.tsx'
 import type { SettingsTab } from '../model/settings.ts'
-import { useAccent, useTheme } from './theme.tsx'
+import { useTheme } from './theme.tsx'
 import type { HostThemeSync } from '../model/theme.ts'
 
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
@@ -167,8 +170,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   useTransientSuccessNote(workbenchNote, expireWorkbenchNote)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
-  // 色彩风格只需订阅:模块级 store 负责落 data-accent,设置弹窗内改选时这里同步重渲染。
-  const [accent] = useAccent()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -525,7 +526,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
-      <ShellUiProvider theme={theme} accent={accent}>
+      <ShellUiProvider theme={theme}>
         <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
           sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
         <HomeScreen
@@ -608,7 +609,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       seatContext={seatContext} />
 
   return (
-    <ShellUiProvider theme={theme} accent={accent}>
+    <ShellUiProvider theme={theme}>
         <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
           sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
       <main
@@ -954,7 +955,15 @@ export function ExtensionsDock(props: { rootProps: unknown }) {
    去重标记保证 effect 重跑不会重复插入。 */
 function injectShellStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
-  const css = radixThemesStyles + redesignedStyles
+  /* design-system-spec §4：旧样式整体进 legacy 层（保持原有先后次序），
+     token 定义进 dsh.tokens 层，层序声明由 collectStyles 统一输出。 */
+  defineStyles('legacy', 'radix-themes', radixThemesStyles)
+  defineStyles('legacy', 'shell-legacy', redesignedStyles)
+  defineStyles('legacy', 'yuangao-components', componentStyles)
+  defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
+  defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
+  defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
+  const css = collectStyles()
   const existing = document.head.querySelector('style[data-dsh-editor-shell-styles]')
   if (existing) {
     existing.setAttribute('data-plugin', 'dsh-editor-shell')

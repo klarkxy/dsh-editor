@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 const owners = new Set([
   'packages/dsh-editor-shell/src/design-system/tokens.ts',
   'packages/dsh-editor-shell/src/design-system/styles.ts',
+  'packages/dsh-editor-shell/src/design-system/compat.ts',
+  'packages/dsh-editor-shell/src/design-system/dsw-vars.ts',
 ])
 
 export function isUiSource(path) {
@@ -23,6 +25,10 @@ const rules = [
   ['cascade-override', /!important\b/gi],
   ['literal-scale', /\b(?:border-radius|borderRadius|font-size|fontSize|font-weight|fontWeight|z-index|zIndex)\s*:\s*["']?(-?\d+(?:\.\d+)?(?:px|rem|em|%)?)(?=["'\s;,}])/g],
   ['literal-shadow', /\b(?:box-shadow|boxShadow|text-shadow|textShadow)\s*:\s*["']?(?:inset\s+)?-?\d[^;\n}"']*/g],
+  // 新文件不得再 import @radix-ui/themes；既有文件按增量基线只减不增。
+  ['radix-themes-import', /['"]@radix-ui\/themes(?:\/[^'"]*)?['"]/g],
+  // style={{}} 不写外观属性（design-system-spec §5）；布局属性不受影响。
+  ['inline-appearance', /style=\{\{[^{}]*?\b(?:color|background|border|borderRadius|boxShadow|fontSize|fontWeight|fontFamily|zIndex)\s*:[^{}]*?\}\}/g],
 ]
 
 export function findings(source) {

@@ -1,11 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
-  ACCENT_STORAGE_KEY,
+  LEGACY_ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
   decodeHostThemePreference,
   hostPreferenceToTheme,
   readInitialTheme,
-  readStoredAccent,
   themeToHostPreference,
   writeHostThemePreference,
   type HostThemePreference,
@@ -174,12 +173,17 @@ describe('legacy theme and accent migration', () => {
     expect(ink.data[THEME_STORAGE_KEY]).toBe('dark')
   })
 
-  it('migrates stored pine/ochre onto green/amber and persists the new value', () => {
-    const pine = memoryStorage({ [ACCENT_STORAGE_KEY]: 'pine' })
-    expect(readStoredAccent(pine)).toBe('green')
-    expect(pine.data[ACCENT_STORAGE_KEY]).toBe('green')
-    const ochre = memoryStorage({ [ACCENT_STORAGE_KEY]: 'ochre' })
-    expect(readStoredAccent(ochre)).toBe('amber')
-    expect(ochre.data[ACCENT_STORAGE_KEY]).toBe('amber')
-  })
+  it('leaves a stored legacy accent key untouched (C43)', async () => {
+    // G1 决策 3：自选主题色已删除；作者保存过的值不读、不迁移、不删。
+    vi.resetModules()
+    const storage = memoryStorage({ [LEGACY_ACCENT_STORAGE_KEY]: 'pine' })
+    vi.stubGlobal('localStorage', storage)
+    try {
+      await import('./client/theme.tsx')
+      await import('./model/theme.ts')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(storage.data[LEGACY_ACCENT_STORAGE_KEY]).toBe('pine')
+  }, 20000)
 })

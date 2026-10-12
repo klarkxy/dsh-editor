@@ -51,7 +51,7 @@ const ctx = { connection: { rpc: { async call(_channel, endpoint, body) {
   throw new Error(endpoint)
 } } } }
 createRoot(document.getElementById('root')).render(
-  <ShellTheme appearance={appearance} accent="blue">
+  <ShellTheme appearance={appearance}>
     <style>{radixThemesStyles}{redesignedStyles}</style>
     <ProposalCard ctx={ctx} sessionId="fixture-session" proposal={proposal} receiptId="fixture-result"
       onApplied={path => refreshedPaths.push(path)} />

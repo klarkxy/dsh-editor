@@ -1,26 +1,21 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { ACCENT_STORAGE_KEY, readStoredAccent } from '../model/theme.ts'
+import { DSW_MAP, DSW_PENDING } from './compat.ts'
+import { DSW_VARS } from './dsw-vars.ts'
 import { designSystemStyles } from './styles.ts'
 
-describe('official web design contracts', () => {
+describe('原稿 web design contracts', () => {
   it('checks token parity, contrast, isolation and scope lifecycle', () => {
     const script = fileURLToPath(new URL('../../../../scripts/check-ui-design.mjs', import.meta.url))
     const output = execFileSync(process.execPath, ['--experimental-strip-types', script], { encoding: 'utf8' })
-    expect(output).toContain('PASS native status labels meet 4.5:1 on their tinted backgrounds')
     expect(output).toMatch(/UI design checks: [1-9]\d* passed/)
   })
-  it('defaults to blue without overwriting existing accent preferences', () => {
-    const values = new Map<string, string>()
-    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) } }
-    expect(readStoredAccent(storage)).toBe('blue')
-    expect(values.size).toBe(0)
-    for (const accent of ['indigo', 'blue', 'teal', 'green', 'amber', 'crimson', 'violet']) {
-      values.set(ACCENT_STORAGE_KEY, accent)
-      expect(readStoredAccent(storage)).toBe(accent)
-      expect(values.get(ACCENT_STORAGE_KEY)).toBe(accent)
-    }
+  it('maps every scanned DSW variable or names it pending (§6)', () => {
+    const unaccounted = DSW_VARS.filter((name) => !(name in DSW_MAP) && !DSW_PENDING.includes(name))
+    expect(unaccounted).toEqual([])
+    expect(DSW_PENDING.length).toBeGreaterThan(0)
+    if (DSW_PENDING.length) console.log(`DSW pending (unclassified): ${DSW_PENDING.length}\n${DSW_PENDING.join('\n')}`)
   })
   it('keeps one manuscript-tree entry on one line', () => {
     expect(designSystemStyles).toMatch(/\.shell \.tree \.tree-name[^{]*\{[^}]*white-space: nowrap/)

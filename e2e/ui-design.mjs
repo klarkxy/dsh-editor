@@ -24,22 +24,6 @@ async function buttonPaint(page, name) {
   })
 }
 
-async function assertNamedAccent(page, name, colorName, brand) {
-  const painted = await page.getByRole('button', { name, exact: true }).evaluate((el, colorName) => {
-    const style = getComputedStyle(el)
-    const probe = document.createElement('span')
-    probe.style.backgroundColor = `var(--${colorName}-9)`
-    el.appendChild(probe)
-    const scale = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    return { bg: style.backgroundColor, accentAttr: el.getAttribute('data-accent-color'), scale }
-  }, colorName)
-  assert.equal(painted.accentAttr, colorName)
-  assert.equal(painted.bg, painted.scale)
-  assert.notEqual(painted.bg, brand)
-  assert.notEqual(painted.bg, 'rgb(65, 118, 230)')
-}
-
 async function assertPrimaryButtons(page, expected) {
   await page.waitForFunction(expected => {
     const adopt = [...document.querySelectorAll('button')].find(el => el.textContent === '采用')
@@ -57,31 +41,6 @@ async function assertPrimaryButtons(page, expected) {
   assert.equal(held.bg, expected.disabled)
   assert.equal(held.fg, expected.disabledText)
   assert.notEqual(held.bg, expected.enabled)
-  await assertNamedAccent(page, '撤回', 'red', expected.enabled)
-  await assertNamedAccent(page, '归档', 'gray', expected.enabled)
-}
-
-/*
- * The primary action must follow the saved accent, not stay neutral. Switching
- * the Theme's accentColor is exactly what the settings dialog does, so drive
- * the same attribute and read the real painted fill back. These are the pinned
- * ACCENT_SOLIDS fills, not Radix's accent-9, which cannot carry a white label.
- */
-async function assertAccentRepaintsPrimary(page, colorName, expected) {
-  await page.evaluate(({ sel, name }) => {
-    document.querySelector(sel).setAttribute('data-accent-color', name)
-  }, { sel: S.radixThemes, name: colorName })
-  // Buttons transition background-color, so the first frame after the swap is
-  // still the previous accent. Wait for the fill to settle before reading it.
-  await page.waitForFunction(expected => {
-    const button = [...document.querySelectorAll('button')].find(b => b.textContent === '采用')
-    return button && getComputedStyle(button).backgroundColor === expected
-  }, expected, { timeout: 5000 })
-  const painted = await page.getByRole('button', { name: '采用', exact: true })
-    .evaluate(el => ({ bg: getComputedStyle(el).backgroundColor, fg: getComputedStyle(el).color }))
-  assert.equal(painted.bg, expected, `${colorName} primary fill`)
-  // A filled button with no readable label is the failure this guards against.
-  assert.notEqual(painted.fg, expected, `${colorName} primary label`)
 }
 
 /*
@@ -114,7 +73,7 @@ async function assertRoundShapes(page) {
       if (!el) return { selector, missing: true }
       return { selector, shape: getComputedStyle(el).cornerShape }
     }
-    return ['.accent-swatch', '.activity-dots i', '.assistant-launcher', '.models-credential-dot', '.preset-badge'].map(read)
+    return ['.activity-dots i', '.assistant-launcher', '.models-credential-dot', '.preset-badge'].map(read)
   })
   for (const item of shapes) {
     assert.equal(item.missing, undefined, item.selector)
@@ -170,7 +129,7 @@ try {
   const paper = page.getByRole('textbox', { name: 'Manuscript fixture' })
   await paper.fill('保留的正文，切换主题不应丢失。')
   await paper.evaluate(el => { window.__paperNode = el; el.setSelectionRange(2, 5) })
-  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(244, 244, 243)')
+  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(232, 235, 230)')
   assert.equal(await page.locator(S.pluginSentinel).evaluate(el => getComputedStyle(el).borderRadius), '2px')
   const readingType = await page.locator(S.chatMarkdown).evaluate(el => {
     const paragraph = getComputedStyle(el.querySelector('p'))
@@ -182,29 +141,25 @@ try {
   assert(parseFloat(readingType.heading) > parseFloat(readingType.size))
   assert.equal(readingType.listSpacing,'8px')
   await assertRoundShapes(page)
-  // The primary action follows the saved accent. The fixture theme is blue, so
-  // these are ACCENT_SOLIDS.blue light, not the old neutral black.
+  // The primary action is the fixed 原稿 黛蓝 brand, not a saved accent.
   await assertPrimaryButtons(page, {
-    enabled: 'rgb(72, 104, 178)',
+    enabled: 'rgb(46, 79, 122)',
     enabledText: 'rgb(255, 255, 255)',
-    disabled: 'rgb(235, 235, 234)',
-    disabledText: 'rgb(95, 95, 95)',
+    disabled: 'rgba(30, 36, 32, 0.06)',
+    disabledText: 'rgb(92, 101, 94)',
   })
-  // amber and crimson are the two extremes of the saved set: the lightest and
-  // the most saturated. If either fails, the accent table needs a new value.
-  await assertAccentRepaintsPrimary(page, 'amber', 'rgb(171, 100, 0)')
-  await assertAccentRepaintsPrimary(page, 'crimson', 'rgb(203, 29, 99)')
-  await assertAccentRepaintsPrimary(page, 'blue', 'rgb(72, 104, 178)')
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const lightDialog = page.getByRole('dialog', { name: 'Writing settings' })
   await lightDialog.waitFor()
-  await assertSave(page, 'rgb(72, 104, 178)', 'rgb(255, 255, 255)')
+  await assertSave(page, 'rgb(46, 79, 122)', 'rgb(255, 255, 255)')
   await page.keyboard.press('Escape')
   await lightDialog.waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: /DSH Editor/ }).click()
   const menu = page.locator(S.dropdownMenuContent)
   await menu.waitFor()
-  assert.match(await menu.evaluate(el => getComputedStyle(el).backdropFilter), /blur/)
+  // 原稿菜单为实色，不模糊。
+  assert.equal(await menu.evaluate(el => getComputedStyle(el).backdropFilter), 'none')
+  assert.equal(await menu.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)')
   assert.equal(await menu.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
   await page.keyboard.press('Escape')
   await menu.waitFor({ state: 'hidden' })
@@ -212,25 +167,25 @@ try {
   await page.getByRole('button', { name: 'Toggle theme' }).click()
   await page.waitForFunction((sel) => {
     const chat = document.querySelector(sel)
-    return chat && getComputedStyle(chat).backgroundColor === 'rgb(38, 38, 38)'
+    return chat && getComputedStyle(chat).backgroundColor === 'rgb(21, 24, 22)'
   }, S.chat)
-  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 38, 38)')
+  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(21, 24, 22)')
   assert(await paper.evaluate(el => el === window.__paperNode))
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')
   await assertPrimaryButtons(page, {
-    enabled: 'rgb(122, 170, 255)',
-    enabledText: 'rgb(15, 17, 21)',
-    disabled: 'rgba(255, 255, 255, 0.07)',
-    disabledText: 'rgb(163, 163, 163)',
+    enabled: 'rgb(143, 176, 222)',
+    enabledText: 'rgb(20, 24, 27)',
+    disabled: 'rgba(218, 223, 214, 0.06)',
+    disabledText: 'rgb(151, 160, 150)',
   })
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Writing settings' })
   await dialog.waitFor()
-  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(46, 46, 46)')
+  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(37, 42, 38)')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
-  assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
+  assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '20px')
   assert.equal(await page.locator(S.baseDialogOverlay).evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')
-  await assertSave(page, 'rgb(122, 170, 255)', 'rgb(15, 17, 21)')
+  await assertSave(page, 'rgb(143, 176, 222)', 'rgb(20, 24, 27)')
   await page.screenshot({ path: fileURLToPath(new URL('dark-portal.png', out)), fullPage: true })
   await page.keyboard.press('Escape')
   await dialog.waitFor({ state: 'hidden' })
@@ -250,14 +205,14 @@ try {
   assert(await send.isDisabled())
   const disabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
   assert.equal(disabledBg, 'rgba(0, 0, 0, 0)', 'disabled send bg')
-  assert.notEqual(disabledBg, 'rgb(122, 170, 255)', 'disabled send must not show the brand primary')
+  assert.notEqual(disabledBg, 'rgb(143, 176, 222)', 'disabled send must not show the brand primary')
   await page.getByRole('textbox', { name: 'Chat input', exact: true }).fill('Test draft')
-  // Enabled must land on the full ACCENT_SOLIDS blue dark fill. Anything less
+  // Enabled must land on the full dark 黛蓝 brand fill. Anything less
   // opaque is a transition frame, not the settled contract.
-  await waitForSettledBackground(page, 'Send message', 'rgb(122, 170, 255)')
+  await waitForSettledBackground(page, 'Send message', 'rgb(143, 176, 222)')
   assert.equal(await send.isDisabled(), false)
   const enabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
-  assert.equal(enabledBg, 'rgb(122, 170, 255)', 'enabled send bg')
+  assert.equal(enabledBg, 'rgb(143, 176, 222)', 'enabled send bg')
   await send.click()
   await page.getByRole('status').filter({ hasText: 'Fixture message submitted' }).waitFor()
   for (const width of [1440, 1024, 760, 390]) {

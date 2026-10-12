@@ -29,6 +29,27 @@ test('comments and long hashes do not become colors; diagnostic line stays corre
   assert.equal(findings(source).length, 1)
   assert.equal(findings(source)[0].line, 5)
 })
+test('new files cannot import @radix-ui/themes; existing imports keep a shrinking budget', () => {
+  const before = `import { Theme } from '@radix-ui/themes'\nimport css from '@radix-ui/themes/styles.css'`
+  assert.deepEqual(regressions(before, before), [])
+  const added = regressions('', `import { Theme } from '@radix-ui/themes'`)
+  assert.equal(added.length, 1)
+  assert.equal(added[0].rule, 'radix-themes-import')
+  assert(regressions(before, `${before}\nimport { Button } from '@radix-ui/themes'`).some(f => f.rule === 'radix-themes-import'))
+  assert.deepEqual(regressions(before, `import { Theme } from '@radix-ui/themes'`), [])
+  assert.deepEqual(findings(`import { Switch } from '@radix-ui/react-switch'`), [])
+})
+test('inline appearance props in style={{}} fail; layout props pass', () => {
+  const bad = findings(`<div style={{ color: 'red', borderRadius: '4px' }} />
+    <div style={{ background: tokens.bg }} />
+    <div style={{ fontSize: '13px', zIndex: 60 }} />`)
+  assert.equal(bad.filter(f => f.rule === 'inline-appearance').length, 3)
+  assert.deepEqual(findings(`<div style={{ minWidth: 0 }} />
+    <div style={{ display: 'contents', height: '100%' }} />`), [])
+  const before = `<div style={{ color: 'red' }} />`
+  assert.deepEqual(regressions(before, before), [])
+  assert(regressions(before, `${before}\n<div style={{ boxShadow: 'none' }} />`).some(f => f.rule === 'inline-appearance'))
+})
 test('unchanged legacy literals pass, duplication and replacement do not', () => {
   const before = '.x { color: #ffffff; }'
   assert.deepEqual(regressions(before, before), [])

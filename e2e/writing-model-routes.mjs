@@ -38,7 +38,7 @@ const scopes=Object.fromEntries(['a','b'].map(id=>{
 }))
 let renderState
 window.routeFixture={calls,records,hold:id=>held.add(id),release:(id,error)=>{held.delete(id);const index=pending.findIndex(item=>item.id===id);if(index<0)throw Error('No pending '+id);pending.splice(index,1)[0].settle(error)},pending:()=>pending.map(x=>x.id),switch:id=>renderState(x=>({...x,id})),mount:mounted=>renderState(x=>({...x,mounted})),theme:appearance=>renderState(x=>({...x,appearance})),external:(id,patch)=>scopes[id].external(patch),capture:id=>scopes[id].capture(),readback:(id,old)=>scopes[id].readback(old)}
-function App(){const[state,setState]=useState({id:'a',mounted:true,appearance:'light'});renderState=setState;return <ShellTheme appearance={state.appearance} accent="blue"><style>{radixThemesStyles}{redesignedStyles}</style><main className="settings-content is-active" style={{padding:24,maxWidth:800}}>{state.mounted?<Routes scope={scopes[state.id].scope} catalog={catalog} writable={true}/>:null}</main></ShellTheme>}
+function App(){const[state,setState]=useState({id:'a',mounted:true,appearance:'light'});renderState=setState;return <ShellTheme appearance={state.appearance}><style>{radixThemesStyles}{redesignedStyles}</style><main className="settings-content is-active" style={{padding:24,maxWidth:800}}>{state.mounted?<Routes scope={scopes[state.id].scope} catalog={catalog} writable={true}/>:null}</main></ShellTheme>}
 createRoot(document.getElementById('root')).render(<App/>)
 `
  const bundle = await build({ stdin: { contents: fixture, loader: 'tsx', resolveDir: root }, bundle: true, write: false,

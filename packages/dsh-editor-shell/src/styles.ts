@@ -10,40 +10,14 @@ import { historyStyles } from './client/history-styles.ts'
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
+/* Palette and font variables now live only in design-system/tokens.ts
+   (dsh.tokens layer). This block keeps structural shell metrics only. */
 export const themeStyles = `
-.radix-themes {
-  --default-font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
-  --code-font-family: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
-  --font-size-1: 13px;
-}
 .radix-themes.shell-theme {
   --topbar-h: 52px;
   --control-h: 34px;
-  --paper-fill: var(--color-background);
   height: 100dvh;
   min-height: 0;
-}
-/* Light surfaces share one warm paper scale so chrome, dialogs and the
-   writing pane do not split into cold white + isolated cream. Accent
-   tokens stay on the selected colour style. */
-html:not([data-theme="dark"]),
-.radix-themes:not(.dark) {
-  --gray-1: #f4efe6;
-  --gray-2: #efe8dc;
-  --gray-3: #e6ddd0;
-  --gray-4: #ddd3c4;
-  --gray-5: #d2c6b5;
-  --gray-6: #c4b6a3;
-  --gray-7: #b3a38d;
-  --gray-8: #9c8b74;
-  --gray-9: #867560;
-  --gray-10: #766656;
-  --gray-11: #5a4e41;
-  --gray-12: #2a241c;
-  --color-background: #f2eee5;
-  --color-panel-solid: #f7f3eb;
-  --color-surface: color-mix(in srgb, #f7f3eb 86%, transparent);
-  --paper-fill: var(--color-background);
 }
 `
 
@@ -762,7 +736,7 @@ ${chatMessageStyles}
 .radix-themes .settings-row-text { flex: 1; }
 .radix-themes .settings-row-description { font-size: var(--font-size-1); line-height: 1.5; }
 .radix-themes .settings-dialog .settings-block + .settings-block { padding-top: var(--space-5); border-top: 1px solid var(--gray-a5); }
-.radix-themes .settings-dialog .rt-BaseButton:not(.accent-swatch):not([role="switch"]) { font-size: var(--font-size-2); min-height: var(--control-h); }
+.radix-themes .settings-dialog .rt-BaseButton:not([role="switch"]) { font-size: var(--font-size-2); min-height: var(--control-h); }
 .radix-themes .settings-dialog :is(input,textarea,select) { font-family: var(--default-font-family); font-size: var(--font-size-2); }
 .radix-themes .settings-dialog .rt-TextFieldRoot { min-height: var(--control-h); }
 .radix-themes .settings-dialog .rt-CalloutRoot { color: var(--accent-12); }
@@ -824,15 +798,6 @@ ${chatMessageStyles}
   --margin-bottom-override: 0px;
   --margin-left-override: 0px;
 }
-.radix-themes .accent-swatch {
-  width: 24px; height: 24px; padding: 0; margin: 0; flex-shrink: 0; border: 0; border-radius: 50%; cursor: pointer;
-  --margin-top-override: 0px; --margin-right-override: 0px; --margin-bottom-override: 0px; --margin-left-override: 0px;
-  box-shadow: 0 0 0 1px var(--gray-a6);
-}
-.radix-themes .accent-swatch.active {
-  box-shadow: 0 0 0 2px var(--color-panel-solid), 0 0 0 4px var(--accent-9);
-}
-
 .radix-themes .select { position: relative; display: inline-block; min-width: 0; }
 .radix-themes .settings-dialog .select-trigger[data-placeholder] .rt-SelectTriggerInner { color: var(--gray-11); }
 .radix-themes .settings-dialog .select-trigger { min-width: 184px; max-width: 100%; min-height: var(--control-h); font-size: var(--font-size-2); }

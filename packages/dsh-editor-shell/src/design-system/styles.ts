@@ -6,7 +6,7 @@
  * Upstream attribution: resources/third-party/deepseek-harness-MIT.txt.
  * The earlier Kimi Web notice remains at resources/third-party/kimi-web-MIT.txt.
  */
-import { SCOPE, tokenStyles, SHELL_ACCENTS, ACCENT_SOLIDS } from './tokens.ts'
+import { SCOPE, SCOPE_DARK, TOKEN_SCOPE, tokenStyles } from './tokens.ts'
 
 // Portalled menus share the HTML scope. Plugin surfaces inherit tokens but not
 // our element rules; plugins own their internal layout and component variants.
@@ -31,7 +31,7 @@ function withThemeSelf(selectors: readonly string[], declarations: string): stri
     const body = pseudo < 0 ? selector : selector.slice(0, pseudo)
     const after = pseudo < 0 ? '' : selector.slice(pseudo)
     const descendant = `${SCOPE} ${body}${excludePlugin}${after}`
-    const self = `${SCOPE.replace(' .radix-themes', '')} .radix-themes${body}${excludePlugin}${after}`
+    const self = `${TOKEN_SCOPE} .radix-themes${body}${excludePlugin}${after}`
     return [descendant, self]
   })
   return `${forms.join(',\n')} { ${declarations} }\n`
@@ -44,7 +44,6 @@ const roundShapes = [
   '.composer-actions .send', '.composer-actions .chat-stop', 'button.send', 'button.chat-stop',
   '.shell ::-webkit-scrollbar-thumb',
   '.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback',
-  '.accent-swatch',
   '.models-credential-dot',
   '.preset-badge', '.cards-badge',
   '.activity-dots i', '.panel-activity-dots i',
@@ -56,17 +55,6 @@ const roundShapes = [
 ]
 const cardSurface = 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none;'
 const menuSelectors = ['.rt-DropdownMenuContent', '.rt-ContextMenuContent', '.rt-SelectContent', '.rt-BaseMenuContent'] as const
-
-// Every saved accent needs its own swatch, and it must show the exact fill the
-// choice produces in the current mode, otherwise the picker offers colours the
-// shell will not use. Generated from the same table as the primary button.
-const accentSwatchStyles = SHELL_ACCENTS.flatMap((accent) => {
-  const selector = `.accent-swatch[data-swatch="${accent}"]${excludePlugin}`
-  return [
-    `${SCOPE} ${selector} { background: ${ACCENT_SOLIDS[accent].light.fill}; }`,
-    `${SCOPE}.dark ${selector} { background: ${ACCENT_SOLIDS[accent].dark.fill}; }`,
-  ]
-}).join('\n')
 
 
 export const componentStyles = [
@@ -140,7 +128,7 @@ export const componentStyles = [
   r(['.layout-controls button[aria-pressed="true"]'], 'background: var(--dsh-ui-sunken); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
   // Sunken reads as a hole in dark mode; pressed is a neutral on-state, so
   // dark uses the hover fill under the same inset hairline.
-  `${SCOPE}.dark .layout-controls button[aria-pressed="true"]${excludePlugin} { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); }`,
+  `${SCOPE_DARK} .layout-controls button[aria-pressed="true"]${excludePlugin} { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); }`,
   r(['.topbar-actions'], 'gap: var(--dsh-ui-space-1);'),
   r(['.shell .window-controls button.window-close:hover'], 'background: var(--dsh-ui-danger); color: #ffffff;'),
 
@@ -312,7 +300,7 @@ export const componentStyles = [
   r(['.proposal-conflict'], 'background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); border: 1px solid var(--dsh-ui-danger); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
 
-  // Portals. Menus keep the official translucent material. Modal masks stay sharp.
+  // Portals. Menus are a solid surface now (menu-blur: none). Modal masks stay sharp.
   withThemeSelf(menuSelectors, 'background: var(--dsh-ui-menu-fill); border: 0; border-radius: var(--dsh-ui-radius-lg); box-shadow: var(--dsh-ui-elevation-panel); backdrop-filter: var(--dsh-ui-menu-blur); -webkit-backdrop-filter: var(--dsh-ui-menu-blur);'),
   r(['.rt-DropdownMenuItem', '.rt-ContextMenuItem', '.rt-SelectItem', '.rt-BaseMenuItem'], 'min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm);'),
   r(['.rt-BaseMenuSeparator', '.rt-DropdownMenuSeparator', '.rt-ContextMenuSeparator'], 'height: 0.5px; background: var(--dsh-ui-line);'),
@@ -415,9 +403,9 @@ export const responsiveStyles = `
 }
 `
 
-const officialResourceStyles = `
+export const officialResourceStyles = `
 ${r(['.official-resource-panel'], `position: absolute; inset: 52px 0 0 auto; width: min(680px, 100%); overflow: hidden; background: var(--dsh-ui-bg); border-left: ${hairline}; box-shadow: none;`)}
 ${r(['.official-resource-panel[hidden]'], 'display: none;')}
 `
 
-export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}\n${accentSwatchStyles}`
+export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}`

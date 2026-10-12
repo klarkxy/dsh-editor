@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { ACCENT_TO_RADIX, SHELL_GRAY_COLOR, radixThemesStyles, rewriteRadixThemesCss } from './theme-root.ts'
+import { rewriteRadixThemesCss } from './theme-root.ts'
+import { SHELL_GRAY_COLOR, radixThemesStyles } from '../client/ui/theme-root.tsx'
 
 const require = createRequire(import.meta.url)
 const publishedCss = readFileSync(require.resolve('@radix-ui/themes/styles.css'), 'utf8')
@@ -28,19 +29,7 @@ describe('radix themes css rewrite', () => {
     expect(rewritten).toContain(':root:where(:has(.radix-themes[data-is-root-theme=')
   })
 
-  it('anchors neutrals on gray for the official web design adapter', () => {
+  it('anchors neutrals on the 原稿 gray ramp for the migration period', () => {
     expect(SHELL_GRAY_COLOR).toBe('gray')
-  })
-
-  it('maps stored accents onto Radix accent colors', () => {
-    expect(ACCENT_TO_RADIX).toEqual({
-      indigo: 'indigo',
-      blue: 'blue',
-      teal: 'teal',
-      green: 'green',
-      amber: 'amber',
-      crimson: 'crimson',
-      violet: 'violet',
-    })
   })
 })

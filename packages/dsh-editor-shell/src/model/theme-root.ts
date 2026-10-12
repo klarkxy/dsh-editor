@@ -1,7 +1,3 @@
-import type { ThemeProps } from '@radix-ui/themes'
-import radixThemesCss from '@radix-ui/themes/styles.css'
-import type { AccentValue } from './theme.ts'
-
 export function rewriteRadixThemesCss(css: string): string {
   const rewritten = css
     .replaceAll(':root, .light, .light-theme {', '.radix-themes, .light, .light-theme {')
@@ -11,17 +7,3 @@ export function rewriteRadixThemesCss(css: string): string {
   }
   return rewritten
 }
-
-export const radixThemesStyles = rewriteRadixThemesCss(radixThemesCss)
-
-export const ACCENT_TO_RADIX: Record<AccentValue, ThemeProps['accentColor']> = {
-  indigo: 'indigo',
-  blue: 'blue',
-  teal: 'teal',
-  green: 'green',
-  amber: 'amber',
-  crimson: 'crimson',
-  violet: 'violet',
-}
-
-export const SHELL_GRAY_COLOR: ThemeProps['grayColor'] = 'gray'

@@ -43,7 +43,7 @@ const controls = {
 Object.assign(window, { shellRepairs: controls })
 function Fixture() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  return <ShellTheme appearance={theme} accent="blue">
+  return <ShellTheme appearance={theme}>
     <style>{radixThemesStyles}{redesignedStyles}</style>
     <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>Toggle fixture theme</button>
     <SettingsModelsSection ctx={ctx} writingScope={{} as never} showWritingRoutes={false} />

@@ -1,16 +1,21 @@
 import { Theme, type ThemeProps } from '@radix-ui/themes'
+import radixThemesCss from '@radix-ui/themes/styles.css'
 import { useLayoutEffect, type ReactNode } from 'react'
-import type { AccentValue, ThemeValue } from '../../model/theme.ts'
-import { ACCENT_TO_RADIX, radixThemesStyles, SHELL_GRAY_COLOR } from '../../model/theme-root.ts'
-import { designSystemStyles } from '../../design-system/styles.ts'
-import { DESIGN_SYSTEM_ID } from '../../design-system/tokens.ts'
+import type { ThemeValue } from '../../model/theme.ts'
+import { rewriteRadixThemesCss } from '../../model/theme-root.ts'
 import { mountDesignScope } from '../../design-system/scope.ts'
 import { DesignSystemGallery } from '../../design-system/gallery.tsx'
 
+export const radixThemesStyles = rewriteRadixThemesCss(radixThemesCss)
 
+export const SHELL_GRAY_COLOR: ThemeProps['grayColor'] = 'gray'
+
+/*
+ * 迁移期 Radix Themes 的 accentColor 固定 indigo（design-system-spec §1）。
+ * 样式统一由 registerShellRoot 的 injectShellStyles 注入 head。
+ */
 export function ShellTheme(props: {
   appearance: ThemeValue
-  accent: AccentValue
   children?: ReactNode
 }) {
   // Scope includes body portals, but disappears when this shell unmounts.
@@ -20,13 +25,12 @@ export function ShellTheme(props: {
     <Theme
       className="shell-theme"
       appearance={props.appearance}
-      accentColor={ACCENT_TO_RADIX[props.accent]}
+      accentColor="indigo"
       grayColor={SHELL_GRAY_COLOR}
       radius="medium"
       scaling="100%"
       panelBackground="solid"
     >
-      <style data-dsh-design-styles={DESIGN_SYSTEM_ID}>{designSystemStyles}</style>
       {props.children}
       <DesignSystemGallery />
     </Theme>

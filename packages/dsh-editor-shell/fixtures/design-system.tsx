@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Badge, Button, Card, Dialog, DropdownMenu, Flex, IconButton, ScrollArea, Text, TextArea } from '@radix-ui/themes'
-import { ShellTheme } from '../src/client/ui/theme-root.tsx'
-import { radixThemesStyles } from '../src/model/theme-root.ts'
+import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
+import { designSystemStyles } from '../src/design-system/styles.ts'
 import { Markdown } from '../src/client/markdown.tsx'
 
 /** Browser contract fixture, not an Electron/runtime simulation. */
@@ -12,10 +12,9 @@ function Preview() {
   const [draft, setDraft] = useState('帮我把这段对话写得更自然。')
   const [selected, setSelected] = useState(2)
   const [sent, setSent] = useState(false)
-  // Mirrors root.tsx: ShellTheme already injects designSystemStyles, so this
-  // fixture must not add a second copy or it would no longer match production.
-  return <ShellTheme appearance={appearance} accent="blue">
-    <style>{radixThemesStyles}{redesignedStyles}{`
+  // Mirrors production injection order: radix + structural + design-system.
+  return <ShellTheme appearance={appearance}>
+    <style>{radixThemesStyles}{redesignedStyles}{designSystemStyles}{`
       .preview-panels { display:grid; grid-template-columns:248px minmax(0,1fr) 384px; min-height:0; }
       .preview-paper { width:100%; height:100%; resize:none; padding:32px; border:0; background:transparent; color:inherit; font:17px/1.9 serif; }
       .preview-sidebar { padding:8px 12px; }
@@ -57,7 +56,7 @@ function Preview() {
           <Flex className="editor-tools"><Button size="1" variant="ghost" color="gray">补全</Button><Button size="1" variant="ghost" color="gray">改写</Button><Button size="1" variant="ghost" color="gray">校对</Button></Flex>
         </main></div>
         <aside className="chat">
-          <Flex className="chat-header" align="center" justify="between" px="3"><Text weight="medium">写作搭档</Text><span className="preset-badge">预设</span><button type="button" className="accent-swatch" aria-label="Accent swatch" /><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge className="composer-mode" color="gray">小说创作</Badge></Flex>
+          <Flex className="chat-header" align="center" justify="between" px="3"><Text weight="medium">写作搭档</Text><span className="preset-badge">预设</span><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge className="composer-mode" color="gray">小说创作</Badge></Flex>
           <div className="chat-history"><ScrollArea style={{height:'100%'}}><Flex direction="column" gap="4" p="4">
             <div className="chat-row user"><Card>保留悬念，让人物说话更自然一点。</Card></div>
             <div className="chat-process"><button className="chat-process-toggle" onClick={event => { const target = event.currentTarget.nextElementSibling as HTMLElement; target.hidden = !target.hidden }}>已阅读 2 份资料 · 展开过程</button><div className="chat-process-body" hidden><Text size="1">章节正文、人物设定。该夹具没有连接模型服务。</Text></div></div>

@@ -1,12 +1,10 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Callout, Card, Flex, Heading, IconButton, Separator, Switch, Text } from '@radix-ui/themes'
+import { Button, Callout, Card, Flex, Heading, Separator, Switch, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
-import { useAccent } from './theme.tsx'
-import { ACCENT_VALUES, type AccentValue } from '../model/theme.ts'
-import { setLocale, t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
+import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
 import {
   DEVELOPER_SETTINGS_NAMESPACE,
   decodeDeveloperSettings,
@@ -27,16 +25,6 @@ import {
 type ThemePreference = 'light' | 'dark' | 'system'
 type LocalePreference = Locale
 type BusyEnterBehavior = 'queue' | 'steer'
-
-const ACCENT_LABEL_KEYS: Record<AccentValue, MessageKey> = {
-  indigo: 'settings.accent.indigo',
-  blue: 'settings.accent.blue',
-  teal: 'settings.accent.teal',
-  green: 'settings.accent.green',
-  amber: 'settings.accent.amber',
-  crimson: 'settings.accent.crimson',
-  violet: 'settings.accent.violet',
-}
 
 function decodePreference<T extends string>(values: readonly T[]) {
   return (value: unknown): { preference: T } | undefined => {
@@ -90,7 +78,6 @@ export function SettingsGeneralSection(props: {
   }), [props.ctx])
 
   const [theme, setTheme, themeWritable] = usePreference(scopes.theme, 'system')
-  const [accent, setAccent] = useAccent()
   const locale = useLocale()
   const [busyEnter, setBusyEnter, conversationWritable] = useBusyEnter(scopes.conversation)
   const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
@@ -145,31 +132,6 @@ export function SettingsGeneralSection(props: {
               onClick={() => setTheme(option.value)}>
               {option.label}
             </Button>)}
-          </Flex>} />
-        <Separator size="4" />
-        <Row
-          title={t('settings.accent')}
-          children={<Flex
-            className="settings-swatches"
-            role="group"
-            aria-label={t('settings.accent')}
-            align="center"
-            gap="2">
-            {ACCENT_VALUES.map((value) => <IconButton
-              key={value}
-              type="button"
-              variant="ghost"
-              size="1"
-              highContrast
-              className={accent === value ? 'accent-swatch active' : 'accent-swatch'}
-              data-swatch={value}
-              style={{ background: `var(--${value}-9)` }}
-              title={t(ACCENT_LABEL_KEYS[value])}
-              aria-label={t(ACCENT_LABEL_KEYS[value])}
-              aria-pressed={accent === value}
-              onClick={() => setAccent(value)}>
-              <span aria-hidden="true" />
-            </IconButton>)}
           </Flex>} />
         <Separator size="4" />
         <Row

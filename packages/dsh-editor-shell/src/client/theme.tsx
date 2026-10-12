@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t, useLocale } from '../i18n/index.ts'
 import { IconButton } from '@radix-ui/themes'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
@@ -7,10 +7,7 @@ import {
   hostPreferenceToTheme,
   persistTheme,
   readInitialTheme,
-  readStoredAccent,
   themeToHostPreference,
-  ACCENT_STORAGE_KEY,
-  type AccentValue,
   type HostThemeSync,
   type ThemeValue,
 } from '../model/theme.ts'
@@ -92,40 +89,6 @@ export function useTheme(
     syncRef.current?.request()
   }
   return [theme, setTheme]
-}
-
-/*
- * State is a module-level store: the settings dialog and shell root each
- * mount a hook instance and stay in sync through subscribe.
- */
-function applyAccent(_accent: AccentValue): void {
-  if (typeof document === 'undefined') return
-  document.documentElement.removeAttribute('data-accent')
-}
-
-const accentListeners = new Set<() => void>()
-let currentAccent: AccentValue | undefined
-
-function accentSnapshot(): AccentValue {
-  if (currentAccent === undefined) currentAccent = readStoredAccent(globalThis.localStorage)
-  return currentAccent
-}
-
-// Apply at import time so a leftover data-accent from a previous build is cleared.
-if (typeof document !== 'undefined') applyAccent(accentSnapshot())
-
-export function useAccent(): [AccentValue, (value: AccentValue) => void] {
-  const accent = useSyncExternalStore(
-    (listener) => { accentListeners.add(listener); return () => { accentListeners.delete(listener) } },
-    accentSnapshot,
-  )
-  const setAccent = (value: AccentValue) => {
-    currentAccent = value
-    try { globalThis.localStorage?.setItem(ACCENT_STORAGE_KEY, value) } catch { /* best-effort */ }
-    applyAccent(value)
-    for (const listener of [...accentListeners]) listener()
-  }
-  return [accent, setAccent]
 }
 
 export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {

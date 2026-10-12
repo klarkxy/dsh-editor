@@ -1,5 +1,3 @@
-import { DEFAULT_SHELL_ACCENT, SHELL_ACCENTS, type ShellAccent } from '../design-system/tokens.ts'
-
 export const THEME_STORAGE_KEY = 'dsh-editor.theme'
 export const THEME_VALUES = ['light', 'dark'] as const
 export type ThemeValue = (typeof THEME_VALUES)[number]
@@ -127,34 +125,7 @@ export function persistTheme(storage: Pick<Storage, 'setItem'> | undefined, them
 }
 
 /*
- * Accent is orthogonal to light/dark. Radix Themes owns the colour scales and
- * the shell Theme's `accentColor`; this store only persists the curated accent
- * name, and the design system maps that name onto the primary fill, selection,
- * bubble, links and focus. Selection lives in localStorage — the host ui-theme
- * namespace does not know accents, and host chrome does not need them.
+ * G1 决策 3：自选主题色已删除，作者保存过的旧键原样保留——不读也不删。
+ * 常量只用于契约测试确认没有代码路径再去触碰它（C43）。
  */
-export const ACCENT_STORAGE_KEY = 'dsh-editor.accent'
-export const ACCENT_VALUES = SHELL_ACCENTS
-export type AccentValue = ShellAccent
-
-const DEFAULT_ACCENT: AccentValue = DEFAULT_SHELL_ACCENT
-
-const LEGACY_ACCENT_VALUES: Record<string, AccentValue> = {
-  pine: 'green',
-  ochre: 'amber',
-}
-
-export function readStoredAccent(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined): AccentValue {
-  try {
-    const value = storage?.getItem(ACCENT_STORAGE_KEY)
-    if (value && (ACCENT_VALUES as readonly string[]).includes(value)) return value as AccentValue
-    const migrated = value ? LEGACY_ACCENT_VALUES[value] : undefined
-    if (migrated) {
-      try { storage?.setItem(ACCENT_STORAGE_KEY, migrated) } catch { /* Persistence is best-effort. */ }
-      return migrated
-    }
-  } catch {
-    /* Storage is best-effort; fall back to the default. */
-  }
-  return DEFAULT_ACCENT
-}
+export const LEGACY_ACCENT_STORAGE_KEY = 'dsh-editor.accent'

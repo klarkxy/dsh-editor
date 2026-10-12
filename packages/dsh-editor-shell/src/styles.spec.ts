@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { redesignedStyles } from './styles.ts'
 
 describe('chrome type scale', () => {
-  it('raises caption to the 13px floor and keeps chrome sizes on tokens', () => {
-    expect(redesignedStyles).toMatch(/\.radix-themes \{[^}]*--font-size-1: 13px/)
+  it('keeps chrome sizes on tokens only, with no leftover literal scale', () => {
+    // --font-size-1 is defined once in design-system/tokens.ts (dsh.tokens layer).
+    expect(redesignedStyles).not.toMatch(/--font-size-1:\s*\d+px/)
     expect(redesignedStyles).not.toMatch(/font-size:\s*1[123]px/)
     expect(redesignedStyles).not.toMatch(/font-size:\s*18px/)
     expect(redesignedStyles).toContain('.shell .chat-markdown h1 { font-size: var(--font-size-4)')
@@ -12,10 +13,13 @@ describe('chrome type scale', () => {
 })
 
 describe('paper pane alignment', () => {
-  it('warms the whole light theme and puts accent on selected settings chrome', () => {
-    expect(redesignedStyles).toContain('--color-background: #f2eee5')
-    expect(redesignedStyles).toContain('--color-panel-solid: #f7f3eb')
-    expect(redesignedStyles).toContain('--paper-fill: var(--color-background)')
+  it('keeps palette literals out of the structural sheet and accent on selected chrome', () => {
+    // 原稿 tokens own every --gray-* / --color-* / --paper-fill value; the
+    // structural sheet only consumes them.
+    expect(redesignedStyles).not.toMatch(/--color-background:\s*#/)
+    expect(redesignedStyles).not.toMatch(/--color-panel-solid:\s*#/)
+    expect(redesignedStyles).not.toMatch(/--gray-1:/)
+    expect(redesignedStyles).not.toMatch(/--paper-fill:\s*(?!var\()/)
     expect(redesignedStyles).toMatch(/\.radix-themes \.editor \{[^}]*background: var\(--paper-fill\)/)
     expect(redesignedStyles).toMatch(/\.shell \.editor-cell \{[^}]*background: var\(--paper-fill\)/)
     expect(redesignedStyles).toMatch(/\.settings-nav \.settings-tab\[data-state="active"\][^}]*background: var\(--accent-a3\)/)

@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import * as tokenModule from '../packages/dsh-editor-shell/src/design-system/tokens.ts'
 import {
-  LIGHT_TOKENS, DARK_TOKENS, DEFAULT_SHELL_ACCENT, DESIGN_SOURCE, DESIGN_SYSTEM_ID,
-  FOUNDATION_TOKENS, SHELL_ACCENTS, ACCENT_SOLIDS, SCOPE,
+  LIGHT_TOKENS, DARK_TOKENS, DESIGN_SOURCE, DESIGN_SYSTEM_ID,
+  FOUNDATION_TOKENS, SCOPE, SCOPE_DARK,
 } from '../packages/dsh-editor-shell/src/design-system/tokens.ts'
 import { componentStyles, designSystemStyles, uiRule } from '../packages/dsh-editor-shell/src/design-system/styles.ts'
 import { mountDesignScope } from '../packages/dsh-editor-shell/src/design-system/scope.ts'
+import { collectStyles, LAYER_ORDER_STATEMENT, STYLE_LAYERS } from '../packages/dsh-editor-shell/src/design-system/layers.ts'
+import { DSW_VARS } from '../packages/dsh-editor-shell/src/design-system/dsw-vars.ts'
+import { DSW_MAP, DSW_PENDING } from '../packages/dsh-editor-shell/src/design-system/compat.ts'
 
 let passed = 0
 function check(name, fn) { fn(); passed++; console.log(`PASS ${name}`) }
@@ -26,98 +30,84 @@ function contrast(a, b) {
   const x = luminance(a), y = luminance(b)
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
 }
-function mixColor(foreground, background, alpha) {
-  const rgb = value => value.slice(1).match(/../g).map(x => parseInt(x, 16))
-  const bg = rgb(background)
-  return '#' + rgb(foreground).map((value, index) => Math.round(value * alpha + bg[index] * (1 - alpha)).toString(16).padStart(2, '0')).join('')
+/** Composite an rgba() over a solid hex background. */
+function blend(value, background) {
+  const rgba = value.match(/rgba?\(([^)]+)\)/)
+  if (!rgba) return value
+  const [r, g, b, a = 1] = rgba[1].split(',').map(Number)
+  const back = background.slice(1).match(/../g).map(x => parseInt(x, 16))
+  return '#' + [r, g, b].map((channel, i) => Math.round(channel * a + back[i] * (1 - a)).toString(16).padStart(2, '0')).join('')
 }
-check('pinned official source, not third-party desktop', () => {
-  assert.equal(DESIGN_SYSTEM_ID, 'dsh-official')
-  assert.equal(DESIGN_SOURCE.repository, 'deepseek-ai/deepseek-harness')
-  assert.equal(DESIGN_SOURCE.revision, '639ed015397290b3745d163aafe02ffee4aa3f84')
-  assert.equal(DESIGN_SOURCE.tag, 'dsh-v0.2.0-rc.2')
-  assert.deepEqual(FOUNDATION_TOKENS['radius-xs'], '4px')
-  assert.equal(FOUNDATION_TOKENS['radius-sm'], '8px')
-  assert.equal(FOUNDATION_TOKENS['radius-md'], '12px')
-  assert.equal(FOUNDATION_TOKENS['radius-lg'], '16px')
-  assert.equal(FOUNDATION_TOKENS['radius-xl'], '20px')
-  assert.equal(FOUNDATION_TOKENS['radius-panel'], '28px')
-  assert.equal(LIGHT_TOKENS.bg, '#fafaf9')
-  assert.equal(LIGHT_TOKENS.surface, '#f0f0ef')
-  assert.equal(LIGHT_TOKENS.raised, '#ffffff')
-  assert.equal(LIGHT_TOKENS.sidebar, '#f4f4f3')
-  assert.equal(LIGHT_TOKENS.sunken, '#e9e9e8')
-  assert.equal(LIGHT_TOKENS.selected, '#e4e4e3')
-  assert.equal(LIGHT_TOKENS.hover, '#ebebea')
-  assert.equal(LIGHT_TOKENS.text, '#1f1f1f')
-  assert.equal(LIGHT_TOKENS.muted, '#5f5f5f')
-  assert.equal(LIGHT_TOKENS.accent, '#4176e6')
-  assert.equal(LIGHT_TOKENS.link, '#4868b2')
-  assert.equal(LIGHT_TOKENS.brand, ACCENT_SOLIDS.blue.light.fill)
-  assert.equal(LIGHT_TOKENS['on-brand'], ACCENT_SOLIDS.blue.light.on)
-  assert.equal(DARK_TOKENS.bg, '#1e1e1e')
-  assert.equal(DARK_TOKENS.surface, '#242424')
-  assert.equal(DARK_TOKENS.raised, '#2e2e2e')
-  assert.equal(DARK_TOKENS.sunken, '#181818')
-  assert.equal(DARK_TOKENS.selected, '#363636')
-  assert.equal(DARK_TOKENS.hover, 'rgba(255, 255, 255, 0.07)')
-  assert.equal(DARK_TOKENS.sidebar, '#262626')
-  assert.equal(DARK_TOKENS.text, '#dadada')
-  assert.equal(DARK_TOKENS.muted, '#a3a3a3')
-  assert.equal(DARK_TOKENS.accent, '#7aaaff')
-  assert.equal(DARK_TOKENS.link, '#7aaaff')
-  assert.equal(DARK_TOKENS.brand, ACCENT_SOLIDS.blue.dark.fill)
-  assert.equal(DARK_TOKENS['on-brand'], ACCENT_SOLIDS.blue.dark.on)
+
+check('own 原稿 design system pinned to the spec values', () => {
+  assert.equal(DESIGN_SYSTEM_ID, 'dsh-yuangao')
+  assert.equal(DESIGN_SOURCE.repository, 'dsh-editor')
+  assert.equal(DESIGN_SOURCE.tag, 'dsh-yuangao')
+  assert.equal(SCOPE, 'html[data-dsh-ui="dsh-yuangao"] :is(.radix-themes, [data-dsh-theme])')
+  assert.equal(SCOPE_DARK, 'html[data-dsh-ui="dsh-yuangao"] :is(.radix-themes.dark, [data-dsh-theme="dark"])')
+  assert.equal(LIGHT_TOKENS.chrome, '#E8EBE6')
+  assert.equal(LIGHT_TOKENS.bg, '#F7F8F4')
+  assert.equal(LIGHT_TOKENS.paper, '#F7F8F4')
+  assert.equal(LIGHT_TOKENS.raised, '#FFFFFF')
+  assert.equal(LIGHT_TOKENS.brand, '#2E4F7A')
+  assert.equal(LIGHT_TOKENS['on-brand'], '#FFFFFF')
+  assert.equal(LIGHT_TOKENS.marker, '#B23A2A')
+  assert.equal(LIGHT_TOKENS['margin-rule'], 'rgba(178, 58, 42, 0.35)')
+  assert.equal(DARK_TOKENS.chrome, '#151816')
+  assert.equal(DARK_TOKENS.bg, '#1C201D')
+  assert.equal(DARK_TOKENS.raised, '#252A26')
+  assert.equal(DARK_TOKENS.brand, '#8FB0DE')
+  assert.equal(DARK_TOKENS['on-brand'], '#14181B')
+  assert.equal(DARK_TOKENS.marker, '#E07A68')
+  assert.equal(FOUNDATION_TOKENS['radius-sm'], '6px')
+  assert.equal(FOUNDATION_TOKENS['radius-md'], '8px')
+  assert.equal(FOUNDATION_TOKENS['radius-panel'], '20px')
+  assert.equal(FOUNDATION_TOKENS['font-display'], '"Kaiti SC", "STKaiti", "KaiTi", "楷体", serif')
+  assert.equal(FOUNDATION_TOKENS['text-display'], '22px')
+  assert.equal(FOUNDATION_TOKENS['dim-opacity'], '0.55')
+  assert.equal(FOUNDATION_TOKENS['z-rail-overlay'], '40')
+  assert.equal(FOUNDATION_TOKENS['z-dropdown'], '50')
+  assert.equal(FOUNDATION_TOKENS['z-dialog'], '60')
 })
 check('light/dark token parity', () => assert.deepEqual(Object.keys(DARK_TOKENS).sort(), Object.keys(LIGHT_TOKENS).sort()))
-check('a new user gets blue and every saved accent reaches the primary action', () => {
-  assert.equal(DEFAULT_SHELL_ACCENT, 'blue')
-  assert(SHELL_ACCENTS.includes(DEFAULT_SHELL_ACCENT))
-  for (const name of ['accent', 'accent-hover', 'accent-solid', 'accent-soft', 'accent-border', 'on-accent', 'link']) {
-    assert(designSystemStyles.includes(`--dsh-ui-${name}: var(--accent-`))
+check('no accent system remains', () => {
+  for (const name of ['SHELL_ACCENTS', 'ACCENT_SOLIDS', 'DEFAULT_SHELL_ACCENT']) {
+    assert(!(name in tokenModule), `${name} export must be gone`)
   }
-  // The current location and the user bubble follow the accent as well. Without
-  // them a saved accent only shows up in links and never reads as the theme.
-  for (const name of ['selected', 'bubble']) {
-    assert(designSystemStyles.includes(`--dsh-ui-${name}: var(--accent-`), name)
-  }
-  for (const accent of SHELL_ACCENTS) {
-    const { light, dark } = ACCENT_SOLIDS[accent]
-    assert(designSystemStyles.includes(`${SCOPE}[data-accent-color="${accent}"] { --dsh-ui-brand: ${light.fill}; --dsh-ui-brand-hover: ${light.hover}; --dsh-ui-on-brand: ${light.on}; }`), `${accent} light`)
-    assert(designSystemStyles.includes(`${SCOPE}.dark[data-accent-color="${accent}"] { --dsh-ui-brand: ${dark.fill}; --dsh-ui-brand-hover: ${dark.hover}; --dsh-ui-on-brand: ${dark.on}; }`), `${accent} dark`)
-  }
+  // Radix's own data-accent-color attr stays for explicit component colours;
+  // the saved-accent override rules and the picker swatch are gone.
+  assert(!designSystemStyles.includes('--dsh-ui-accent: var(--accent-9'))
+  assert(!designSystemStyles.includes('accent-swatch'))
 })
-check('every saved accent keeps a readable primary fill in both modes', () => {
-  for (const accent of SHELL_ACCENTS) {
-    for (const [mode, tokens] of Object.entries(ACCENT_SOLIDS[accent])) {
-      assert(contrast(tokens.on, tokens.fill) >= 4.5, `${accent}/${mode} fill ${contrast(tokens.on, tokens.fill)}`)
-      assert(contrast(tokens.on, tokens.hover) >= 4.5, `${accent}/${mode} hover ${contrast(tokens.on, tokens.hover)}`)
-      // A label must not be the fill colour, or the button reads as empty.
-      assert(tokens.on.toLowerCase() !== tokens.fill.toLowerCase(), `${accent}/${mode}`)
-    }
+check('tokens carry no gradients or blur', () => {
+  for (const source of [LIGHT_TOKENS, DARK_TOKENS, FOUNDATION_TOKENS, DSW_MAP]) {
+    for (const value of Object.values(source)) assert(!/gradient|blur\(/.test(value), value)
   }
 })
 check('all referenced design tokens are defined', () => {
   const defined = new Set([...designSystemStyles.matchAll(/(--dsh-ui-[\w-]+)\s*:/g)].map(m => m[1]))
   for (const match of designSystemStyles.matchAll(/var\((--dsh-ui-[\w-]+)/g)) assert(defined.has(match[1]), match[1])
 })
-check('body, secondary text and small primary labels meet 4.5:1', () => {
+check('spec contrast pairs clear 4.5:1 in both modes', () => {
   for (const tokens of [LIGHT_TOKENS, DARK_TOKENS]) {
-    for (const surface of ['bg', 'surface', 'raised', 'sidebar']) {
-      for (const role of ['text', 'muted', 'link']) assert(contrast(tokens[role], tokens[surface]) >= 4.5, `${role}/${surface} ${contrast(tokens[role], tokens[surface])}`)
+    for (const [foreground, surface] of [
+      ['text', 'bg'], ['text', 'chrome'], ['text', 'raised'],
+      ['muted', 'bg'], ['muted', 'chrome'], ['muted', 'raised'],
+      ['on-brand', 'brand'], ['link', 'bg'], ['link', 'raised'],
+      ['danger', 'bg'], ['success', 'bg'], ['warning', 'bg'],
+    ]) {
+      assert(contrast(tokens[foreground], tokens[surface]) >= 4.5, `${foreground}/${surface} ${contrast(tokens[foreground], tokens[surface])}`)
     }
-    assert(contrast(tokens['on-accent'], tokens['accent-solid']) >= 4.5)
-    assert(contrast(tokens['on-brand'], tokens.brand) >= 4.5)
   }
 })
-check('native status labels meet 4.5:1 on their tinted backgrounds', () => {
+check('status text stays readable on its soft background', () => {
   for (const tokens of [LIGHT_TOKENS, DARK_TOKENS]) {
-    const info = mixColor(tokens.link, tokens.text, 0.85)
-    for (const foreground of [info, tokens.success, tokens.danger]) {
-      for (const surface of ['bg', 'surface', 'raised', 'sidebar']) {
-        const background = mixColor(foreground, tokens[surface], 0.1)
-        assert(contrast(foreground, background) >= 4.5, `${foreground}/${surface} ${contrast(foreground, background)}`)
-      }
+    for (const [foreground, surface] of [
+      ['success', 'success-soft'], ['warning', 'warning-soft'], ['danger', 'danger-soft'],
+      ['accent', 'raised'],
+    ]) {
+      const background = blend(tokens[surface], tokens.bg)
+      assert(contrast(tokens[foreground], background) >= 4.5, `${foreground}/${surface} ${contrast(tokens[foreground], background)}`)
     }
   }
 })
@@ -127,12 +117,12 @@ check('component rules stay out of plugin surfaces', () => {
 })
 check('unmount restores the previous host scope', () => {
   const root = host('original'); const dispose = mountDesignScope(root)
-  assert.equal(root.getAttribute('data-dsh-ui'), 'dsh-official'); dispose(); dispose()
+  assert.equal(root.getAttribute('data-dsh-ui'), 'dsh-yuangao'); dispose(); dispose()
   assert.equal(root.getAttribute('data-dsh-ui'), 'original')
 })
 check('nested roots and StrictMode do not leak or remove a live scope', () => {
   const root = host(); const one = mountDesignScope(root); const two = mountDesignScope(root)
-  one(); assert.equal(root.getAttribute('data-dsh-ui'), 'dsh-official'); two()
+  one(); assert.equal(root.getAttribute('data-dsh-ui'), 'dsh-yuangao'); two()
   assert.equal(root.getAttribute('data-dsh-ui'), null)
   const three = mountDesignScope(root); three(); assert.equal(root.getAttribute('data-dsh-ui'), null)
 })
@@ -140,6 +130,23 @@ check('cleanup never overwrites another host change', () => {
   const root = host(); const dispose = mountDesignScope(root)
   root.setAttribute('data-dsh-ui', 'another-host'); dispose()
   assert.equal(root.getAttribute('data-dsh-ui'), 'another-host')
+})
+check('layer order is declared once at the head of the collected sheet', () => {
+  const collected = collectStyles()
+  assert(collected.startsWith(LAYER_ORDER_STATEMENT))
+  assert.equal(LAYER_ORDER_STATEMENT, '@layer legacy, dsh.reset, dsh.tokens, dsh.components, dsh.surfaces, dsh.state;')
+  assert(!/@layer\s+(?!legacy\b|dsh\.)/.test(collected.replace(LAYER_ORDER_STATEMENT, '')))
+  let position = -1
+  for (const layer of STYLE_LAYERS) {
+    const at = collected.indexOf(`@layer ${layer} {`)
+    if (at >= 0) { assert(at > position, `${layer} out of order`); position = at }
+  }
+})
+check('DSW_MAP covers every scanned var or names it pending', () => {
+  const mapped = new Set(Object.keys(DSW_MAP))
+  const pending = new Set(DSW_PENDING)
+  for (const name of DSW_VARS) assert(mapped.has(name) || pending.has(name), `unclassified dsw var ${name}`)
+  for (const name of pending) assert(!mapped.has(name), `${name} is both mapped and pending`)
 })
 check('motion, forced-color and circle fallbacks are present', () => {
   assert(designSystemStyles.includes('prefers-reduced-motion: reduce'))
@@ -159,7 +166,7 @@ check('motion, forced-color and circle fallbacks are present', () => {
     '.composer-actions .send', '.composer-actions .chat-stop', 'button.send', 'button.chat-stop',
     '::-webkit-scrollbar-thumb',
     '.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback',
-    '.accent-swatch', '.models-credential-dot', '.preset-badge', '.cards-badge',
+    '.models-credential-dot', '.preset-badge', '.cards-badge',
     '.activity-dots i', '.panel-activity-dots i',
     '.activity-shimmer:not(:where(', '.activity-shimmer i',
     '.assistant-launcher:not(.capability-note)',
@@ -167,27 +174,16 @@ check('motion, forced-color and circle fallbacks are present', () => {
     '.chat-step-status', '.chat-step-error-dot',
   ]) assert(roundRule.includes(selector), selector)
   assert(!roundRule.includes('.chat-step-dot'))
-  assert(!roundRule.includes('.assistant-launcher:not(:where'))
-  assert(!roundRule.includes('.assistant-launcher.capability-note'))
+  assert(!roundRule.includes('.accent-swatch'))
 })
-check('menu material is the only blur; modal masks stay sharp', () => {
+check('menus are solid and no surface uses blur', () => {
   assert(!/(?:linear|radial)-gradient|https?:\/\/|!important/.test(componentStyles))
-  let blurred = 0
-  for (const block of componentStyles.split(/}\n/)) {
-    if (!/backdrop-filter/.test(block)) continue
-    const usesMenuBlur = /backdrop-filter:\s*var\(--dsh-ui-menu-blur\)/.test(block)
-    const clearsBlur = /backdrop-filter:\s*none/.test(block)
-    assert(usesMenuBlur !== clearsBlur, block.slice(0, 180))
-    if (usesMenuBlur) {
-      blurred += 1
-      assert(/rt-(?:DropdownMenuContent|ContextMenuContent|SelectContent|BaseMenuContent)/.test(block))
-      assert(!/Dialog|composer|\.rt-Card|Overlay|palette/.test(block))
-    } else {
-      assert(/Overlay|composer|\.rt-Card|palette|dismiss/.test(block))
-    }
-  }
-  assert.equal(blurred, 1)
-  assert(componentStyles.split(/}\n/).some(block => /\.rt-BaseDialogOverlay/.test(block) && /backdrop-filter:\s*none/.test(block)))
+  assert(!/blur\(/.test(componentStyles))
+  assert(/menu-fill/.test(componentStyles))
+  assert.equal(LIGHT_TOKENS['menu-blur'], 'none')
+  assert.equal(DARK_TOKENS['menu-blur'], 'none')
+  const overlayBlock = componentStyles.split(/}\n/).find(block => /\.rt-BaseDialogOverlay/.test(block) && /backdrop-filter/.test(block))
+  assert(overlayBlock && /backdrop-filter:\s*none/.test(overlayBlock))
 })
 check('accent location selection and unchanged editor typography contract', () => {
   assert(componentStyles.includes('background: var(--dsh-ui-selected)'))

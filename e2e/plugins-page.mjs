@@ -253,7 +253,7 @@ try {
       // The overview is a floating card; the proofread panel is a flat sidebar
       // section by design (校对与记忆面板成为侧栏区段).
       for (const [command, selector, close, radius] of [
-        ['文档概览',S.overviewPanelSurface,'关闭概览','28px'],
+        ['文档概览',S.overviewPanelSurface,'关闭概览','20px'],
         ['校对当前文档',S.proofreadPanelSurface,'关闭文稿校对','0px'],
       ]) {
         await openCommand(command)
