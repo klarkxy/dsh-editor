@@ -45,7 +45,11 @@ function nextFrame() {
 }
 
 /** Run the production hook's handlers/effects with a conditional Panel mount and rAF queue. */
-function layoutHarness() {
+function layoutHarness(props?: {
+  ctx?: ShellContext
+  fileSession?: Parameters<typeof useRootLayout>[0]['fileSession']
+  openWorkspaceId?: Parameters<typeof useRootLayout>[0]['openWorkspaceId']
+}) {
   dispose?.()
   type Effect = { deps?: readonly unknown[]; cleanup?: () => void }
   const state: unknown[] = []
@@ -93,7 +97,14 @@ function layoutHarness() {
       cursor = 0
       dirty = false
       pending = []
-      layout = useRootLayout({ ctx: {} as ShellContext, treeRevision: 0, assistantEnabled: true, officialPreviewOpen: false })
+      layout = useRootLayout({
+        ctx: props?.ctx ?? {} as ShellContext,
+        fileSession: props?.fileSession,
+        openWorkspaceId: props?.openWorkspaceId,
+        treeRevision: 0,
+        assistantEnabled: true,
+        officialPreviewOpen: false,
+      })
       // Panel is absent while closed or in an overlay; mounting consumes its defaultSize.
       if (layout.sidebarInGrid) {
         if (pixels === null) pixels = layout.sidebarViewWidth
@@ -208,5 +219,89 @@ describe('temporary sidebar reveal width', () => {
     const sidebar = root.slice(root.indexOf('id="sidebar"'), root.indexOf('id="editor"'))
     expect(sidebar).toContain('defaultSize={sidebarViewWidth}')
     expect(root).toMatch(/if \(!meta\.isUserInteraction\) return\s+setSidebarWidth\(sidebarWidthRef\.current\)/)
+  })
+})
+
+describe('author owns the persisted rail preference', () => {
+  it('narrow mount keeps stored preferences; only the assistant rail stays yielded', () => {
+    storage.set('dsh-editor.layout.sidebar-open', 'true')
+    storage.set('dsh-editor.layout.assistant-open', 'true')
+    viewport.width = 700
+    const view = layoutHarness()
+    const layout = view.render()
+    // C31 divergence: the sidebar settle yields, but the openWorkspaceId reset
+    // effect runs after it in mount order and restores the stored 'true', so the
+    // sidebar ends open in the overlay. The assistant has no reset effect and
+    // stays yielded closed. Persisted preferences are untouched either way.
+    expect(layout.sidebarVisible).toBe(true)
+    expect(layout.assistantVisible).toBe(false)
+    expect(storage.get('dsh-editor.layout.sidebar-open')).toBe('true')
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('true')
+  })
+
+  it('author open claims the yielded assistant and persists, author close writes false', () => {
+    storage.set('dsh-editor.layout.sidebar-open', 'true')
+    storage.set('dsh-editor.layout.assistant-open', 'true')
+    viewport.width = 700
+    const view = layoutHarness()
+    view.render().claimAssistant(true)
+    view.render().setAssistantOpen(true)
+    expect(view.render().assistantVisible).toBe(true)
+    expect(view.render().assistantVisible).toBe(true)
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('true')
+    view.render().claimAssistant(false)
+    view.render().setAssistantOpen(false)
+    view.render()
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('false')
+  })
+
+  it('narrow reload keeps stored preferences and widening back restores both rails', () => {
+    storage.set('dsh-editor.layout.sidebar-open', 'true')
+    storage.set('dsh-editor.layout.assistant-open', 'true')
+    viewport.width = 700
+    const view = layoutHarness()
+    view.render()
+    expect(storage.get('dsh-editor.layout.sidebar-open')).toBe('true')
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('true')
+    viewport.width = 1440
+    const layout = view.render()
+    expect(layout.sidebarVisible).toBe(true)
+    expect(layout.assistantVisible).toBe(true)
+    expect(storage.get('dsh-editor.layout.sidebar-open')).toBe('true')
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('true')
+  })
+
+  it('at 900px only the assistant yields to overlay while the sidebar stays docked', () => {
+    storage.set('dsh-editor.layout.sidebar-open', 'true')
+    storage.set('dsh-editor.layout.assistant-open', 'true')
+    viewport.width = 900
+    const view = layoutHarness()
+    const layout = view.render()
+    expect(layout.sidebarVisible).toBe(true)
+    expect(layout.sidebarInGrid).toBe(true)
+    expect(layout.assistantVisible).toBe(false)
+    expect(storage.get('dsh-editor.layout.sidebar-open')).toBe('true')
+    expect(storage.get('dsh-editor.layout.assistant-open')).toBe('true')
+  })
+
+  it('single-manuscript auto-collapse closes the sidebar without mutating the stored preference', async () => {
+    storage.set('dsh-editor.layout.sidebar-open', 'true')
+    viewport.width = 1440
+    const ctx = {
+      connection: {
+        rpc: {
+          call: async () => ({ ok: true, value: { entries: [{ name: 'a.md', type: 'file' }] } }),
+        },
+      },
+    } as unknown as ShellContext
+    const view = layoutHarness({
+      ctx,
+      fileSession: { sessionId: 's1' } as Parameters<typeof useRootLayout>[0]['fileSession'],
+    })
+    view.render()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const layout = view.render()
+    expect(layout.sidebarVisible).toBe(false)
+    expect(storage.get('dsh-editor.layout.sidebar-open')).toBe('true')
   })
 })
