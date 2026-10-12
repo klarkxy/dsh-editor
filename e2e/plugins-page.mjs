@@ -249,37 +249,38 @@ try {
         await page.waitForFunction(theme => document.querySelector('.shell-theme')?.classList.contains(theme), theme)
       }
       await page.waitForTimeout(350)
-      for (const [command, selector, close] of [
-        ['文档概览','.overview-panel','关闭概览'],
-        ['校对当前文档','.proofread-panel','关闭文稿校对'],
+      // The overview is a floating card; the proofread panel is a flat sidebar
+      // section by design (校对与记忆面板成为侧栏区段).
+      for (const [command, selector, close, radius] of [
+        ['文档概览','.overview-panel','关闭概览','28px'],
+        ['校对当前文档','.proofread-panel','关闭文稿校对','0px'],
       ]) {
         await openCommand(command)
         const panel = page.locator(selector)
         await panel.waitFor()
         await page.waitForTimeout(350)
-        assert.equal(await panel.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
+        assert.equal(await panel.evaluate(el => getComputedStyle(el).borderTopLeftRadius), radius)
         await shot(theme + '-' + selector.slice(1))
         await panel.getByRole('button',{name:close,exact:true}).click()
         await panel.waitFor({state:'hidden'})
       }
     }
     report.checks.push('real overview and proofread panels opened and closed in both themes')
-    // Current document actions live beside the file tree and remain usable
-    // after visiting the plugin page; the workspace menu owns workspace actions.
+    // The sidebar renders no 文档概览 / 校对当前文档 buttons: both commands stay
+    // reachable through the palette (verified above) and their registered
+    // shortcuts, with the editor focused so the keydown reaches the workspace.
     for (const theme of ['light', 'dark']) {
       if (!await page.locator('.shell-theme').evaluate((el, value) => el.classList.contains(value), theme)) {
         await page.locator('.theme-toggle').click()
         await page.waitForFunction(value => document.querySelector('.shell-theme')?.classList.contains(value), theme)
       }
-      if (!await page.locator('.side-document-tools').isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
-      const tools = page.locator('.side-document-tools')
-      for (const [name, selector, close] of [
-        ['文档概览', '.overview-panel', '关闭概览'],
-        ['校对当前文档', '.proofread-panel', '关闭文稿校对'],
+      assert.equal(await page.locator('.side-document-tools').count(), 0, theme + ': no sidebar document tool buttons')
+      await editor.focus()
+      for (const [shortcut, selector, close] of [
+        ['Control+Shift+O', '.overview-panel', '关闭概览'],
+        ['Control+Shift+L', '.proofread-panel', '关闭文稿校对'],
       ]) {
-        const command = tools.getByRole('button', { name, exact: true })
-        assert.equal(await command.count(), 1, theme + ': one reachable ' + name + ' action')
-        await command.click()
+        await page.keyboard.press(shortcut)
         const panel = page.locator(selector)
         await panel.waitFor()
         await shot(theme + '-sidebar-' + selector.slice(1))
@@ -287,7 +288,7 @@ try {
         await panel.waitFor({ state: 'hidden' })
       }
     }
-    report.checks.push('sidebar document overview and proofread actions remain reachable once in both themes')
+    report.checks.push('sidebar document tool buttons removed; overview and proofread panels open via Ctrl+Shift+O / Ctrl+Shift+L in both themes')
     report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     await chat.fill('')

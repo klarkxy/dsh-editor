@@ -53,10 +53,10 @@ export const LIGHT_TOKENS = {
   // One step down from pure white. Pure white paper plus near-black body text
   // is the glare source in light mode; the page now sits a step down and raised
   // surfaces stay the brightest layer, so cards read as cards by depth.
-  bg: '#f7f7f8', surface: '#eff0f2', raised: '#ffffff', sunken: '#e8e9ec',
-  sidebar: '#f0f1f3', text: '#1a1c1f', muted: '#5c6166', faint: '#7b8087',
-  line: 'rgba(0, 0, 0, 0.1)', 'line-strong': 'rgba(0, 0, 0, 0.16)',
-  selected: '#dde1e6', hover: '#e6e8eb',
+  bg: '#fafaf9', surface: '#f0f0ef', raised: '#ffffff', sunken: '#e9e9e8',
+  sidebar: '#f4f4f3', text: '#1f1f1f', muted: '#5f5f5f', faint: '#7a7a7a',
+  line: 'rgba(0, 0, 0, 0.08)', 'line-strong': 'rgba(0, 0, 0, 0.14)',
+  selected: '#e4e4e3', hover: '#ebebea',
   // Focus, business state and non-text accent. Small text uses the darker step.
   accent: '#4176e6', 'accent-hover': '#2f4c8f', 'accent-soft': '#edf3fe', 'accent-border': '#d3e2ff',
   'accent-solid': '#4868b2', 'on-accent': '#ffffff', link: '#4868b2',
@@ -82,10 +82,10 @@ export const LIGHT_TOKENS = {
 } as const
 
 export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
-  bg: '#151517', surface: '#1e1e20', raised: '#2a2a2c', sunken: '#0f0f11',
-  sidebar: '#1a1a1c', text: '#f9fafb', muted: '#adb2b8', faint: '#81858c',
-  line: 'rgba(255, 255, 255, 0.12)', 'line-strong': 'rgba(255, 255, 255, 0.2)',
-  selected: '#33353a', hover: 'rgba(255, 255, 255, 0.12)',
+  bg: '#1e1e1e', surface: '#242424', raised: '#2e2e2e', sunken: '#181818',
+  sidebar: '#262626', text: '#dadada', muted: '#a3a3a3', faint: '#7f7f7f',
+  line: 'rgba(255, 255, 255, 0.08)', 'line-strong': 'rgba(255, 255, 255, 0.16)',
+  selected: '#363636', hover: 'rgba(255, 255, 255, 0.07)',
   accent: '#7aaaff', 'accent-hover': '#b7c8fe',
   'accent-soft': 'rgba(122, 170, 255, 0.16)', 'accent-border': 'rgba(122, 170, 255, 0.4)',
   'accent-solid': '#7aaaff', 'on-accent': '#0f1115', link: '#7aaaff',
@@ -179,15 +179,15 @@ ${SCOPE} {
 ${cssVariables(FOUNDATION_TOKENS)}
 ${cssVariables(LIGHT_TOKENS)}
   color-scheme: light;
-  --gray-1: #ffffff; --gray-2: #f7f7f8; --gray-3: #eff0f2;
-  --gray-4: #e9ebee; --gray-5: #e2e5e9; --gray-6: #d7dbe1;
-  --gray-7: #c6cbd2; --gray-8: #a7acb3; --gray-9: #93989f;
-  --gray-10: #5c6166; --gray-11: #5c6166; --gray-12: #1a1c1f;
-  --gray-a1: rgba(38, 49, 72, 0.03); --gray-a2: rgba(38, 49, 72, 0.04); --gray-a3: rgba(38, 49, 72, 0.06);
-  --gray-a4: rgba(38, 49, 72, 0.1); --gray-a5: rgba(0, 0, 0, 0.1); --gray-a6: rgba(0, 0, 0, 0.12);
+  --gray-1: #ffffff; --gray-2: #fafaf9; --gray-3: #f4f4f3;
+  --gray-4: #ededec; --gray-5: #e6e6e5; --gray-6: #dcdcdb;
+  --gray-7: #cbcbca; --gray-8: #ababaa; --gray-9: #949494;
+  --gray-10: #5f5f5f; --gray-11: #5f5f5f; --gray-12: #1f1f1f;
+  --gray-a1: rgba(0, 0, 0, 0.02); --gray-a2: rgba(0, 0, 0, 0.03); --gray-a3: rgba(0, 0, 0, 0.05);
+  --gray-a4: rgba(0, 0, 0, 0.08); --gray-a5: rgba(0, 0, 0, 0.1); --gray-a6: rgba(0, 0, 0, 0.12);
   --gray-a7: rgba(0, 0, 0, 0.16); --gray-a8: rgba(0, 0, 0, 0.28);
-  --gray-a9: rgba(15, 17, 21, 0.52); --gray-a10: rgba(15, 17, 21, 0.62);
-  --gray-a11: rgba(15, 17, 21, 0.72); --gray-a12: rgba(15, 17, 21, 0.92);
+  --gray-a9: rgba(0, 0, 0, 0.48); --gray-a10: rgba(0, 0, 0, 0.58);
+  --gray-a11: rgba(0, 0, 0, 0.68); --gray-a12: rgba(0, 0, 0, 0.9);
   --default-font-family: var(--dsh-ui-font-ui);
   --code-font-family: var(--dsh-ui-font-mono);
   --font-size-1: var(--dsh-ui-text-xs);
@@ -231,15 +231,15 @@ ${cssVariables(LIGHT_TOKENS)}
 ${SCOPE}.dark {
 ${cssVariables(DARK_TOKENS)}
   color-scheme: dark;
-  --gray-1: #151517; --gray-2: #1b1b1c; --gray-3: #232324;
-  --gray-4: #2c2c2e; --gray-5: #353638; --gray-6: #43454a;
-  --gray-7: #535458; --gray-8: #81858c; --gray-9: #979da6;
-  --gray-10: #adb2b8; --gray-11: #adb2b8; --gray-12: #f9fafb;
+  --gray-1: #1e1e1e; --gray-2: #232323; --gray-3: #282828;
+  --gray-4: #2e2e2e; --gray-5: #353535; --gray-6: #3f3f3f;
+  --gray-7: #4d4d4d; --gray-8: #6e6e6e; --gray-9: #8a8a8a;
+  --gray-10: #a3a3a3; --gray-11: #a3a3a3; --gray-12: #dadada;
   --gray-a1: rgba(255, 255, 255, 0.03); --gray-a2: rgba(255, 255, 255, 0.05); --gray-a3: rgba(255, 255, 255, 0.08);
   --gray-a4: rgba(255, 255, 255, 0.14); --gray-a5: rgba(255, 255, 255, 0.12); --gray-a6: rgba(255, 255, 255, 0.16);
   --gray-a7: rgba(255, 255, 255, 0.2); --gray-a8: rgba(255, 255, 255, 0.32);
-  --gray-a9: rgba(249, 250, 251, 0.52); --gray-a10: rgba(249, 250, 251, 0.62);
-  --gray-a11: rgba(249, 250, 251, 0.72); --gray-a12: rgba(249, 250, 251, 0.92);
+  --gray-a9: rgba(218, 218, 218, 0.52); --gray-a10: rgba(218, 218, 218, 0.62);
+  --gray-a11: rgba(218, 218, 218, 0.72); --gray-a12: rgba(218, 218, 218, 0.92);
 }
 ${accentRoleRules}
 ${accentSolidRules}

@@ -78,7 +78,6 @@ export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatConte
 export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
   ctx: ShellContext
   sessionId: string
-  documentTools?: readonly { id: string; label: string; disabled?: boolean; run(): void }[]
   searchOpen: boolean
   searchQuery: string
   onSearchQueryChange(value: string): void
@@ -165,10 +164,6 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         </Menu>
         </Flex>
       </Flex>
-      {props.documentTools?.length ? <Flex className="side-document-tools" gap="2" px="3" pb="2" wrap="wrap">
-        {props.documentTools.map((tool) => <Button key={tool.id} size="1" variant="outline" color="gray"
-          className="side-document-tool" disabled={tool.disabled} onClick={tool.run}>{tool.label}</Button>)}
-      </Flex> : null}
       <TextField.Root
         ref={searchInput}
         data-workspace-search=""

@@ -19,7 +19,7 @@
  *   them back as user edits.
  */
 
-import { Annotation, RangeSet, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { Annotation, RangeSet, StateEffect, StateField, type EditorState, type Extension, type TransactionSpec } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { defineLanguageFacet, HighlightStyle, Language, LanguageSupport, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { Emoji, GFM, Subscript, Superscript, parser as lezerMarkdownParser } from '@lezer/markdown'
@@ -132,6 +132,18 @@ export const paperTheme: Extension = EditorView.theme({
     textUnderlineOffset: '3px',
     textDecorationThickness: 'from-font',
   },
+  '.cm-lp-bullet': {
+    color: 'var(--gray-10)',
+    marginInlineEnd: '0.15em',
+  },
+  '.cm-lp-task': {
+    accentColor: 'var(--accent-9)',
+    cursor: 'pointer',
+    verticalAlign: 'middle',
+    marginInlineEnd: '0.15em',
+    width: '0.95em',
+    height: '0.95em',
+  },
   /* FIM ghost inline widget. */
   '.cm-ghost': { color: 'var(--gray-9)', whiteSpace: 'pre-wrap' },
 })
@@ -170,6 +182,72 @@ const hrText = Decoration.mark({ class: 'cm-lp-hr' })
 
 const LINK_SYNTAX = new Set(['LinkMark', 'URL', 'LinkTitle', 'LinkLabel'])
 
+class BulletWidget extends WidgetType {
+  override eq(other: BulletWidget): boolean {
+    return other instanceof BulletWidget
+  }
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-lp-bullet'
+    span.textContent = '•'
+    return span
+  }
+}
+
+class TaskWidget extends WidgetType {
+  constructor(readonly checked: boolean) {
+    super()
+  }
+  override eq(other: TaskWidget): boolean {
+    return other.checked === this.checked
+  }
+  toDOM(view: EditorView): HTMLElement {
+    const input = document.createElement('input')
+    input.type = 'checkbox'
+    input.className = 'cm-lp-task'
+    input.checked = this.checked
+    input.setAttribute('aria-label', '待办')
+    input.addEventListener('mousedown', (event) => {
+      // Keep the caret where it is; the marker edit is a normal user change.
+      event.preventDefault()
+      const spec = toggleTaskMarker(view.state, view.posAtDOM(input))
+      if (spec) view.dispatch(spec)
+    })
+    return input
+  }
+  override ignoreEvent(event: Event): boolean {
+    return event.type === 'mousedown' || event.type === 'click'
+  }
+}
+
+/**
+ * Builds the transaction that flips the task marker at `pos` between `[ ]`
+ * and `[x]`/`[X]`, or returns null when the text at `pos` is not a task
+ * marker or editing is disabled. `pos` may sit anywhere inside the marker.
+ */
+export function toggleTaskMarker(state: EditorState, pos: number): TransactionSpec | null {
+  if (state.readOnly || !state.facet(EditorView.editable)) return null
+  for (let start = Math.max(0, pos - 3); start <= pos && start + 3 <= state.doc.length; start++) {
+    const text = state.doc.sliceString(start, start + 3)
+    if (text === '[ ]' || text === '[x]' || text === '[X]') {
+      return {
+        changes: { from: start + 1, to: start + 2, insert: text === '[ ]' ? 'x' : ' ' },
+        userEvent: 'input',
+      }
+    }
+  }
+  return null
+}
+
+const bulletDeco = Decoration.replace({ widget: new BulletWidget() })
+
+function listItemHasTask(item: { firstChild: { name: string; nextSibling: unknown } | null }): boolean {
+  for (let child = item.firstChild; child; child = child.nextSibling as typeof child) {
+    if (child.name === 'Task') return true
+  }
+  return false
+}
+
 type PreviewRange = { from: number; to: number; deco: Decoration }
 
 function hideInlineLink(node: { firstChild: { name: string; from: number; to: number; nextSibling: unknown } | null }, ranges: PreviewRange[]): void {
@@ -201,13 +279,17 @@ function hideInlineLink(node: { firstChild: { name: string; from: number; to: nu
 export type LivePreviewHost = {
   state: EditorState
   visibleRanges: readonly { from: number; to: number }[]
+  hasFocus?: boolean
 }
 
 export function buildLivePreview(view: LivePreviewHost): DecorationSet {
   const ranges: { from: number; to: number; deco: Decoration }[] = []
   const selection = view.state.selection
+  /* Only a focused editor keeps the caret line raw: on blur the whole paper
+   * renders as preview. Spec hosts omit hasFocus and keep raw-at-caret. */
+  const focused = view.hasFocus !== false
   const active = (from: number, to: number) =>
-    selection.ranges.some((range) => range.from <= to && range.to >= from)
+    focused && selection.ranges.some((range) => range.from <= to && range.to >= from)
   const pushLineDeco = (from: number, deco: Decoration) => ranges.push({ from, to: from, deco })
 
   const windows = view.visibleRanges.length > 0 ? view.visibleRanges : [{ from: 0, to: view.state.doc.length }]
@@ -224,8 +306,20 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
           return undefined
         }
         if (name === 'HeaderMark') {
-          // Only reached when the heading line itself is not active.
-          ranges.push({ from, to, deco: hiddenMark })
+          // Only reached when the heading line itself is not active. Fold the
+          // whitespace next to the mark into the hidden range so headings are
+          // not visibly indented (`# t` -> `t`, `t ##` -> `t`).
+          const line = view.state.doc.lineAt(from)
+          const before = view.state.doc.sliceString(line.from, from)
+          if (/^[ \t]*$/.test(before)) {
+            let end = to
+            while (end < line.to && /[ \t]/.test(view.state.doc.sliceString(end, end + 1))) end++
+            ranges.push({ from, to: end, deco: hiddenMark })
+          } else {
+            let start = from
+            while (start > line.from && /[ \t]/.test(view.state.doc.sliceString(start - 1, start))) start--
+            ranges.push({ from: start, to, deco: hiddenMark })
+          }
           return false
         }
         if (name === 'Link' || name === 'Image') {
@@ -247,7 +341,7 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
           return undefined
         }
         if (name === 'EmphasisMark') {
-          ranges.push({ from, to, deco: fadedMark })
+          ranges.push({ from, to, deco: hiddenMark })
           return false
         }
         if (name === 'InlineCode') {
@@ -259,7 +353,9 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
           return false
         }
         if (name === 'CodeMark') {
-          ranges.push({ from, to, deco: fadedMark })
+          // Backticks vanish in preview; fenced ``` marks stay visible but faded.
+          const parent = node.node.parent
+          ranges.push({ from, to, deco: parent && parent.name === 'InlineCode' ? hiddenMark : fadedMark })
           return false
         }
         if (name === 'Blockquote') {
@@ -271,9 +367,38 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
           }
           return undefined
         }
-        if (name === 'QuoteMark' || name === 'ListMark') {
+        if (name === 'QuoteMark') {
           const line = view.state.doc.lineAt(from)
-          if (!active(line.from, line.to)) ranges.push({ from, to, deco: fadedMark })
+          if (!active(line.from, line.to)) {
+            let end = to
+            if (end < line.to && view.state.doc.sliceString(end, end + 1) === ' ') end++
+            ranges.push({ from, to: end, deco: hiddenMark })
+          }
+          return false
+        }
+        if (name === 'ListMark') {
+          const line = view.state.doc.lineAt(from)
+          if (active(line.from, line.to)) return false
+          const item = node.node.parent
+          const task = item ? listItemHasTask(item) : false
+          if (task) {
+            // `- [ ] t` -> `☐ t`: the dash and its spacing disappear.
+            let end = to
+            while (end < line.to && /[ \t]/.test(view.state.doc.sliceString(end, end + 1))) end++
+            ranges.push({ from, to: end, deco: hiddenMark })
+          } else if (item && item.parent && item.parent.name === 'BulletList') {
+            ranges.push({ from, to, deco: bulletDeco })
+          } else {
+            ranges.push({ from, to, deco: fadedMark })
+          }
+          return false
+        }
+        if (name === 'TaskMarker') {
+          const line = view.state.doc.lineAt(from)
+          if (!active(line.from, line.to)) {
+            const checked = /[xX]/.test(view.state.doc.sliceString(from + 1, from + 2))
+            ranges.push({ from, to, deco: Decoration.replace({ widget: new TaskWidget(checked) }) })
+          }
           return false
         }
         if (name === 'HorizontalRule') {
@@ -303,6 +428,7 @@ export const livePreview: Extension = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
+        update.focusChanged ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildLivePreview(update.view)

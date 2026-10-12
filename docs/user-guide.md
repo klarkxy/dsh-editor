@@ -91,7 +91,7 @@ Editor 保留稿纸和写作搭档界面，通过 DSH 的公有布局合同与�
 | 功能 | 入口与说明 |
 | --- | --- |
 | 文稿校对 | `Ctrl+Shift+L` 或命令面板「校对当前文档」；[检查范围与名单](../packages/dsh-editor-proofread-panel/README.md) |
-| 文档概览 | 作品菜单「文档概览」或 `Ctrl+Shift+O`；[字数与写作曲线](../packages/dsh-editor-overview-panel/README.md) |
+| 文档概览 | 命令面板「文档概览」或 `Ctrl+Shift+O`；[字数与写作曲线](../packages/dsh-editor-overview-panel/README.md) |
 | 人物与世界书 | 文件树直接编辑；[可选目录快捷入口](../packages/dsh-editor-cards/README.md) |
 | 写作记忆 | 按需开启；查看规则、人物卡与世界书的维护历史并撤销写入，[面板说明](../packages/dsh-editor-memory-panel/README.md) |
 | 知乎资料 | 按需安装 `@klarkxy/dsh-zhihu` 后在插件页配置；[使用与上传须知](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) |

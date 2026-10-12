@@ -22,16 +22,26 @@ UI chrome uses the system font stack. Author typography for manuscript text is u
 
 `src/design-system/tokens.ts` owns the namespaced semantic tokens.
 
-Light surfaces sit one step down from pure white: page `#f7f7f8`, surface
-`#eff0f2`, sunken `#e8e9ec`, sidebar `#f0f1f3`, raised `#ffffff`, text `#1a1c1f`
-and muted `#5c6166`. Pure white paper with near-black body text was the
+Light surfaces sit one step down from pure white: page `#fafaf9`, surface
+`#f0f0ef`, sunken `#e9e9e8`, sidebar `#f4f4f3`, raised `#ffffff`, text `#1f1f1f`
+and muted `#5f5f5f`. Pure white paper with near-black body text was the
 light-mode glare source, so raised surfaces stay the brightest layer and cards
 read as cards by depth rather than by a pure-white comparison. Dark surfaces run
-the other way: background `#151517`, surface `#1e1e20`, raised `#2a2a2c`,
-sidebar `#1a1a1c`, sunken `#0f0f11` below the surface, text `#f9fafb` and muted
-`#adb2b8`. Links, business state and focus use `#4176e6` / `#7aaaff`. Small link
+the other way: background `#1e1e1e`, surface `#242424`, raised `#2e2e2e`,
+sidebar `#262626`, sunken `#181818` below the surface, text `#dadada` and muted
+`#a3a3a3`. Links, business state and focus use `#4176e6` / `#7aaaff`. Small link
 text uses the darker official step `#4868b2` in light so it stays at or above
 4.5:1. An unset accent defaults to blue.
+
+The chrome surfaces share the sidebar fill: the topbar, the assistant rail and
+the chat header all paint `--dsh-ui-sidebar`, so the window frame reads as one
+neutral band around the paper. The sidebar title row, the editor/pinned header
+and the chat header drop their bottom hairlines so each header blends into its
+own surface. File-tree rows use the 28px compact control height with a 4px
+radius, 13px text, flat hover fill, and muted icons; the current file uses the
+`--dsh-ui-selected` fill (tinted by the saved accent) plus medium weight,
+without the 3px accent bar. Home recent-work rows keep their wrapping block,
+inset hover hairline and accent-bar location cue.
 
 **The saved accent owns the shell, not only the links.** The primary action,
 the send button, the current location in the sidebar and settings, the user
@@ -51,7 +61,7 @@ and menu items, R16 code, diff and menus, R20 settings cards and bubbles, R28
 composer, dialogs and main floating panels. Circles and pills set `corner-shape: round`.
 `superellipse(1.5)` applies only inside `@supports`. Planar dividers and resting
 cards use a 0.5px neutral border and no shadow: dividers take `--dsh-ui-line`
-(`rgba(0, 0, 0, 0.1)` light, `rgba(255, 255, 255, 0.12)` dark) and cards take
+(`rgba(0, 0, 0, 0.08)` light, `rgba(255, 255, 255, 0.08)` dark) and cards take
 the stronger `--dsh-ui-line-strong`, with `.rt-Card`, `.home-card` and
 `.home-entry-card` on one shared surface rule and Radix's `::before`/`::after`
 decoration layers stripped. Settings blocks are the deliberate exception: inside

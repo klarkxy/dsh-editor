@@ -131,7 +131,7 @@ export const componentStyles = [
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
   r(['.shell'], 'background: var(--dsh-ui-bg); color: var(--dsh-ui-text); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-normal);'),
-  r(['.shell > .chrome'], `height: var(--topbar-h); background: var(--dsh-ui-bg); border-bottom: ${hairline}; box-shadow: none;`),
+  r(['.shell > .chrome'], `height: var(--topbar-h); background: var(--dsh-ui-sidebar); border-bottom: ${hairline}; box-shadow: none;`),
   r(['.workspace-menu-trigger'], 'border-radius: var(--dsh-ui-radius-md); background: transparent; color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.workspace-menu-trigger:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.layout-controls'], 'gap: var(--dsh-ui-space-1);'),
@@ -178,19 +178,26 @@ export const componentStyles = [
 
   // Neutral navigation: location is not a primary action.
   r(['.shell .sidebar'], `background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
-  r(['.shell .sidebar .side-title'], `min-height: var(--dsh-ui-header-height); border-bottom: ${hairline};`),
-  r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-muted);'),
+  r(['.shell .sidebar .side-title'], 'min-height: var(--dsh-ui-header-height); border-bottom: 0;'),
+  r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text);'),
   // Home recent-work rows stack a title, a path and a timestamp, so they keep the
   // wrapping block. File-tree rows do not: one entry is one line, and the full name
   // stays reachable through the row's title attribute.
   r(['.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal;'),
-  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-control-md); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); gap: var(--dsh-ui-space-2); border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-base);'),
+  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-control-xs); padding: 0 var(--dsh-ui-space-2); gap: var(--dsh-ui-space-2); border-radius: var(--dsh-ui-radius-xs); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  // Row icons are siblings of the name inside the row button; the hover actions
+  // sit in `.tree-row-actions` next to the row, not inside it.
+  r(['.shell .tree .tree-row svg'], 'color: var(--dsh-ui-muted); flex-shrink: 0;'),
   r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
   // The empty-tree message carried no inset of its own and sat flush against the panel
   // edge, under the search field that keeps the same content inset as the title.
   r(['.shell .tree .tree-empty'], 'padding-inline: var(--dsh-ui-space-3);'),
-  r(['.shell .tree .tree-row:hover', '.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
-  r(['.shell .tree .tree-row[aria-current="page"]', '.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: inset 3px 0 0 var(--dsh-ui-accent);'),
+  r(['.shell .tree .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: none;'),
+  r(['.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  // The current file keeps the accent-tinted selected fill; the medium weight is
+  // the non-colour cue now that the 3px accent bar is gone.
+  r(['.shell .tree .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); font-weight: var(--dsh-ui-weight-medium); box-shadow: none;'),
+  r(['.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: inset 3px 0 0 var(--dsh-ui-accent);'),
   r(['.shell .tree .tree-row::before'], 'display: none;'),
   r(['.shell .tree .tree-row[data-drop="true"]'], 'background: var(--dsh-ui-accent-soft); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-accent);'),
   r(['.shell .tree-row-actions'], 'opacity: 1;'),
@@ -217,13 +224,11 @@ export const componentStyles = [
   // The sidebar title gives up width first: the create action and the overflow
   // menu are controls, and the label is the one thing that can truncate.
   r(['.side-new-document'], 'flex-shrink: 0; white-space: nowrap;'),
-  r(['.side-document-tool'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); color: var(--dsh-ui-text); box-shadow: none; min-height: var(--dsh-ui-control-sm);'),
-  r(['.side-document-tool:hover:not(:disabled)'], 'background: var(--dsh-ui-hover);'),
 
   // Writing stays in the existing CodeMirror instance. Do not override the
   // author's font, size, line-height, line width or typography preferences.
   r(['.editor'], 'background: var(--dsh-ui-bg); --paper-pad-inline: clamp(24px, 4vw, 64px); --paper-pad-block: 32px;'),
-  r(['.editor-header', '.pinned-header'], `min-height: var(--dsh-ui-header-height); background: var(--dsh-ui-bg); border-bottom: ${hairline};`),
+  r(['.editor-header', '.pinned-header'], 'min-height: var(--dsh-ui-header-height); background: var(--dsh-ui-bg); border-bottom: 0;'),
   r(['.editor-doc-title'], 'color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.editor-header [data-testid="paper-wordcount"]', '.editor-header [data-testid="paper-save-state"]'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-variant-numeric: tabular-nums;'),
   r(['.editor-tools'], `background: var(--dsh-ui-bg); border-top: ${hairline}; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-4); gap: var(--dsh-ui-space-2);`),
@@ -233,8 +238,8 @@ export const componentStyles = [
   r(['.ghost.is-loading'], 'color: var(--dsh-ui-muted); background: none; animation: none;'),
 
   // Conversation: open assistant prose, one bubble fill, grouped process rows.
-  r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-surface);'),
-  r(['.chat-header'], `flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: ${hairline}; background: var(--dsh-ui-surface);`),
+  r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-sidebar);'),
+  r(['.chat-header'], 'flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: 0; background: var(--dsh-ui-sidebar);'),
   r(['.conversation-select .select-trigger'], 'border: 0; box-shadow: none; background: transparent; font-weight: var(--dsh-ui-weight-medium);'),
   r(['.chat-status', '.composer-mode'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
   r(['.chat .archived-conversations'], `flex-shrink: 0; border-bottom: ${hairline};`),

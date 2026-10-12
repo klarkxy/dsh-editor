@@ -125,7 +125,11 @@ export async function assertConfigNavLinksReachable(plugins) {
       left: box.left + parseFloat(style.borderLeftWidth || '0'),
       right: box.right - parseFloat(style.borderRightWidth || '0'),
     }
-    const links = [...element.querySelectorAll('.plugins-page-link')].map(link => {
+    // Links inside the collapsed 高级组件 <details> are intentionally not
+    // laid out until the author expands it; they are not "outside the box".
+    const links = [...element.querySelectorAll('.plugins-page-link')]
+      .filter(link => !link.closest('details:not([open])'))
+      .map(link => {
       const rect = link.getBoundingClientRect()
       return {
         label: link.textContent.trim(),

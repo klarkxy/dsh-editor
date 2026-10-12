@@ -169,7 +169,7 @@ try {
   const paper = page.getByRole('textbox', { name: 'Manuscript fixture' })
   await paper.fill('保留的正文，切换主题不应丢失。')
   await paper.evaluate(el => { window.__paperNode = el; el.setSelectionRange(2, 5) })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(239, 240, 242)')
+  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(244, 244, 243)')
   assert.equal(await page.locator('.plugin-sentinel').evaluate(el => getComputedStyle(el).borderRadius), '2px')
   const readingType = await page.locator('.chat-markdown').evaluate(el => {
     const paragraph = getComputedStyle(el.querySelector('p'))
@@ -186,8 +186,8 @@ try {
   await assertPrimaryButtons(page, {
     enabled: 'rgb(72, 104, 178)',
     enabledText: 'rgb(255, 255, 255)',
-    disabled: 'rgb(230, 232, 235)',
-    disabledText: 'rgb(92, 97, 102)',
+    disabled: 'rgb(235, 235, 234)',
+    disabledText: 'rgb(95, 95, 95)',
   })
   // amber and crimson are the two extremes of the saved set: the lightest and
   // the most saturated. If either fails, the accent table needs a new value.
@@ -211,21 +211,21 @@ try {
   await page.getByRole('button', { name: 'Toggle theme' }).click()
   await page.waitForFunction(() => {
     const chat = document.querySelector('.chat')
-    return chat && getComputedStyle(chat).backgroundColor === 'rgb(30, 30, 32)'
+    return chat && getComputedStyle(chat).backgroundColor === 'rgb(38, 38, 38)'
   })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(30, 30, 32)')
+  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 38, 38)')
   assert(await paper.evaluate(el => el === window.__paperNode))
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')
   await assertPrimaryButtons(page, {
     enabled: 'rgb(122, 170, 255)',
     enabledText: 'rgb(15, 17, 21)',
-    disabled: 'rgba(255, 255, 255, 0.12)',
-    disabledText: 'rgb(173, 178, 184)',
+    disabled: 'rgba(255, 255, 255, 0.07)',
+    disabledText: 'rgb(163, 163, 163)',
   })
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Writing settings' })
   await dialog.waitFor()
-  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(42, 42, 44)')
+  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(46, 46, 46)')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
   assert.equal(await page.locator('.rt-BaseDialogOverlay').evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')

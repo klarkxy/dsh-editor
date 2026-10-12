@@ -411,7 +411,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     })),
     [commandTick, commands, hasFileSession, locale, seatContext, seatRegistryContext],
   )
-  const documentTools = useMemo(() => ['overview', 'proofread-document'].flatMap((id) => registryCommands.filter((item) => item.id === id)), [registryCommands])
   /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
   const refreshWrittenPath = useCallback((writtenPath: string) => {
     setTreeRevision((old) => old + 1)
@@ -579,7 +578,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       onReplaceOutcomeChange={onSearchReplaceOutcomeChange}
       replaceBusy={searchReplaceBusy}
       onReplaceBusyChange={setSearchReplaceBusy}
-      documentTools={documentTools}
       onSearchRequestOpen={onSearchRequestOpen}
       onSearchRequestClose={onSearchRequestClose}
       onOpenDocument={openDocument}
