@@ -8,6 +8,8 @@
 - [界面设计](ui-design.md)：官方 deepseek-harness Web 视觉适配、主题色归属、组件预览与验证范围（更早的 Kimi Web 适配保留为历史许可证归属）。
 - [UI/UX 实测记录](ui-ux-audit-2026-10.md)：真实前端里的测量结论、修复前后数字与仍未解决的问题。
 - [UI 施工约定](ui-agent-guide.md)：给 Agent 的组件用法、改动边界、防偏移检查与验收证据。
+- [界面行为契约](ui-behavior-contracts.md)：外观改动不得改变的行为、实现位置、现有测试覆盖与缺口。
+- [界面重写前的 UX 审计](redesign/ux-audit.md)：`redesign/ui-v2` 重写的问题清单、流程成本与门禁基线。
 - [DSH 0.1.7 升级审计](dsh-0.1.7-upgrade.md)（历史留档，已完成）：兼容性修复、能力重叠与验收范围。
 - [AI 插件](ai-plugins-implementation.md)：当前插件、原生模型设置、退役与历史验证边界。
 - [Fusion 协作实现](fusion-implementation.md)（历史留档，已移除）：旧的配对、任务与候选边界。
