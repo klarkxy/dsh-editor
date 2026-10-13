@@ -23,12 +23,13 @@ const report = { stage, pages: [], errors: [], checks: [] }
 let app, page
 const openSettings = async () => {
   await page.locator(S.nativeSettingsButton).click()
-  const settings = page.getByRole('dialog', { name: '设置', exact: true })
-  await settings.waitFor()
+  const settings = page.locator(S.settingsDialog)
+  await settings.waitFor({ state: 'visible' })
   return settings
 }
 const closeSettings = async () => {
-  await page.getByRole('dialog', { name: '设置', exact: true }).getByRole('button', { name: '关闭设置', exact: true }).click()
+  await page.locator(S.settingsDialog).locator(S.settingsBack).click()
+  await page.locator(S.settingsDialog).waitFor({ state: 'hidden' })
 }
 const shot = async name => {
   await page.screenshot({ path: resolve(output, name + '.png') })
@@ -58,10 +59,17 @@ try {
   if (await later.isVisible()) await later.click()
   for (const theme of ['浅色', '深色']) {
     const settings = await openSettings()
-    await settings.getByRole('tab', { name: '通用设置', exact: true }).click()
-    await settings.getByRole('button', { name: theme, exact: true }).click()
-    const labels = await settings.locator(S.settingsNavTab).allTextContents()
-    assert(!labels.some(label => /插件|知乎|网络搜索|记忆/.test(label)), labels.join(','))
+    await settings.locator(S.settingsNavSection('appearance')).click()
+    await settings.getByRole('radio', { name: theme, exact: true }).click()
+    /* 固定导航是规格分区集合；插件配置链接另列在「插件配置」分组里。 */
+    const navIds = await settings.locator('[data-testid^="settings-nav-"]').evaluateAll(nodes =>
+      nodes.map(node => node.getAttribute('data-testid')))
+    assert.deepEqual(navIds, [
+      'settings-nav-writing', 'settings-nav-models', 'settings-nav-assistant',
+      'settings-nav-appearance', 'settings-nav-shortcuts',
+      'settings-nav-plugins-installed', 'settings-nav-plugins-discovery', 'settings-nav-plugins-manager',
+      'settings-nav-usage', 'settings-nav-about', 'settings-nav-advanced',
+    ], navIds.join(','))
     await shot(theme + '-settings')
     await closeSettings()
     await page.locator(S.pluginsTrigger).click()
@@ -125,7 +133,7 @@ try {
     await editor.waitFor()
     const paper = page.locator(S.paperEditor)
     const writingSettings = await openSettings()
-    await writingSettings.getByRole('tab', {name:'写作',exact:true}).click()
+    await writingSettings.locator(S.settingsNavSection('writing')).click()
     for (const name of ['字号', '行距']) {
       const slider = writingSettings.getByRole('slider', {name,exact:true})
       await slider.focus()
@@ -136,12 +144,15 @@ try {
       }
     }
     for (const [name, option] of [['字体','无衬线'], ['稿纸宽度','窄栏']]) {
-      await writingSettings.getByRole('combobox', {name,exact:true}).click()
-      await page.getByRole('option', {name:option,exact:true}).click()
+      await writingSettings.getByRole('radio', {name:option,exact:true}).click()
     }
     const paragraphFocus = writingSettings.getByRole('switch', {name:'聚焦当前段落',exact:true})
-    if (!await paragraphFocus.isChecked()) await paragraphFocus.click()
+    if (await paragraphFocus.getAttribute('aria-checked') !== 'true') await paragraphFocus.click()
     await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('聚焦当前段落'))
+    /* 新增的稿纸开关也走同一写契约：打开后预览与编辑器变量即时变化。 */
+    const firstLineIndent = writingSettings.getByRole('switch', {name:'首行缩进',exact:true})
+    if (await firstLineIndent.getAttribute('aria-checked') !== 'true') await firstLineIndent.click()
+    await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('首行缩进'))
     await closeSettings()
     await page.waitForFunction(sel => {
       const paper = document.querySelector(sel)

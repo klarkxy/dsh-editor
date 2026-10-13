@@ -11,8 +11,7 @@ import {
 } from '../../model/home-resume.ts'
 import { AppBrandMark, DotsIcon } from '../../client/icons.tsx'
 import { CommandPaletteTrigger } from '../../client/command-palette.tsx'
-import { PluginsTrigger } from '../../client/plugins-page.tsx'
-import { SettingsTrigger } from '../../client/settings.tsx'
+import { PluginsTrigger, SettingsTrigger } from '../../client/settings.tsx'
 import type { SettingsTab } from '../../model/settings.ts'
 import { WindowControls } from '../../client/window-controls.tsx'
 import { titleBarDoubleClick } from '../../model/window-controls.ts'
@@ -179,7 +178,6 @@ export function HomeScreen(props: {
   onCancelRemoveRecent(): void
   onConfirmRemoveRecent(): void
   dialogs: ReactNode
-  settingsDialog: ReactNode
   onOpenPalette(): void
   onOpenSettings(tab?: SettingsTab): void
   onOpenPlugins(): void
@@ -305,7 +303,6 @@ export function HomeScreen(props: {
         tone="danger"
         onCancel={props.onCancelRemoveRecent}
         onConfirm={() => void props.onConfirmRemoveRecent()} />
-      {props.settingsDialog}
     </main>
   );
 }

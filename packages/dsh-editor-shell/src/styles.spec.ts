@@ -3,6 +3,7 @@ import { redesignedStyles } from './styles.ts'
 import { collectStyles } from './design-system/layers.ts'
 import './app/files/files-rail.styles.ts'
 import './app/home/home.styles.ts'
+import './ui/list-row.styles.ts'
 
 const filesRailStyles = collectStyles()
 
@@ -28,7 +29,8 @@ describe('paper pane alignment', () => {
     expect(redesignedStyles).not.toMatch(/--paper-fill:\s*(?!var\()/)
     expect(redesignedStyles).toMatch(/\.radix-themes \.editor \{[^}]*background: var\(--paper-fill\)/)
     expect(redesignedStyles).toMatch(/\.shell \.editor-cell \{[^}]*background: var\(--paper-fill\)/)
-    expect(redesignedStyles).toMatch(/\.settings-nav \.settings-tab\[data-state="active"\][^}]*background: var\(--accent-a3\)/)
+    /* C36 退役后设置导航是 ListRow 行：选中态走共享的 --dsh-ui-selected。 */
+    expect(filesRailStyles).toMatch(/\.dsh-list-row\[data-selected\][^}]*background: var\(--dsh-ui-selected\)/)
     /* 首页 chrome 与工作台顶栏同约定：底边只有 hairline，不再有 accent 条。 */
     expect(redesignedStyles).not.toMatch(/\.shell > \.chrome \{[^}]*box-shadow/)
   })

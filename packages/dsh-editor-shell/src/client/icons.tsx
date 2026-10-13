@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 import appIconUrl from './assets/app-icon.webp';
 
 type IconProps = { size?: number }
@@ -16,7 +16,7 @@ function svg(size: number, ...children: ReactNode[]) {
       strokeLinecap="round"
       aria-hidden="true"
       focusable="false">
-      {children}
+      {Children.toArray(children)}
     </svg>
   );
 }
@@ -166,6 +166,12 @@ export function RegistryCommandIcon({ size = 16 }: IconProps) {
     <rect x="4.5" y="4.5" width="15" height="15" rx="2" />,
     <path d="M12 8.5v7" />,
     <path d="M8.5 12h7" />,
+  );
+}
+
+export function PluginIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <path d="M9 3h6v4a3 3 0 1 1 0 6v4H9a3 3 0 1 0-6 0v-6h4a3 3 0 1 1 2-8Z" />,
   );
 }
 

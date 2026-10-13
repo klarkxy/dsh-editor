@@ -1,19 +1,21 @@
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Separator, Slider, Switch, Text } from '@radix-ui/themes'
+import { Button, Callout, Card, Flex, Heading, Kbd, Separator, Text } from '@radix-ui/themes'
 import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { COMPLETION_DELAY, normalizeWritingEffort, normalizeWritingModelRoute, object, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
+import { normalizeTypography, typographyCssVariables } from 'dsh-manuscript/client/editor-core'
 import { t, useLocale } from './i18n/index.ts'
 import { ActivityDots } from './client/ui/index.ts'
+import { RadioGroup, SegmentedControl, Slider, Switch } from './ui/index.ts'
 import { Select } from './client/select.tsx'
+import type { CSSProperties } from 'react'
 import { runtimeShortcutHint } from './palette-shortcut.ts'
 
 
@@ -215,59 +217,48 @@ export type WritingSettingsSlots = {
 }
 
 /*
- * 写作设置页内容。渲染进 shell 自建的设置弹窗（settings.tsx）的"写作"
- * 标签页;上游 DSH 设置弹窗（settings.section slot）在桌面 profile 中已被
- * 禁用,不再注册进去。
+ * 写作设置页内容。渲染进全页设置（app/settings/settings-page.tsx）的"写作"
+ * 分区；右侧预览与编辑器共用同一组 --paper-* 排版变量，不复制第二套排版实现。
  * 作者侧写不对作者暴露设置入口,由助手观察后静默写入,超限时自动淘汰最旧的自动条目。
  */
-function LabeledSlider(props: {
-  label: string
-  valueLabel: string
-  value: number
-  min: number
-  max: number
-  step: number
-  onValueChange(value: number): void
-}) {
-  const root = useRef<HTMLSpanElement | null>(null)
-  useLayoutEffect(() => {
-    const thumb = root.current?.querySelector<HTMLElement>('[role="slider"]')
-    if (thumb) thumb.setAttribute('aria-label', props.label)
-  }, [props.label, props.value])
+function SettingRow(props: { title: string; description?: string; children: ReactNode }) {
   return (
-    <Flex className="slider-row" direction="column" gap="2">
-      <Flex align="center" justify="between" gap="3">
-        <Text as="label" size="2" weight="medium">
-          {props.label}
+    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
+      <Flex direction="column" className="settings-row-text" gap="1" minWidth="0">
+        <Text size="2" weight="medium" className="settings-row-title">
+          {props.title}
         </Text>
-        <Text size="2" color="gray" className="slider-value">
-          {props.valueLabel}
-        </Text>
+        {props.description ? <Text size="1" color="gray" className="settings-row-description">
+          {props.description}
+        </Text> : null}
       </Flex>
-      <Slider
-        ref={root}
-        value={[props.value]}
-        min={props.min}
-        max={props.max}
-        step={props.step}
-        aria-label={props.label}
-        style={{ width: '100%' }}
-        onValueChange={(next) => {
-          const value = next[0]
-          if (value !== undefined) props.onValueChange(value)
-        }} />
+      {props.children}
     </Flex>
   )
 }
 
-function SettingRow(props: { title: string; children: ReactNode }) {
+/** 预览消费与编辑器相同的 --paper-* 变量:缩进、段距、行高、字号、字族、版心宽。 */
+function ManuscriptPreview(props: { preferences: WritingPreferences }) {
+  const resolved = normalizeTypography(writingTypography(props.preferences))
+  const vars = typographyCssVariables(resolved) as CSSProperties
   return (
-    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
-      <Text size="2" weight="medium" className="settings-row-title">
-        {props.title}
-      </Text>
-      {props.children}
-    </Flex>
+    <aside className="dsh-settings-preview" aria-label={t('writing.preview')}>
+      <div className="dsh-settings-preview__paper" style={vars} data-testid="writing-preview-paper">
+        <p className={resolved.centerSectionMarks
+          ? 'dsh-settings-preview__section dsh-settings-preview__section--centered'
+          : 'dsh-settings-preview__section'}>
+          {t('writing.previewSection')}
+        </p>
+        <p className="dsh-settings-preview__para">{t('writing.previewPara1')}</p>
+        <p className="dsh-settings-preview__para">{t('writing.previewPara2')}</p>
+        <p className={resolved.centerSectionMarks
+          ? 'dsh-settings-preview__mark dsh-settings-preview__section--centered'
+          : 'dsh-settings-preview__mark'}>
+          {t('writing.previewMark')}
+        </p>
+        <p className="dsh-settings-preview__para">{t('writing.previewPara3')}</p>
+      </div>
+    </aside>
   )
 }
 
@@ -347,109 +338,124 @@ export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
 
   return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <Card className="settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" size="3" className="settings-block-title">
-            {t('writing.completion')}
-          </Heading>
-        </header>
-        <RadioGroup.Root
-          value={values.completion}
-          name="completion-preference"
-          aria-label={t('writing.completion')}
-          disabled={saving !== null}
-          onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])}>
-          <Flex direction="column" gap="3" py="2">
-            <RadioGroup.Item value="manual">{t('writing.manualOnly')}</RadioGroup.Item>
-            <RadioGroup.Item value="pause">{t('writing.pauseHint')}</RadioGroup.Item>
-          </Flex>
-        </RadioGroup.Root>
-        {values.completion === 'pause' ? <SettingRow title={t('writing.completionDelay')}>
-          <Select
-            value={String(values.completionDelayMs ?? COMPLETION_DELAY.default)}
-            options={Array.from(new Set([500, 1000, 1500, 2000, 3000, 5000, values.completionDelayMs ?? COMPLETION_DELAY.default])).sort((a, b) => a - b).map(value => ({ value: String(value), label: t('writing.seconds', { seconds: value / 1000 }) }))}
-            disabled={saving !== null}
-            onChange={value => void update('completionDelayMs', Number(value))}
-            aria-label={t('writing.completionDelay')} />
-        </SettingRow> : null}
-        {values.completion === 'pause' ? <Text as="p" size="2" color="gray">{t('writing.delayHelp')}</Text> : null}
-        <Flex direction="column" align="start" gap="2" mt="3">
-          <Text size="2"><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')}</Text>
-          <Text size="2"><Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</Text>
-          {onOpenShortcuts ? <Button variant="ghost" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
-        </Flex>
-      </Card>
-      <Card className="paper-typography settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" size="3" className="settings-block-title">
-            {t('writing.paper')}
-          </Heading>
-        </header>
-        <SettingRow title={t('writing.typewriter')}>
-          <Flex align="center" gap="2">
-            <Kbd>
-              {runtimeShortcutHint('Mod+Alt+T')}
-            </Kbd>
+      <div className="dsh-writing-settings">
+        <div className="dsh-writing-settings__controls">
+          <Card className="settings-block">
+            <header className="settings-block-head">
+              <Heading as="h3" size="3" className="settings-block-title">
+                {t('writing.completion')}
+              </Heading>
+            </header>
+            <RadioGroup
+              value={values.completion}
+              name="completion-preference"
+              aria-label={t('writing.completion')}
+              disabled={saving !== null}
+              options={[
+                { value: 'manual', label: t('writing.manualOnly') },
+                { value: 'pause', label: t('writing.pauseHint') },
+              ]}
+              onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])} />
+            {values.completion === 'pause' ? <SettingRow title={t('writing.completionDelay')}>
+              <Select
+                value={String(values.completionDelayMs ?? COMPLETION_DELAY.default)}
+                options={Array.from(new Set([500, 1000, 1500, 2000, 3000, 5000, values.completionDelayMs ?? COMPLETION_DELAY.default])).sort((a, b) => a - b).map(value => ({ value: String(value), label: t('writing.seconds', { seconds: value / 1000 }) }))}
+                disabled={saving !== null}
+                onChange={value => void update('completionDelayMs', Number(value))}
+                aria-label={t('writing.completionDelay')} />
+            </SettingRow> : null}
+            {values.completion === 'pause' ? <Text as="p" size="2" color="gray">{t('writing.delayHelp')}</Text> : null}
+            <Flex direction="column" align="start" gap="2" mt="3">
+              <Text size="2"><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')}</Text>
+              <Text size="2"><Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</Text>
+              {onOpenShortcuts ? <Button variant="ghost" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
+            </Flex>
+          </Card>
+          <Card className="paper-typography settings-block">
+            <header className="settings-block-head">
+              <Heading as="h3" size="3" className="settings-block-title">
+                {t('writing.paper')}
+              </Heading>
+            </header>
             <Switch
+              id="writing-typewriter"
+              label={t('writing.typewriter')}
+              shortcut={runtimeShortcutHint('Mod+Alt+T')}
               checked={values.typewriter}
-              aria-label={t('writing.typewriter')}
               onCheckedChange={(next) => void update('typewriter', next)} />
-          </Flex>
-        </SettingRow>
-        <Separator size="4" />
-        <SettingRow title={t('writing.focusParagraph')}>
-          <Flex align="center" gap="2">
-            <Kbd>
-              {runtimeShortcutHint('Mod+Alt+P')}
-            </Kbd>
             <Switch
+              id="writing-focus-paragraph"
+              label={t('writing.focusParagraph')}
+              shortcut={runtimeShortcutHint('Mod+Alt+P')}
               checked={values.focusParagraph}
-              aria-label={t('writing.focusParagraph')}
               onCheckedChange={(next) => void update('focusParagraph', next)} />
-          </Flex>
-        </SettingRow>
-        <Separator size="4" />
-        <LabeledSlider
-          label={t('writing.fontSizeAria')}
-          valueLabel={`${values.fontSize}px`}
-          value={values.fontSize}
-          min={PAPER_FONT_SIZE.min}
-          max={PAPER_FONT_SIZE.max}
-          step={1}
-          onValueChange={(value) => void update('fontSize', value)} />
-        <LabeledSlider
-          label={t('writing.lineHeightAria')}
-          valueLabel={values.lineHeight.toFixed(1)}
-          value={values.lineHeight}
-          min={PAPER_LINE_HEIGHT.min}
-          max={PAPER_LINE_HEIGHT.max}
-          step={0.1}
-          onValueChange={(value) => void update('lineHeight', value)} />
-        <LabeledSlider
-          label={t('writing.paragraphSpacingAria')}
-          valueLabel={`${values.paragraphSpacing.toFixed(2)}em`}
-          value={values.paragraphSpacing}
-          min={PAPER_PARAGRAPH_SPACING.min}
-          max={PAPER_PARAGRAPH_SPACING.max}
-          step={0.05}
-          onValueChange={(value) => void update('paragraphSpacing', value)} />
-        <Separator size="4" />
-        <SettingRow title={t('writing.font')}>
-          <Select
-            value={values.fontFamily}
-            options={[{ value: 'serif', label: t('writing.serif') }, { value: 'sans', label: t('writing.sans') }, { value: 'mono', label: t('writing.mono') }]}
-            onChange={(value) => void update('fontFamily', value as PaperFontFamily)}
-            aria-label={t('writing.font')} />
-        </SettingRow>
-        <Separator size="4" />
-        <SettingRow title={t('writing.paperWidth')}>
-          <Select
-            value={values.paperWidth}
-            options={[{ value: 'narrow', label: t('writing.narrow') }, { value: 'medium', label: t('writing.medium') }, { value: 'wide', label: t('writing.wide') }]}
-            onChange={(value) => void update('paperWidth', value as PaperWidth)}
-            aria-label={t('writing.paperWidth')} />
-        </SettingRow>
-      </Card>
+            <Separator size="4" />
+            <div className="writing-slider-group">
+              <Slider
+                label={t('writing.fontSizeAria')}
+                format={(value) => `${Math.round(value)}px`}
+                value={[values.fontSize]}
+                min={PAPER_FONT_SIZE.min}
+                max={PAPER_FONT_SIZE.max}
+                step={1}
+                onValueChange={(next) => { if (next[0] !== undefined) void update('fontSize', next[0]) }} />
+              <Slider
+                label={t('writing.lineHeightAria')}
+                format={(value) => value.toFixed(1)}
+                value={[values.lineHeight]}
+                min={PAPER_LINE_HEIGHT.min}
+                max={PAPER_LINE_HEIGHT.max}
+                step={0.1}
+                onValueChange={(next) => { if (next[0] !== undefined) void update('lineHeight', next[0]) }} />
+              <Slider
+                label={t('writing.paragraphSpacingAria')}
+                format={(value) => `${value.toFixed(2)}em`}
+                value={[values.paragraphSpacing]}
+                min={PAPER_PARAGRAPH_SPACING.min}
+                max={PAPER_PARAGRAPH_SPACING.max}
+                step={0.05}
+                onValueChange={(next) => { if (next[0] !== undefined) void update('paragraphSpacing', next[0]) }} />
+            </div>
+            <Separator size="4" />
+            <SettingRow title={t('writing.font')}>
+              <SegmentedControl
+                value={values.fontFamily}
+                options={[
+                  { value: 'serif', label: t('writing.serif') },
+                  { value: 'sans', label: t('writing.sans') },
+                  { value: 'mono', label: t('writing.mono') },
+                ]}
+                onValueChange={(value) => void update('fontFamily', value as PaperFontFamily)}
+                aria-label={t('writing.font')} />
+            </SettingRow>
+            <SettingRow title={t('writing.paperWidth')}>
+              <SegmentedControl
+                value={values.paperWidth}
+                options={[
+                  { value: 'narrow', label: t('writing.narrow') },
+                  { value: 'medium', label: t('writing.medium') },
+                  { value: 'wide', label: t('writing.wide') },
+                ]}
+                onValueChange={(value) => void update('paperWidth', value as PaperWidth)}
+                aria-label={t('writing.paperWidth')} />
+            </SettingRow>
+            <Separator size="4" />
+            <Switch
+              id="writing-first-line-indent"
+              label={t('writing.firstLineIndent')}
+              description={t('writing.firstLineIndentHint')}
+              checked={values.firstLineIndent}
+              onCheckedChange={(next) => void update('firstLineIndent', next)} />
+            <Switch
+              id="writing-center-section-marks"
+              label={t('writing.centerSectionMarks')}
+              description={t('writing.centerSectionMarksHint')}
+              checked={values.centerSectionMarks}
+              onCheckedChange={(next) => void update('centerSectionMarks', next)} />
+          </Card>
+        </div>
+        <ManuscriptPreview preferences={values} />
+      </div>
       {writeFailure ? <Callout.Root color="red" role="alert">
         <Callout.Text>
           {writeFailure}

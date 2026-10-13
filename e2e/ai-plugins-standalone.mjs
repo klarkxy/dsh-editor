@@ -111,8 +111,8 @@ async function boot(label) {
 }
 async function settings() {
   await page.getByRole('button', { name: '设置', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '设置', exact: true })
-  await dialog.waitFor(); return dialog
+  const dialog = page.locator(S.settingsDialog)
+  await dialog.waitFor({ state: 'visible' }); return dialog
 }
 try {
   if (!process.env.AI_STANDALONE_HOME) {

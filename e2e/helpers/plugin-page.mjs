@@ -177,9 +177,12 @@ export async function assertConfigNavLinksReachable(plugins) {
     }
     // Links inside the collapsed 高级组件 <details> are intentionally not
     // laid out until the author expands it; they are not "outside the box".
+    // The full-page nav scrolls vertically: reachability means every link can
+    // be scrolled into the box while staying inside its horizontal bounds.
     const links = [...element.querySelectorAll(linkSelector)]
       .filter(link => !link.closest('details:not([open])'))
       .map(link => {
+      link.scrollIntoView({ block: 'nearest' })
       const rect = link.getBoundingClientRect()
       return {
         label: link.textContent.trim(),
@@ -190,6 +193,7 @@ export async function assertConfigNavLinksReachable(plugins) {
           && rect.left >= edges.left - 1 && rect.right <= edges.right + 1,
       }
     })
+    element.scrollTop = 0
     return { links, nav: { client: element.clientWidth, scroll: element.scrollWidth } }
   }, S.pluginsPageLink)
   assert.ok(measured.links.length > 0, 'the plugins nav renders its links')
@@ -199,7 +203,7 @@ export async function assertConfigNavLinksReachable(plugins) {
   return measured
 }
 
-/** A catalog row shows the author's brand art or its monogram; a blank tile is a defect. */
+/** A catalog row shows the author's brand art, its monogram, or the unified type icon; a blank tile is a defect. */
 export async function assertCatalogIconsRendered(plugins) {
   const tiles = await plugins.locator(S.pluginsCatalog)
     .locator(S.pluginsCatalogIcon)
@@ -208,13 +212,14 @@ export async function assertCatalogIconsRendered(plugins) {
       return {
         image: Boolean(image),
         loaded: image ? image.complete && image.naturalWidth > 0 : false,
+        svg: Boolean(node.querySelector('svg')),
         text: node.textContent.trim(),
       }
     }))
   assert.ok(tiles.length > 0, 'the catalog renders at least one icon tile')
   for (const tile of tiles) {
-    assert.ok(tile.image ? tile.loaded : tile.text.length > 0,
-      'an icon tile renders brand art or a monogram, never a blank: ' + JSON.stringify(tile))
+    assert.ok(tile.image ? tile.loaded : tile.svg || tile.text.length > 0,
+      'an icon tile renders brand art, a type icon or a monogram, never a blank: ' + JSON.stringify(tile))
   }
   return tiles
 }

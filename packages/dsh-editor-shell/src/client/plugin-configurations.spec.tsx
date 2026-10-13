@@ -6,7 +6,7 @@ import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
 import { PluginConfigurationPage, usePluginConfigurations } from './plugin-configurations.tsx'
 import { legacyZhihuVisible, projectPluginConfigurations } from '../model/plugin-configurations.ts'
-import { PluginsPage } from './plugins-page.tsx'
+import { SettingsPage } from '../app/settings/settings-page.tsx'
 import { mergeSections, secondaryConfigKeys } from '../model/plugins-page.ts'
 import { CatalogRow, PluginsCatalog } from './plugins-catalog.tsx'
 import {
@@ -175,7 +175,13 @@ it('keeps every keyed bundle on its native configuration route without a special
  expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@scope/configurable', '@scope/other'])
 })
 
-function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
+const UNAVAILABLE_SNAPSHOT = { status: 'unavailable' } as const
+const unavailableWritingScope = {
+  subscribe: () => () => {},
+  getSnapshot: () => UNAVAILABLE_SNAPSHOT,
+}
+
+function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode, section = 'plugins-installed') {
   const host = fixture(rows)
   const write = console.error
   console.error = (...args: unknown[]) => {
@@ -183,12 +189,16 @@ function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
     write(...args)
   }
   try {
-    return renderToStaticMarkup(createElement(PluginsPage, {
+    return renderToStaticMarkup(createElement(SettingsPage, {
       ctx: host as never,
+      writingScope: unavailableWritingScope as never,
+      migrateWriting: async () => ({ failed: [] }),
       renderSlot: slot => createElement('div', null, slot === PLUGINS_SETTINGS_SLOT ? 'installed-management' : 'official-slot'),
       plugins: createElement('p', null, 'installed-management'),
       zhihu,
       hasWorkspace: true,
+      section,
+      onSelectSection() {},
       onClose() {},
     }))
   } finally {
@@ -213,7 +223,7 @@ describe('plugin configuration navigation', () => {
     expect(html).toContain('installed-management')
     expect(html).toContain('official-slot')
     expect(html).not.toContain('插件模型')
-    expect(html).toContain('插件总览')
+    expect(html).toContain('已安装')
   })
 
   it('drops a legacy Zhihu registration replaced by that plugin\'s official configuration', () => {
@@ -258,7 +268,7 @@ describe('plugin configuration navigation', () => {
     const html = navigation(rows, createElement('p', null, 'legacy-zhihu-body'))
     expect(html).toContain('知乎资料')
     /* The package name may appear as a configuration link, never as page content. */
-    const content = html.slice(html.indexOf('plugins-page-content'))
+    const content = html.slice(html.indexOf('data-testid="settings-content"'))
     expect(content).not.toContain('@klarkxy/dsh-memory')
     expect(content).not.toContain('>记忆<')
   })
@@ -493,8 +503,8 @@ describe('plugin catalog', () => {
     expect('icon' in withIcon[2]!.items[1]!).toBe(false)
     const html = sectionHtml(catalog({ sections: withIcon }), 'user')
     expect(html).toContain(`<img class="plugins-catalog-icon-image" src="${icon}" alt=""/>`)
-    /* The monogram stays the fallback for a card with no icon: never a blank tile. */
-    expect(html).toContain('<span class="plugins-catalog-icon" aria-hidden="true">甲</span>')
+    /* The unified kind icon is the fallback for a card with no icon: never a blank tile. */
+    expect(html).toContain('<span class="plugins-catalog-icon" aria-hidden="true"><svg')
     expect(catalogIconSource({ icon, title: '知乎' })).toBe(icon)
     expect(catalogIconSource({ title: '知乎' })).toBe('')
     expect(catalogIconSource({ icon, title: '知乎' }, icon)).toBe('')
@@ -537,6 +547,7 @@ describe('plugin catalog', () => {
     expect(newUserCardKeys(userSectionKeys(after), userSectionKeys(before))).toEqual([])
     const row = (highlighted: boolean) => renderToStaticMarkup(createElement(CatalogRow, {
       card: { key: 'bundle:b', title: 'B', description: '', badges: [], action: 'detail' },
+      kind: 'user',
       pending: false, configurable: false, highlighted,
       onToggle() {}, onConfigure() {}, onDetail() {},
     }))
@@ -633,15 +644,15 @@ describe('plugin catalog', () => {
   })
 })
 
-describe('plugins page navigation', () => {
+describe('settings plugins navigation', () => {
   it('keeps the nav and the three fixed entries with zero configuration entries', () => {
     const html = navigation({})
-    expect(html).toContain('data-testid="plugins-page-nav"')
-    expect(html).toContain('data-testid="plugins-nav-overview"')
-    expect(html).toContain('data-testid="plugins-nav-discovery"')
-    expect(html).toContain('data-testid="plugins-nav-manager"')
-    expect(html).toContain('插件总览')
-    expect(html).toContain('发现插件')
+    expect(html).toContain('data-testid="settings-nav"')
+    expect(html).toContain('data-testid="settings-nav-plugins-installed"')
+    expect(html).toContain('data-testid="settings-nav-plugins-discovery"')
+    expect(html).toContain('data-testid="settings-nav-plugins-manager"')
+    expect(html).toContain('已安装')
+    expect(html).toContain('发现')
     expect(html).toContain('安装与卸载')
     expect(html).toContain('插件配置')
     expect(html).toContain('搜索插件配置')

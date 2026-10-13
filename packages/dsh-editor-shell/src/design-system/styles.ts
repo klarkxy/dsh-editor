@@ -57,29 +57,8 @@ const menuSelectors = ['.rt-DropdownMenuContent', '.rt-ContextMenuContent', '.rt
 
 
 export const componentStyles = [
-  // Global plugin page shares the workspace cell without resizing the manuscript.
-  r(['.plugin-workspace'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 100%; height: 100%; min-height: 0;'),
-  r(['.plugin-workspace-writing', '.plugins-page'], 'grid-area: 1 / 1; min-width: 0; min-height: 0;'),
-  r(['.plugin-workspace-writing.is-covered'], 'visibility: hidden; pointer-events: none;'),
-  r(['.plugins-page'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--dsh-ui-header-height) minmax(0, 1fr); background: var(--dsh-ui-bg); color: var(--dsh-ui-text);'),
-  r(['.plugins-page-header'], `padding-inline-start: var(--dsh-ui-space-3); border-bottom: ${hairline};`),
-  // Page title outranks the plugin group h3 (16px/600); the header default left it smaller.
-  r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
-  r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
-  r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
-  r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
-  r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
-  /* Nav section label follows the settings-nav-group treatment (muted, small,
-     medium weight) so it never out-weighs the content group headings. */
-  r(['.plugins-config-label'], 'margin-top: var(--dsh-ui-space-4); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);'),
-  r(['.plugins-config-links'], 'display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0;'),
-  r(['.plugins-page .plugins-page-nav .plugins-page-link'], 'justify-content: flex-start; width: 100%; margin: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); border: 0; border-radius: var(--dsh-ui-radius-md); background: transparent; box-shadow: none; color: var(--dsh-ui-text); white-space: normal; text-align: start; height: auto; min-height: var(--dsh-ui-control-md); overflow-wrap: anywhere;'),
-  r(['.plugins-page .plugins-page-nav .plugins-page-link:hover'], 'background: var(--dsh-ui-hover);'),
-  r(['.plugins-page .plugins-page-nav .plugins-page-link[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
-  r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-5); overflow: auto; min-width: 0; min-height: 0; overflow-wrap: anywhere;'),
-  // Header search + add action share the drag row; the title yields before them.
-  r(['.plugins-page-tools'], 'min-width: 0;'),
-  r(['.plugins-page-search'], 'flex: 0 1 16rem; min-width: 0;'),
+  // 全页设置的骨架/导航在 app/settings/settings.styles.ts；这里只留目录行样式。
+  r(['.plugins-trigger'], '-webkit-app-region: no-drag;'),
   // Three-class catalog: one flat card per row, one primary control, no shadow.
   r(['.plugins-catalog'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-6); min-width: 0;'),
   r(['.plugins-catalog-section'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); min-width: 0;'),
@@ -275,16 +254,11 @@ export const componentStyles = [
   r(['.history-technical-details > summary'], 'cursor: pointer; min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
   r(['.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback'], 'border-radius: 50%; corner-shape: round;'),
 
-  // Settings are a settings window, not a collection of differently themed cards.
-  r(['.settings-nav'], `background: var(--dsh-ui-sidebar); border-right: ${hairline}; padding: var(--dsh-ui-space-5) var(--dsh-ui-space-3);`),
-  r(['.settings-nav .settings-tab'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-text);'),
-  r(['.settings-nav .settings-tab[data-state="active"]', '.settings-nav .settings-tab.active'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
-  r(['.settings-header'], `background: var(--dsh-ui-raised); border-bottom: ${hairline};`),
-  r(['.settings-header-title', '.settings-nav h2'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium);'),
-  r(['.settings-block-title', '.settings-page h3'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
-  r(['.settings-dialog .settings-row'], 'min-height: 56px; padding-block: var(--dsh-ui-space-3);'),
+  // Settings are a settings page, not a collection of differently themed cards.
+  r(['.settings-block-title', '.dsh-settings-page h3'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
+  r(['.dsh-settings-page .settings-row'], 'min-height: 56px; padding-block: var(--dsh-ui-space-3);'),
   r(['.settings-row-description'], 'font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-muted);'),
-  r(['.settings-dialog .settings-block + .settings-block'], `border-top: ${hairline}; padding-top: var(--dsh-ui-space-5);`),
+  r(['.dsh-settings-page .settings-block + .settings-block'], `border-top: ${hairline}; padding-top: var(--dsh-ui-space-5);`),
   r(['.settings-segmented'], 'background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-lg); box-shadow: none;'),
   r(['.settings-segmented button[aria-pressed="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.settings-content.is-active .settings-page'], 'animation: none;'),

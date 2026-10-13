@@ -49,7 +49,7 @@ try {
       id: element.getAttribute('data-testid'), width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
     })))
     assert.ok(switches.length > 0, 'writing mode controls must be visible after expanding their group')
-    assert.ok(switches.every(control => control.width === 35 && control.height === 20), JSON.stringify(switches))
+    assert.ok(switches.every(control => control.width === 36 && control.height === 20), JSON.stringify(switches))
     await openWebSearchSettings(plugins)
     const styles = await page.locator(S.dshPluginStyles).evaluateAll(elements => elements.map(element => ({
       owner: element.getAttribute('data-plugin'), length: element.textContent.length,

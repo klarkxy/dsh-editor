@@ -310,25 +310,25 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   // Global settings and plugin management have separate entry points.
   const window = ctx.window
   await window.locator(S.nativeSettingsTrigger).click()
-  const dialog = window.getByRole('dialog', { name: '设置' })
+  const dialog = window.locator(S.settingsDialog)
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-  await dialog.getByRole('tab', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
-  await dialog.getByRole('tab', { name: '模型', exact: true }).click()
+  await dialog.locator(S.settingsNavSection('appearance')).waitFor({ state: 'visible', timeout: 5_000 })
+  await dialog.locator(S.settingsNavSection('models')).click()
   try {
     await window.waitForFunction(
       ({ DIALOG }) => (document.querySelector(DIALOG)?.textContent ?? '').includes('DeepSeek'),
-      DOM,
+      { DIALOG: S.settingsDialog },
       { timeout: 15_000 },
     )
   } catch {
-    throw new Error(`settings models tab did not list the DeepSeek provider: ${(await dialog.textContent())?.slice(0, 400)}`)
+    throw new Error(`settings models section did not list the DeepSeek provider: ${(await dialog.textContent())?.slice(0, 400)}`)
   }
-  await dialog.getByRole('tab', { name: '写作', exact: true }).click()
+  await dialog.locator(S.settingsNavSection('writing')).click()
   await dialog.getByRole('radio').first().waitFor({ state: 'visible', timeout: 10_000 })
   const writingRadios = await dialog.getByRole('radio').count()
-  if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
+  if (writingRadios < 2) throw new Error('settings writing section lost the completion radios')
   await window.keyboard.press('Escape')
-  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+  await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
   const pluginsPage = await openPluginsPage(window)
   const bundles = await assertDefaultPluginPage(window, pluginsPage)
   for (const name of ['dsh-manuscript', 'dsh-editor-shell', 'dsh-editor-plugins']) {

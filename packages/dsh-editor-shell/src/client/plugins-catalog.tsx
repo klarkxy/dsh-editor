@@ -6,7 +6,7 @@
  * normalized: an unknown shape drops one card instead of the whole page.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { Badge, Button as ThemeButton, Callout, Flex, Heading, Switch, Text } from '@radix-ui/themes'
+import { Badge, Button as ThemeButton, Callout, Flex, Heading, Text } from '@radix-ui/themes'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall } from './shared.ts'
 import {
@@ -36,6 +36,8 @@ import {
   type WritingPresetsBundle,
 } from '../model/plugins-catalog.ts'
 import { ActivityText, Button } from './ui/index.ts'
+import { SwitchControl } from '../ui/index.ts'
+import { AppBrandMark, PluginIcon, ThemePaperIcon } from './icons.tsx'
 
 export function usePluginCatalog(ctx: unknown): PluginCatalogBundle {
   const [sections, setSections] = useState<PluginCatalogSection[] | null>(null)
@@ -124,23 +126,29 @@ export function useWritingPresets(ctx: unknown): WritingPresetsBundle {
   return { status, presets: presets ?? [], error, pending, restartRequired, setEnabled }
 }
 
-function monogramOf(title: string): string {
-  return [...title.trim()][0]?.toLocaleUpperCase() ?? '·'
+export type CatalogKind = 'official' | 'builtin' | 'user' | 'preset'
+
+/** 三类目录的统一类型图标：官方=DSH 标志,内置/预设=稿纸,用户=拼图。 */
+function CatalogKindIcon({ kind }: { kind: CatalogKind }) {
+  if (kind === 'official') return <AppBrandMark size={20} />
+  if (kind === 'builtin' || kind === 'preset') return <ThemePaperIcon size={20} />
+  return <PluginIcon size={20} />
 }
 
-/** The icon tile shows the author's brand art, or the title's monogram. */
-export function CatalogIcon(props: { icon?: string; title: string }) {
+/** 图标槽位优先用插件自带的品牌图;没有时回落到统一的类型图标。 */
+export function CatalogIcon(props: { icon?: string; title: string; kind?: CatalogKind }) {
   const [failed, setFailed] = useState('')
   const source = catalogIconSource({ icon: props.icon, title: props.title }, failed)
   return <span className="plugins-catalog-icon" aria-hidden="true">
     {source
       ? <img className="plugins-catalog-icon-image" src={source} alt="" onError={() => setFailed(source)} />
-      : monogramOf(props.title)}
+      : <CatalogKindIcon kind={props.kind ?? 'user'} />}
   </span>
 }
 
 export function CatalogRow(props: {
   card: PluginCatalogCard
+  kind: CatalogKind
   pending: boolean
   /** True when the row also reaches a 插件配置 page and may offer the secondary control. */
   configurable: boolean
@@ -153,7 +161,7 @@ export function CatalogRow(props: {
   const card = props.card
   return <li className={props.highlighted ? 'plugins-catalog-row is-new' : 'plugins-catalog-row'}
     data-testid={`plugins-catalog-row-${card.key}`}>
-    <CatalogIcon icon={card.icon} title={card.title} />
+    <CatalogIcon icon={card.icon} title={card.title} kind={props.kind} />
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{card.title}</Text>
@@ -174,7 +182,7 @@ export function CatalogRow(props: {
               {t('plugins.catalogConfigure')}
             </ThemeButton>
             : null}
-          <Switch className="plugins-catalog-switch" checked={card.enabled === true} disabled={props.pending}
+          <SwitchControl className="plugins-catalog-switch" checked={card.enabled === true} disabled={props.pending}
             aria-label={card.title} data-testid={`plugins-catalog-toggle-${card.key}`}
             onCheckedChange={(enabled) => props.onToggle(card, enabled)} />
         </>
@@ -198,7 +206,7 @@ function PresetRow(props: {
 }) {
   const preset = props.preset
   return <li className="plugins-catalog-row" data-testid={`plugins-catalog-preset-${preset.id}`}>
-    <CatalogIcon title={preset.title} />
+    <CatalogIcon title={preset.title} kind="preset" />
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{preset.title}</Text>
@@ -213,7 +221,7 @@ function PresetRow(props: {
     <div className="plugins-catalog-row-action">
       {preset.locked
         ? <Text size="1" color="gray" className="plugins-catalog-preset-locked">{t('plugins.badgeRequired')}</Text>
-        : <Switch className="plugins-catalog-switch" checked={preset.enabled} disabled={props.pending}
+        : <SwitchControl className="plugins-catalog-switch" checked={preset.enabled} disabled={props.pending}
           aria-label={preset.title} data-testid={`plugins-catalog-preset-toggle-${preset.id}`}
           onCheckedChange={(enabled) => props.onToggle(preset, enabled)} />}
     </div>
@@ -255,6 +263,7 @@ function CatalogSection(props: {
     </Flex>
     {ordinary.length
       ? <ul className="plugins-catalog-rows">{ordinary.map((card) => <CatalogRow key={card.key} card={card}
+        kind={section.id === 'official' || section.id === 'builtin' || section.id === 'user' ? section.id : 'user'}
         pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
         highlighted={props.freshKeys.includes(card.key)}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
@@ -263,6 +272,7 @@ function CatalogSection(props: {
       <summary>{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
       <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogAdvancedHint')}</Text>
       <ul className="plugins-catalog-rows">{advanced.map(card => <CatalogRow key={card.key} card={card}
+        kind={section.id === 'official' || section.id === 'builtin' || section.id === 'user' ? section.id : 'user'}
         pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)} highlighted={false}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
     </details> : null}

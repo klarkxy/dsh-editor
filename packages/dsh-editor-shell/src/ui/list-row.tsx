@@ -11,6 +11,8 @@ export function ListRow(props: {
   onSelect?(): void
   density?: 'compact' | 'regular'
   className?: string
+  'data-testid'?: string
+  'data-warn'?: boolean
 }) {
   const interactive = Boolean(props.onSelect)
   return (
@@ -18,6 +20,8 @@ export function ListRow(props: {
       className={cx('dsh-list-row', props.className)}
       data-density={props.density ?? 'regular'}
       data-selected={props.selected || undefined}
+      data-testid={props['data-testid']}
+      data-warn={props['data-warn'] || undefined}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-current={props.selected ? 'page' : undefined}

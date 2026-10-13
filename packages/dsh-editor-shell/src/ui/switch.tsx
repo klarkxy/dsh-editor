@@ -34,9 +34,39 @@ export const Switch = forwardRef<HTMLButtonElement, {
         defaultChecked={props.defaultChecked}
         onCheckedChange={props.onCheckedChange}
         disabled={props.disabled}
+        aria-label={typeof props.label === 'string' ? props.label : undefined}
       >
         <SwitchPrimitive.Thumb className="dsh-switch__thumb" />
       </SwitchPrimitive.Root>
     </label>
+  )
+})
+
+/*
+ * 只带滑动块的最小形态：调用方自行编排行内文字（插件目录等），
+ * 仍复用 dsh-switch 的开关样式与命中尺寸。
+ */
+export const SwitchControl = forwardRef<HTMLButtonElement, {
+  checked?: boolean
+  onCheckedChange?(checked: boolean): void
+  disabled?: boolean
+  id?: string
+  'aria-label'?: string
+  className?: string
+  'data-testid'?: string
+}>(function SwitchControl(props, ref) {
+  return (
+    <SwitchPrimitive.Root
+      ref={ref}
+      id={props.id}
+      className={cx('dsh-switch', props.className)}
+      checked={props.checked}
+      onCheckedChange={props.onCheckedChange}
+      disabled={props.disabled}
+      aria-label={props['aria-label']}
+      data-testid={props['data-testid']}
+    >
+      <SwitchPrimitive.Thumb className="dsh-switch__thumb" />
+    </SwitchPrimitive.Root>
   )
 })

@@ -436,20 +436,25 @@ try {
     await page.waitForFunction((prev) => document.documentElement.getAttribute('data-theme') !== prev, beforeTheme, { timeout: 10_000 })
     const r1 = await verifyCm('theme')
     note('identity', `theme toggle: sameView=${r1.sameView} sameDom=${r1.sameDom}`)
-    // font-size change via the 写作 settings slider
+    // C40: opening/closing the full-page settings must not remount the editor.
     await page.getByRole('button', { name: '设置', exact: true }).click()
+    await page.locator(S.settingsDialog).waitFor({ state: 'visible' })
+    const r1b = await verifyCm('settings-open')
+    note('identity', `settings open: sameView=${r1b.sameView} sameDom=${r1b.sameDom}`)
+    // font-size change via the 写作 settings slider
     const settingsNav = page.locator(S.settingsNav)
-    await settingsNav.getByRole('tab', { name: '写作', exact: true }).click()
+    await settingsNav.locator(S.settingsNavSection('writing')).click()
     const fontSlider = page.locator(S.fontSizeSlider)
     const oldSize = await fontSlider.getAttribute('aria-valuenow')
     await fontSlider.focus()
     await page.keyboard.press('ArrowRight')
     await page.waitForFunction(({ old, sel }) => document.querySelector(sel)?.getAttribute('aria-valuenow') !== old,
       { old: oldSize, sel: S.fontSizeSlider })
-    await page.getByRole('button', { name: '关闭设置', exact: true }).click()
+    await page.locator(S.settingsBack).click()
+    await page.locator(S.settingsDialog).waitFor({ state: 'hidden' })
     const r2 = await verifyCm('font-size')
     note('identity', `font-size change: sameView=${r2.sameView} sameDom=${r2.sameDom}`)
-    report.identity = { theme: r1, fontSize: r2 }
+    report.identity = { theme: r1, settingsOpen: r1b, fontSize: r2 }
   } else {
     failures.push('identity: __cmView or .cm-editor not found on paper editor')
   }
@@ -493,14 +498,39 @@ try {
   await page.waitForTimeout(900)
   await marginRuleCheck('1440/medium')
 
-  // paperWidth variants through the real 写作 settings Select.
+  // paperWidth variants through the real 写作 settings segmented control.
+  const dumpSettings = async (label) => {
+    const d = await page.evaluate(() => ({
+      pages: [...document.querySelectorAll('.dsh-settings-page')].map((p) => ({
+        rect: p.getBoundingClientRect().height > 0,
+        overlayHidden: p.closest('.dsh-settings-workspace__page')?.hidden,
+        activeNav: p.querySelector('[data-testid^="settings-nav-"][aria-current="page"]')?.getAttribute('data-testid'),
+        visibleSections: [...p.querySelectorAll('.dsh-settings-section')].filter((s) => !s.hidden).map((s) => s.getAttribute('data-testid')),
+        narrowBtns: [...p.querySelectorAll('button')].filter((b) => b.textContent.trim() === '窄栏').map((b) => {
+          let chain = []
+          for (let el = b; el && el !== document.body; el = el.parentElement) {
+            if (el.inert || el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('inert')) chain.push(`${el.tagName}.${String(el.className).slice(0, 40)}[inert=${el.inert},aria-hidden=${el.getAttribute('aria-hidden')}]`)
+          }
+          return { vis: b.getBoundingClientRect().height > 0, label: b.getAttribute('aria-label'), role: b.getAttribute('role'), blocked: chain }
+        }),
+      })),
+      storedTab: localStorage.getItem('dsh-editor.settings.tab'),
+      theme: document.documentElement.getAttribute('data-theme'),
+    })).catch((e) => String(e))
+    note(`diag/${label}`, JSON.stringify(d))
+  }
   const setPaperWidth = async (label, optionText) => {
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const nav = page.locator(S.settingsNav)
-    await nav.getByRole('tab', { name: '写作', exact: true }).click()
-    await page.locator(S.combobox('稿纸宽度')).click()
-    await page.getByRole('option', { name: optionText, exact: true }).click()
-    await page.getByRole('button', { name: '关闭设置', exact: true }).click()
+    await nav.locator(S.settingsNavSection('writing')).click()
+    try {
+      await page.locator(S.settingsDialog).getByRole('radio', { name: optionText, exact: true }).click({ timeout: 10_000 })
+    } catch (e) {
+      await dumpSettings(`setPaperWidth-${label}`)
+      throw e
+    }
+    await page.locator(S.settingsBack).click()
+    await page.locator(S.settingsDialog).waitFor({ state: 'hidden' })
     await page.waitForTimeout(900)
     await marginRuleCheck(`1440/${label}`)
   }
@@ -780,6 +810,46 @@ try {
     } else {
       failures.push(`drawer/${width}: partner drawer did not open`)
     }
+  }
+
+  // ---- Settings full page: no horizontal overflow at the 4 widths, and
+  // Escape closes the page returning focus to the invoker. ----
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(700)
+  if (await page.locator(S.dshDrawer).isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => undefined)
+    await page.waitForTimeout(600)
+  }
+  const settingsTrigger = page.getByRole('button', { name: '设置', exact: true })
+  await settingsTrigger.click()
+  await page.locator(S.settingsDialog).waitFor({ state: 'visible', timeout: 10_000 })
+  for (const vp of VIEWPORTS) {
+    await page.setViewportSize(vp)
+    await page.waitForTimeout(600)
+    const so = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      pageRight: document.querySelector('.dsh-settings-page')?.getBoundingClientRect().right ?? null,
+    }))
+    if (so.scrollWidth > so.innerWidth) failures.push(`settings/${vp.width}: scrollWidth ${so.scrollWidth} > innerWidth ${so.innerWidth}`)
+    if (so.pageRight != null && so.pageRight > so.innerWidth + 1) failures.push(`settings/${vp.width}: page right ${so.pageRight.toFixed(1)} > innerWidth ${so.innerWidth}`)
+    note(`settings/${vp.width}`, `scrollWidth=${so.scrollWidth} innerWidth=${so.innerWidth}`)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(500)
+  await page.keyboard.press('Escape')
+  await page.locator(S.settingsDialog).waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => undefined)
+  if (await page.locator(S.settingsDialog).isVisible().catch(() => false)) {
+    failures.push('settings: Escape did not close the page')
+  }
+  const settingsFocus = await page.evaluate(() => {
+    const el = document.activeElement
+    const label = el?.getAttribute?.('aria-label') ?? el?.textContent?.trim() ?? ''
+    return { tag: el?.tagName ?? 'none', label }
+  })
+  if (!settingsTrigger) failures.push('settings: focus check skipped (trigger missing)')
+  else if (!(settingsFocus.tag === 'BUTTON' && settingsFocus.label.includes('设置'))) {
+    failures.push(`settings: Escape focus returned to ${settingsFocus.tag} '${settingsFocus.label.slice(0, 40)}', not the settings button`)
   }
 } catch (error) {
   failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)

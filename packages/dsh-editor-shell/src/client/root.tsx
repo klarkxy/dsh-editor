@@ -35,9 +35,9 @@ import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarToo
 import { HomeScreen } from '../app/home/home.tsx'
 import { CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
-import { PluginWorkspace } from './plugins-page.tsx'
-import { SettingsDialog, type SettingsRenderSlot } from './settings.tsx'
-import type { SettingsTab } from '../model/settings.ts'
+import { type SettingsRenderSlot } from './settings.tsx'
+import { SettingsWorkspace } from '../app/settings/settings-page.tsx'
+import { isPluginsSection, normalizeSettingsSection, readStoredTab, type SettingsTab } from '../model/settings.ts'
 import { useTheme } from './theme.tsx'
 import { WindowControls } from './window-controls.tsx'
 import type { HostThemeSync } from '../model/theme.ts'
@@ -236,18 +236,37 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const { startupUpdate, setStartupUpdate } = useRootDesktop(editorHandleRef)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const openPlugins = () => {
-    setSettingsOpen(false)
-    ;(ctx as unknown as { layout: { selectPanel(id: string | null): void } }).layout.selectPanel('plugins')
-  }
-  const closePlugins = () => {
-    ;(ctx as unknown as { layout: { selectPanel(id: string | null): void } }).layout.selectPanel(null)
-  }
-  const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
-  const openSettings = useCallback((tab?: SettingsTab) => {
-    setSettingsFocusTab(tab)
+  /* 设置与插件共用一页：section 是页内分区；插件分区同步到 layout panelInfo，
+     selectPanel('plugins')/selectPanel(null) 的对外语义不变（§7）。 */
+  const [settingsSection, setSettingsSection] = useState<string>(() => readStoredTab())
+  const selectPanel = useCallback((id: string | null) => {
+    ;(ctx as unknown as { layout: { selectPanel(id: string | null): void } }).layout.selectPanel(id)
+  }, [ctx])
+  const selectSettingsSection = useCallback((id: string) => {
+    setSettingsSection(id)
+    if (isPluginsSection(id)) selectPanel('plugins')
+  }, [selectPanel])
+  const openPlugins = useCallback(() => {
+    setSettingsSection((current) => isPluginsSection(current) ? current : 'plugins-installed')
+    selectPanel('plugins')
+  }, [selectPanel])
+  const closePlugins = useCallback(() => {
+    selectPanel(null)
+  }, [selectPanel])
+  const openSettings = useCallback((tab?: SettingsTab | string) => {
+    if (tab !== undefined) setSettingsSection(normalizeSettingsSection(tab))
     setSettingsOpen(true)
   }, [])
+  const closeSettingsPage = useCallback(() => {
+    setSettingsOpen(false)
+    selectPanel(null)
+  }, [selectPanel])
+  const settingsPageOpen = settingsOpen || pluginsOpen
+  /* selectPanel('plugins') → 插件分区；selectPanel(null) → 关闭整页。 */
+  useEffect(() => {
+    if (!pluginsOpen) { setSettingsOpen(false); return }
+    setSettingsSection((current) => isPluginsSection(current) ? current : 'plugins-installed')
+  }, [pluginsOpen])
   const seatContextRef = useRef<ShellToolSeatContext | null>(null)
   /* 工作区 <main> 的句柄。 */
   const shellMainRef = useRef<HTMLElement | null>(null)
@@ -280,17 +299,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     globalThis.addEventListener('dsh-editor:official-layout', toggle)
     return () => globalThis.removeEventListener('dsh-editor:official-layout', toggle)
   }, [])
-  const shortcutEnabled = useRef({ pluginsOpen, session: Boolean(session) })
-  shortcutEnabled.current = { pluginsOpen, session: Boolean(session) }
+  const shortcutEnabled = useRef({ pageOpen: settingsPageOpen, session: Boolean(session) })
+  shortcutEnabled.current = { pageOpen: settingsPageOpen, session: Boolean(session) }
   useEffect(() => registerEditorWorkspaceShortcuts(
     (ctx as unknown as { shortcuts: Parameters<typeof registerEditorWorkspaceShortcuts>[0] }).shortcuts,
     Object.fromEntries(Object.keys(officialActionRef.current).map(key => [key, () => officialActionRef.current[key]?.()])),
-    action => !shortcutEnabled.current.pluginsOpen && (['settings', 'new-window', 'palette'].includes(action) || shortcutEnabled.current.session),
+    action => !shortcutEnabled.current.pageOpen && (['settings', 'new-window', 'palette'].includes(action) || shortcutEnabled.current.session),
   ), [ctx])
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return
-      if (pluginsOpen) return
+      if (settingsPageOpen) return
       if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       /* 窄屏抽屉由 Radix Drawer(Dialog)处理自己的 Esc 关闭；菜单/下拉打开时
          也让位给它们自己的 Esc 处理。 */
@@ -309,7 +328,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [pluginsOpen, assistantEnabled, commands, path, session?.sessionId, workbench, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [settingsPageOpen, assistantEnabled, commands, path, session?.sessionId, workbench, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantVisible || layout.aux.tab !== 'partner' || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -556,8 +575,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider theme={theme}>
-        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
-          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
+        <SettingsWorkspace open={settingsPageOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          commands={commands} writingScope={writingScope} migrateWriting={migrateWriting}
+          assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
+          section={settingsSection} onSelectSection={selectSettingsSection}
+          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closeSettingsPage}>
         <HomeScreen
           workspaceOpen={workspaceOpen}
           extensionsDock={extensionsDock}
@@ -581,19 +603,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             {renderCommandPalette()}
             {renderImportDialog()}
           </>}
-          settingsDialog={<SettingsDialog
-            open={settingsOpen}
-            ctx={ctx}
-            commands={commands}
-            writingScope={writingScope}
-            migrateWriting={migrateWriting}
-            assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
-            focusTab={settingsFocusTab}
-            renderSlot={renderSlot}
-            onClose={() => setSettingsOpen(false)} />}
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenSettings={openSettings} onOpenPlugins={openPlugins} />
-      </PluginWorkspace>
+      </SettingsWorkspace>
       </ShellUiProvider>
     );
   }
@@ -703,8 +715,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   return (
     <ShellUiProvider theme={theme}>
-        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
-          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
+        <SettingsWorkspace open={settingsPageOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          commands={commands} writingScope={writingScope} migrateWriting={migrateWriting}
+          assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
+          section={settingsSection} onSelectSection={selectSettingsSection}
+          sessionId={chatSession?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closeSettingsPage}>
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}`}
         ref={shellMainRef}
@@ -843,18 +858,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           returnFocusRef={workspaceMenuTrigger}>
           {pathFallbackForm}
         </HostDialog>
-        <SettingsDialog
-          sessionId={chatSession?.sessionId}
-          open={settingsOpen}
-          ctx={ctx}
-          commands={commands}
-          writingScope={writingScope}
-          migrateWriting={migrateWriting}
-          assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
-          focusTab={settingsFocusTab}
-          renderSlot={renderSlot}
-          onClose={() => setSettingsOpen(false)} />
-        {startupUpdate && !settingsOpen ? <Callout.Root className="update-toast" role="status">
+        {startupUpdate && !settingsPageOpen ? <Callout.Root className="update-toast" role="status">
           <Flex align="center" gap="3">
             <Text className="update-toast-text" size="2">
               {t('about.toast', { version: startupUpdate.version })}
@@ -880,7 +884,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           </Flex>
         </Callout.Root> : null}
       </main>
-    </PluginWorkspace>
+    </SettingsWorkspace>
       </ShellUiProvider>
   );
 }

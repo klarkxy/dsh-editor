@@ -30,12 +30,13 @@ export const Slider = forwardRef<HTMLSpanElement, {
         step={props.step}
         onValueChange={props.onValueChange}
         disabled={props.disabled}
-        aria-label={props['aria-label'] ?? (typeof props.label === 'string' ? props.label : undefined)}
       >
         <SliderPrimitive.Track className="dsh-slider__track">
           <SliderPrimitive.Range className="dsh-slider__range" />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb className="dsh-slider__thumb" />
+        {/* Radix 把 role="slider" 挂在 Thumb 上；可访问名也必须到这里。 */}
+        <SliderPrimitive.Thumb className="dsh-slider__thumb"
+          aria-label={props['aria-label'] ?? (typeof props.label === 'string' ? props.label : undefined)} />
       </SliderPrimitive.Root>
       {props.format && value?.length ? <span className="dsh-slider-row__value">{props.format(value[0])}</span> : null}
     </span>

@@ -38,22 +38,28 @@ describe('author preference draft lifecycle', () => {
 })
 
 describe('settings task groups', () => {
-  it('keeps application preferences grouped exactly once without plugin entries', () => {
-    const features = ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage'] as const
-    const groups = composeSettingsNavGroups(features)
+  it('groups every fixed section exactly once, with 高级 carrying the warn flag', () => {
+    const groups = composeSettingsNavGroups(true)
     expect(groups.map(group => group.label)).toEqual([
-      'settings.groupWriting', 'settings.groupAssistant', 'settings.groupApp',
+      'settings.groupWriting', 'settings.groupApp', 'settings.plugins', 'settings.groupMore',
     ])
-    expect(groups.flatMap(group => group.tabs)).toEqual([
-      'writing', 'shortcuts', 'assistant', 'models', 'usage',
-      'general', 'about',
+    expect(groups.flatMap(group => group.items.map(item => item.id))).toEqual([
+      'writing', 'models', 'assistant',
+      'appearance', 'shortcuts',
+      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'usage', 'about', 'advanced',
     ])
+    const advanced = groups.flatMap(group => group.items).find(item => item.id === 'advanced')
+    expect(advanced?.warn).toBe(true)
   })
 
-  it('removes gated assistant pages while keeping writing and app preferences', () => {
-    const groups = composeSettingsNavGroups(['general', 'writing', 'shortcuts', 'usage'])
-    expect(groups.flatMap(group => group.tabs)).toEqual([
-      'writing', 'shortcuts', 'usage', 'general', 'about',
+  it('removes gated model/assistant sections while keeping writing and app preferences', () => {
+    const groups = composeSettingsNavGroups(false)
+    expect(groups.flatMap(group => group.items.map(item => item.id))).toEqual([
+      'writing',
+      'appearance', 'shortcuts',
+      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'usage', 'about', 'advanced',
     ])
   })
 })

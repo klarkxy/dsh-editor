@@ -53,6 +53,7 @@ export const PanelRightIcon = make(<>
   <path d="M14.5 5v14" />
 </>)
 export const ChevronRightIcon = make(<path d="m9 6 6 6-6 6" />)
+export const ChevronLeftIcon = make(<path d="m15 6-6 6 6 6" />)
 export const ChevronDownIcon = make(<path d="m6 9 6 6 6-6" />)
 export const NewDocIcon = make(<>
   <path d="M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />

@@ -47,19 +47,33 @@ try {
     ipcMain.handle('dsh-window:check-update',()=>({status:'latest',currentVersion:'0.3.6'}))
   })
   await page.locator(S.nativeSettingsTrigger).click()
-  const dialog = page.getByRole('dialog', { name: '设置', exact: true })
-  await dialog.waitFor()
-  const tabs = (await dialog.locator(S.settingsNavTab).allTextContents()).map(text => text.slice(0, text.length / 2) === text.slice(text.length / 2) ? text.slice(0, text.length / 2) : text)
-  console.log('Settings pages: ' + tabs.join(', '))
+  // C36 retired the dialog: settings is a full-page view, kept mounted hidden.
+  const dialog = page.locator(S.settingsDialog)
+  await dialog.waitFor({ state: 'visible' })
+  // Nav rows are ListRow items; config links share the row class but carry no
+  // testid, so only the fixed sections join the per-section sweep.
+  const navItems = dialog.locator('[data-testid^="settings-nav-"]')
+  const tabs = (await navItems.allTextContents()).map(text => text.slice(0, text.length / 2) === text.slice(text.length / 2) ? text.slice(0, text.length / 2) : text)
+  console.log('Settings sections: ' + tabs.join(', '))
+  const navTo = async index => {
+    const item = navItems.nth(index)
+    await item.scrollIntoViewIfNeeded()
+    await item.click()
+    await page.waitForTimeout(150)
+  }
+  const setTheme = async theme => {
+    await dialog.locator(S.settingsNavSection('appearance')).scrollIntoViewIfNeeded()
+    await dialog.locator(S.settingsNavSection('appearance')).click()
+    await dialog.getByRole('radio', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
+    await page.waitForFunction(({ theme, sel }) => document.querySelector(sel)?.classList.contains(theme), { theme, sel: S.shellTheme })
+  }
   for (const [width, height] of (process.env.SETTINGS_UI_MATRIX === 'skip' ? [] : [[1440, 900], [1024, 720]])) {
     await app.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setSize(...bounds), [width, height])
     for (const theme of ['dark', 'light']) {
-      await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
-      await dialog.getByRole('button', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
-      await page.waitForFunction(({ theme, sel }) => document.querySelector(sel)?.classList.contains(theme), { theme, sel: S.shellTheme })
+      await setTheme(theme)
       for (let i = 0; i < tabs.length; i++) {
         const tab = tabs[i].trim()
-        await dialog.locator(S.settingsNavTab).nth(i).click()
+        await navTo(i)
         if(tab === '用量') await dialog.locator(S.usageCards).waitFor()
         await page.waitForTimeout(300)
         const content = dialog.locator(S.settingsContentActive)
@@ -83,6 +97,7 @@ try {
         if (await scroller.evaluate(el=>el.scrollHeight > el.clientHeight + 2)) {
           await scroller.evaluate(el=>{el.scrollTop=el.scrollHeight})
           await dialog.screenshot({path:resolve(output, `${width}-${theme}-${i}-bottom.jpg`),quality:85})
+          await scroller.evaluate(el=>{el.scrollTop=0})
         }
         report.pages.push({ tab, width, height, theme, file, ...metrics })
         console.log(`${width} ${theme} ${tab}: ${metrics.fonts.length} elements; overflow ${metrics.overflow.length}; a11y ${metrics.accessibility.length}`)
@@ -95,9 +110,7 @@ try {
     await app.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setSize(...bounds), [width, height])
     for (const theme of ['dark', 'light']) {
       await page.locator(S.nativeSettingsTrigger).click()
-      await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
-      await dialog.getByRole('button', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
-      await page.waitForFunction(({ theme, sel }) => document.querySelector(sel)?.classList.contains(theme), { theme, sel: S.shellTheme })
+      await setTheme(theme)
       await page.keyboard.press('Escape')
       await dialog.waitFor({ state: 'hidden' })
       const plugins = await openPluginsPage(page)
@@ -128,6 +141,7 @@ try {
         if (await content.evaluate(el=>el.scrollHeight > el.clientHeight + 2)) {
           await content.evaluate(el=>{el.scrollTop=el.scrollHeight})
           await plugins.screenshot({path:resolve(output, `plugins-${width}-${theme}-${i}-bottom.jpg`),quality:85})
+          await content.evaluate(el=>{el.scrollTop=0})
         }
         report.pages.push({ tab: '插件 / ' + tab, width, height, theme, file, ...metrics })
         console.log(`${width} ${theme} 插件 / ${tab}: ${metrics.fonts.length} elements; overflow ${metrics.overflow.length}; a11y ${metrics.accessibility.length}`)
@@ -136,13 +150,14 @@ try {
     }
   }
   await page.locator(S.nativeSettingsTrigger).click()
-  await dialog.waitFor()
+  await dialog.waitFor({ state: 'visible' })
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1024,720))
-  await dialog.getByRole('tab',{name:'通用设置',exact:true}).click()
-  await dialog.getByRole('button',{name:'浅色',exact:true}).click()
+  await setTheme('light')
   report.interactions = []
-  const tabTo = async name => {
-    await dialog.locator(S.settingsNav).getByRole('tab', { name, exact: true }).click()
+  const tabTo = async id => {
+    const item = dialog.locator(S.settingsNavSection(id))
+    await item.scrollIntoViewIfNeeded()
+    await item.click()
     await page.waitForTimeout(150)
   }
   const captureExtra = async name => {
@@ -151,7 +166,7 @@ try {
     const scan = await new AxeBuilder({ page }).setLegacyMode().include(S.settingsDialog).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()
     report.interactions.push({ name, accessibility: scan.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})) })
   }
-  await tabTo('通用设置')
+  await tabTo('appearance')
   await page.evaluate(({ selectOpen, listbox })=>{
     window.settingsKeyEvents=[]
     document.addEventListener('keydown',event=>{
@@ -166,24 +181,37 @@ try {
     report.escapeChecks ??= []
     report.escapeChecks.push(await page.evaluate((sel)=>{
       const panel=document.querySelector(sel)
-      return {state:panel?.getAttribute('data-state'),ariaHidden:panel?.getAttribute('aria-hidden'),display:panel?getComputedStyle(panel).display:null}
+      return {pageVisible: panel ? panel.getBoundingClientRect().height > 0 : false}
     }, S.settingsDialog))
     await page.getByRole('listbox').waitFor({state:'hidden'})
     await dialog.waitFor({state:'visible'})
     await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label') === '语言')
   }
+  await tabTo('advanced')
   await dialog.getByRole('button', {name:'显示开发者选项',exact:true}).click()
   await captureExtra('general-developer')
-  await tabTo('助手')
+  // 破限模式 still requires the enable confirmation.
+  const limitBreak = dialog.getByRole('switch', { name: '破限模式', exact: true })
+  await limitBreak.waitFor()
+  await limitBreak.click()
+  const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog').filter({ hasText: '破限' })).first()
+  await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 })
+  report.interactions.push({ name: 'limit-break enable requires the confirmation', ok: true })
+  await confirmDialog.getByRole('button', { name: '取消', exact: true }).click()
+  await confirmDialog.waitFor({ state: 'hidden' })
+  const limitBreakState = await limitBreak.getAttribute('aria-checked') ?? await limitBreak.getAttribute('data-state')
+  assert.ok(limitBreakState === 'false' || limitBreakState === 'unchecked',
+    `cancelling the limit-break confirm must leave the switch off (got ${limitBreakState})`)
+  await tabTo('assistant')
   const author = dialog.getByRole('textbox', {name:'跨作品作者约定',exact:true})
   await author.fill('界面验收：保持段落清晰。')
-  await tabTo('写作')
-  await tabTo('助手')
+  await tabTo('writing')
+  await tabTo('assistant')
   assert.equal(await author.inputValue(), '界面验收：保持段落清晰。')
   await dialog.getByRole('button',{name:'保存作者约定',exact:true}).click()
   await page.waitForFunction(sel => document.querySelector(sel)?.disabled, S.assistantSettingsButton)
   await captureExtra('assistant-saved')
-  await tabTo('写作')
+  await tabTo('writing')
   const fontSlider = dialog.getByRole('slider',{name:'字号',exact:true})
   const oldSize=await fontSlider.getAttribute('aria-valuenow')
   await fontSlider.focus()
@@ -191,8 +219,53 @@ try {
   await page.waitForFunction(({ oldSize, sel }) => document.querySelector(sel)?.getAttribute('aria-valuenow') !== oldSize, { oldSize, sel: S.fontSizeSlider })
   assert.notEqual(await fontSlider.getAttribute('aria-valuenow'),oldSize)
   await page.keyboard.press('ArrowLeft')
+  // The live preview paper reflects the writing typography controls.
+  await dialog.locator(S.writingPreviewPaper).waitFor({ state: 'visible' })
+  const previewProbe = await dialog.locator(S.writingPreviewPaper).evaluate(el => ({
+    fontSize: parseFloat(getComputedStyle(el.querySelector('.dsh-settings-preview__para') ?? el).fontSize),
+    indent: getComputedStyle(el.querySelector('.dsh-settings-preview__para') ?? el).textIndent,
+  }))
+  assert.ok(previewProbe.fontSize > 0, 'the writing preview renders at the chosen font size')
+  const indentSwitch = dialog.getByRole('switch', { name: '首行缩进', exact: true })
+  const indentWasOn = (await indentSwitch.getAttribute('aria-checked')) === 'true' || (await indentSwitch.getAttribute('data-state')) === 'checked'
+  if (!indentWasOn) await indentSwitch.click()
+  await page.waitForFunction(sel => {
+    const para = document.querySelector(sel)?.querySelector('.dsh-settings-preview__para')
+    return para ? parseFloat(getComputedStyle(para).textIndent) > 0 : false
+  }, S.writingPreviewPaper)
+  const indentValue = await dialog.locator(S.writingPreviewPaper).evaluate(el => parseFloat(getComputedStyle(el.querySelector('.dsh-settings-preview__para')).textIndent))
+  assert.ok(indentValue > 0, `firstLineIndent on must indent the preview paragraph (got ${indentValue})`)
+  await indentSwitch.click()
+  await page.waitForFunction(sel => {
+    const para = document.querySelector(sel)?.querySelector('.dsh-settings-preview__para')
+    return para ? parseFloat(getComputedStyle(para).textIndent) === 0 : false
+  }, S.writingPreviewPaper)
+  const centerSwitch = dialog.getByRole('switch', { name: '分节符居中', exact: true })
+  await centerSwitch.waitFor()
+  const centerWasOn = (await centerSwitch.getAttribute('aria-checked')) === 'true' || (await centerSwitch.getAttribute('data-state')) === 'checked'
+  if (!centerWasOn) await centerSwitch.click()
+  await page.waitForFunction(sel => {
+    const mark = document.querySelector(sel)?.querySelector('.dsh-settings-preview__section')
+    return mark ? getComputedStyle(mark).textAlign === 'center' || mark.classList.contains('dsh-settings-preview__section--centered') : false
+  }, S.writingPreviewPaper)
+  await centerSwitch.click()
   await captureExtra('writing-keyboard')
-  await tabTo('模型')
+  // The round-tripped writing scope reaches the live paper: computed
+  // text-indent on a paragraph and section-mark centering.
+  const docHasIndent = await page.locator(S.paperEditor).isVisible().catch(() => false)
+  if (docHasIndent) {
+    const paperProbe = await page.evaluate(() => {
+      const para = document.querySelector('.cm-lp-para, .cm-line')
+      const mark = document.querySelector('.cm-lp-sectionmark, [class*="sectionmark"], [class*="section-mark"]')
+      return para || mark ? {
+        indent: para ? getComputedStyle(para).textIndent : null,
+        markAlign: mark ? getComputedStyle(mark).textAlign : null,
+      } : null
+    })
+    if (paperProbe?.indent != null) report.interactions.push({ name: 'live paper paragraph text-indent', value: paperProbe.indent })
+    if (paperProbe?.markAlign != null) report.interactions.push({ name: 'live paper section-mark align', value: paperProbe.markAlign })
+  }
+  await tabTo('models')
   await dialog.getByRole('button',{name:'编辑 DeepSeek',exact:true}).click()
   await dialog.locator(S.modelsCustomizedSummary).click()
   await captureExtra('model-editor')
@@ -247,11 +320,19 @@ try {
   })
   await zhihuCard.getByRole('button', { name: '复制规格', exact: true }).click()
   await discovery.getByText(`请手动复制：${installSpec}`, { exact: true }).waitFor()
+  // 发现 search is scoped to that page: it must not filter the 已安装 list.
+  const installedBefore = await plugins.locator(S.pluginsCatalogRow).count()
+  await showPluginList(plugins)
+  const installedAfter = await plugins.locator(S.pluginsCatalogRow).count()
+  assert.equal(installedAfter, installedBefore, 'discovery search must not filter the installed list')
+  await openPluginDiscovery(plugins)
   await query.fill('')
   await discovery.locator(S.form).getByRole('button', { name: '搜索', exact: true }).waitFor()
   await capturePluginExtra('plugin-discovery')
   // The header button routes to the official manager page and opens its
   // install dialog in one step; the dialog is modal, so fill it directly.
+  // 「添加插件」 sits in the 已安装 section's tools, so return to the list first.
+  await showPluginList(plugins)
   await plugins.locator(S.pluginsPageAddPlugin).click()
   const install = page.getByRole('dialog')
   await install.waitFor()
@@ -265,8 +346,8 @@ try {
   await capturePluginExtra('plugin-native-install-closed')
   await closePluginsPage(page)
   await page.locator(S.nativeSettingsTrigger).click()
-  await dialog.waitFor()
-  await tabTo('关于')
+  await dialog.waitFor({ state: 'visible' })
+  await tabTo('about')
   await app.evaluate(({ipcMain})=>{
     ipcMain.removeHandler('dsh-window:check-update')
     ipcMain.handle('dsh-window:check-update',()=>({status:'update-available',currentVersion:'0.3.6',latest:{version:'0.3.7',tag:'v0.3.7',name:'界面验证用更新',publishedAt:'2026-09-20T00:00:00Z',url:'https://github.com/klarkxy/dsh-editor/releases',body:'用于检查更新详情和插图是否相互遮挡。'.repeat(12)}}))
@@ -276,7 +357,7 @@ try {
   await captureExtra('about-update')
   assert.equal(await dialog.locator(S.aboutNote).filter({hasText:'macOS'}).count(),0)
   await page.emulateMedia({reducedMotion:'reduce'})
-  await tabTo('通用设置')
+  await tabTo('appearance')
   assert.equal(await dialog.locator(S.settingsPage).first().evaluate(el=>getComputedStyle(el).transform),'none')
   report.interactions.push({name:'settings keyboard, draft retention, save, native link dispatch, and reduced motion',ok:true})
   await page.keyboard.press('Escape')

@@ -291,8 +291,8 @@ try {
 
  if(await page.locator(S.proofreadOpen).count())throw new Error('paused proofreading launcher is visible');
  if(await page.locator(S.zhihuOpen).count())throw new Error('Zhihu must not contribute a desktop launcher');
- const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator(S.settingsNav).getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
- const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
+ const openSettings=async(section)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'visible'});await page.locator(S.settingsNavSection(section)).click();await page.waitForTimeout(250)};
+ const closeSettings=async()=>{await page.locator(S.settingsBack).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
  let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await openWebSearchSettings(plugins);await closePluginsPage(page);
  evidence.checks.push('desktop launchers absent; native plugin manager lists the default web-search bundle and opens its configuration');
  await page.getByRole('button',{name:'新建作品'}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000});
@@ -335,7 +335,7 @@ try {
  const panelColors=[];
  for(const theme of ['light','dark']){
    if(theme==='dark')await toggleTheme(page);
-   await openSettings('通用设置');panelColors.push(await page.locator(S.settingsDialog).evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
+   await openSettings('appearance');panelColors.push(await page.locator(S.settingsDialog).evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
    plugins=await openPluginsPage(page);await openWebSearchSettings(plugins);await page.screenshot({path:resolve(output,'web-search-settings-'+theme+'.png')});await closePluginsPage(page);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');

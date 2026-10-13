@@ -1,9 +1,10 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Callout, Card, Flex, Heading, Separator, Switch, Text } from '@radix-ui/themes'
+import { Button, Callout, Card, Flex, Heading, Separator, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
+import { Switch, SegmentedControl } from '../ui/index.ts'
 import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
 import {
   DEVELOPER_SETTINGS_NAMESPACE,
@@ -17,9 +18,9 @@ import {
 } from '../limit-break-settings.ts'
 
 /*
- * 通用设置页:语言 / 外观 / 繁忙时 Enter 行为,与上游 dsh-client-ui-settings-general
- * 的偏好写同一个 settings namespace,宿主其它模块(主题、会话 composer)照常生效。
- * 破限模式另起一个卡片:常驻封号风险声明,从关到开必须过一次确认框。
+ * 外观与语言 / 助手 / 高级三段分区:语言、外观与繁忙时 Enter 行为写上游
+ * ui-theme / ui-conversation 两个 settings namespace;破限模式是高级分区里
+ * 独立的卡片——常驻封号风险声明,从关到开必须过一次确认框。
  */
 
 type ThemePreference = 'light' | 'dark' | 'system'
@@ -65,45 +66,33 @@ function Row(props: { title: string; description?: string; children: ReactNode }
   );
 }
 
-export function SettingsGeneralSection(props: {
-  ctx: ShellContext
-  showDeveloperMode?: boolean
-  onRevealDeveloper?(): void
-}) {
-  const scopes = useMemo(() => ({
-    theme: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeThemePreference>>>('ui-theme'),
-    conversation: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeBusyEnter>>>('ui-conversation'),
-    developer: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE),
-    limitBreak: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeLimitBreakSettings>>>(LIMIT_BREAK_SETTINGS_NAMESPACE),
-  }), [props.ctx])
+export function SettingsBlock(props: { label: string; children: ReactNode }) {
+  return <Card className="settings-block">
+    <header className="settings-block-head">
+      <Heading as="h3" size="3" className="settings-block-title">
+        {props.label}
+      </Heading>
+    </header>
+    {props.children}
+  </Card>
+}
 
-  const [theme, setTheme, themeWritable] = usePreference(scopes.theme, 'system')
+/** 外观与语言分区:语言 + 主题（ui-theme namespace,写契约不变）。 */
+export function AppearanceSection(props: { ctx: ShellContext }) {
+  const scope = useMemo(
+    () => props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeThemePreference>>>('ui-theme'),
+    [props.ctx],
+  )
+  const [theme, setTheme, themeWritable] = usePreference(scope, 'system')
   const locale = useLocale()
-  const [busyEnter, setBusyEnter, conversationWritable] = useBusyEnter(scopes.conversation)
-  const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
-  const [limitBreakMode, setLimitBreakMode, limitBreakWritable] = useLimitBreakMode(scopes.limitBreak)
-  const [limitBreakConfirm, setLimitBreakConfirm] = useState(false)
-  const showDeveloperMode = props.showDeveloperMode === true
-  /* 关闭立即生效；开启要过确认框，避免误触把封号风险打开。 */
-  const requestLimitBreak = (next: boolean) => {
-    if (next) setLimitBreakConfirm(true)
-    else setLimitBreakMode(false)
-  }
-
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
     { value: 'light', label: t('settings.themeLight') },
     { value: 'dark', label: t('settings.themeDark') },
     { value: 'system', label: t('settings.themeSystem') },
   ]
-
   return (
-    <section className="settings-general" aria-label={t('settings.general')}>
-      <Card className="settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" size="3" className="settings-block-title">
-            {t('settings.interface')}
-          </Heading>
-        </header>
+    <section className="settings-general" aria-label={t('settings.appearanceTitle')}>
+      <SettingsBlock label={t('settings.interface')}>
         <Row
           title={t('settings.language')}
           children={<Select
@@ -114,72 +103,83 @@ export function SettingsGeneralSection(props: {
         <Separator size="4" />
         <Row
           title={t('settings.appearance')}
-          children={<Flex
-            className="settings-segmented"
-            role="group"
+          children={<SegmentedControl
             aria-label={t('settings.appearance')}
-            align="center"
-            gap="1">
-            {appearanceOptions.map((option) => <Button
-              key={option.value}
-              type="button"
-              size="1"
-              variant={theme === option.value ? 'soft' : 'ghost'}
-              color={theme === option.value ? undefined : 'gray'}
-              className={theme === option.value ? 'active' : ''}
-              aria-pressed={theme === option.value}
-              disabled={!themeWritable}
-              onClick={() => setTheme(option.value)}>
-              {option.label}
-            </Button>)}
-          </Flex>} />
-        <Separator size="4" />
-        <Row
-          title={t('settings.busyEnter')}
-          children={<Select
-            value={busyEnter}
-            disabled={!conversationWritable}
-            options={[{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }]}
-            onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
-            aria-label={t('settings.busyEnter')} />} />
-      </Card>
-      <Card className="settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" size="3" className="settings-block-title">
-            {t('settings.reviewExemption')}
-          </Heading>
-        </header>
-        <Row
-          title={t('settings.limitBreak')}
+            value={theme}
+            options={appearanceOptions}
+            disabled={!themeWritable}
+            onValueChange={(value) => setTheme(value as ThemePreference)} />} />
+      </SettingsBlock>
+    </section>
+  );
+}
+
+/** 助手分区里的一行:搭档忙碌时按 Enter 的发送方式（ui-conversation namespace）。 */
+export function AssistantBusyEnterRow(props: { ctx: ShellContext }) {
+  const scope = useMemo(
+    () => props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeBusyEnter>>>('ui-conversation'),
+    [props.ctx],
+  )
+  const [busyEnter, setBusyEnter, writable] = useBusyEnter(scope)
+  return (
+    <Row
+      title={t('settings.busyEnterTitle')}
+      description={t('settings.busyEnterHint')}
+      children={<Select
+        value={busyEnter}
+        disabled={!writable}
+        options={[{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }]}
+        onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
+        aria-label={t('settings.busyEnterTitle')} />} />
+  );
+}
+
+/** 高级分区:审阅豁免（破限模式）+ 开发者选项。开关整行可点,确认流程不变。 */
+export function AdvancedSection(props: {
+  ctx: ShellContext
+  showDeveloperMode?: boolean
+  onRevealDeveloper?(): void
+}) {
+  const scopes = useMemo(() => ({
+    developer: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE),
+    limitBreak: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeLimitBreakSettings>>>(LIMIT_BREAK_SETTINGS_NAMESPACE),
+  }), [props.ctx])
+
+  const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
+  const [limitBreakMode, setLimitBreakMode, limitBreakWritable] = useLimitBreakMode(scopes.limitBreak)
+  const [limitBreakConfirm, setLimitBreakConfirm] = useState(false)
+  const showDeveloperMode = props.showDeveloperMode === true
+  /* 关闭立即生效；开启要过确认框,避免误触把封号风险打开。 */
+  const requestLimitBreak = (next: boolean) => {
+    if (next) setLimitBreakConfirm(true)
+    else setLimitBreakMode(false)
+  }
+
+  return (
+    <section className="settings-general" aria-label={t('settings.advanced')}>
+      <SettingsBlock label={t('settings.reviewExemption')}>
+        <Switch
+          id="settings-limit-break"
+          label={t('settings.limitBreak')}
           description={t('settings.limitBreakModeHint')}
-          children={<Switch
-            className="settings-switch"
-            checked={limitBreakMode}
-            disabled={!limitBreakWritable}
-            aria-label={t('settings.limitBreak')}
-            onCheckedChange={requestLimitBreak} />} />
+          checked={limitBreakMode}
+          disabled={!limitBreakWritable}
+          onCheckedChange={requestLimitBreak} />
         <Callout.Root className="warning" color="red" role="alert" size="1" mt="2">
           <Callout.Text>
             {t('settings.limitBreakWarning')}
           </Callout.Text>
         </Callout.Root>
-      </Card>
-      {showDeveloperMode ? <Card className="settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" size="3" className="settings-block-title">
-            {t('settings.developer')}
-          </Heading>
-        </header>
-        <Row
-          title={t('settings.developerMode')}
+      </SettingsBlock>
+      {showDeveloperMode ? <SettingsBlock label={t('settings.developer')}>
+        <Switch
+          id="settings-developer-mode"
+          label={t('settings.developerMode')}
           description={t('settings.developerModeHint')}
-          children={<Switch
-            className="settings-switch"
-            checked={developerMode}
-            disabled={!developerWritable}
-            aria-label={t('settings.developerMode')}
-            onCheckedChange={setDeveloperMode} />} />
-      </Card> : props.onRevealDeveloper ? <Card className="settings-block">
+          checked={developerMode}
+          disabled={!developerWritable}
+          onCheckedChange={setDeveloperMode} />
+      </SettingsBlock> : props.onRevealDeveloper ? <SettingsBlock label={t('settings.developer')}>
         <Button
           type="button"
           variant="ghost"
@@ -189,7 +189,7 @@ export function SettingsGeneralSection(props: {
           onClick={props.onRevealDeveloper}>
           {t('settings.showDeveloper')}
         </Button>
-      </Card> : null}
+      </SettingsBlock> : null}
       {limitBreakConfirm ? <ConfirmDialog
         id="limit-break"
         title={t('settings.limitBreakConfirmTitle')}

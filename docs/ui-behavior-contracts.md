@@ -49,6 +49,7 @@
 | C34 | 单稿件作品自动收起文件栏，直到作者选择；按作品记住 | `src/client/sidebar-chrome.ts` | `sidebar-chrome.spec.ts` | 无 |
 | C35 | 空对话与非空对话的输入框都锚定在底部 | `src/client/chat.tsx` | 无 | 缺少测试 |
 | C36 | （已取消）设置窗口在各页保持同一高度。第 4 阶段起设置改为全页视图，本条随弹窗形态一并取消，见 [Shell 重写规格](redesign/shell-rewrite-spec.md) 第 7 节 | — | — | — |
+| C37 | 设置与插件共用同一全页视图：工作台原位保留但 inert+hidden，编辑器实例不重建；Escape 或「返回写作」关闭并把焦点还给触发者；`layout.selectPanel('plugins')` 打开插件分区、`selectPanel(null)` 关闭，`panelInfo` 发布语义不变 | `src/app/settings/settings-page.tsx` 的 `SettingsWorkspace`、`src/model/settings.ts`、`src/client/root.tsx` | `settings.spec.ts`、`e2e/layout-invariants.mjs`（编辑器身份 + Escape/焦点 + 溢出）、`e2e/settings-ui.mjs`、`e2e/plugins-page.mjs` | 无 |
 
 ## 稿纸与主题
 

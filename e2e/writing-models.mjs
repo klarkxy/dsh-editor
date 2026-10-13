@@ -155,8 +155,8 @@ async function waitForCall(kind, after = 0) {
 async function screenshot(name) { await page.screenshot({ path: resolve(output, name + '.png'), fullPage: true }) }
 async function openSettings(target = page) {
   await target.locator(S.nativeSettingsTrigger).click()
-  const dialog = target.getByRole('dialog', { name: '设置', exact: true })
-  await dialog.waitFor()
+  const dialog = target.locator(S.settingsDialog)
+  await dialog.waitFor({ state: 'visible' })
   return dialog
 }
 async function openPlugins(target = page) { return openPluginsPage(target) }
@@ -220,7 +220,7 @@ try {
   }
   await screenshot('00-plugin-inventory');
   await closePluginsPage(page);
-  let dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
+  let dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();
   const select=dialog.getByRole('combobox',{name:'补全模型',exact:true});await select.filter({hasText:process.env.RETIREMENT_LEGACY_FIXTURE==='1'?'New':'Legacy'}).waitFor();
   await select.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await select.filter({hasText:'New'}).waitFor();
   await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);
@@ -232,7 +232,7 @@ try {
   await chatSelection.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await chatSelection.filter({hasText:'New'}).waitFor();
   await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.chatModelSelect);
   await screenshot('01-native-models-light');
-  await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   await page.getByRole('button',{name:'新建作品'}).first().click();
   const project=page.getByRole('dialog',{name:'新建作品',exact:true});await project.getByLabel('作品名称').fill('原生写作模型验收');await project.getByRole('button',{name:'创建',exact:true}).click();await project.waitFor({state:'detached'});
   await page.getByRole('button',{name:'写第一篇',exact:true}).click();
@@ -261,18 +261,18 @@ try {
   assert.equal((await native('setPluginEnabled',{id:assist.entryId,enabled:true})).changed,true);
   assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));
   report.checks.push('writing assist disabled/enabled without a model-center service and author text retained');
-  dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
+  dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();
   for(const name of ['补全模型','改写模型']){const picker=dialog.getByRole('combobox',{name,exact:true});await picker.click();await page.getByRole('option',{name:'跟随当前对话',exact:true}).click();await picker.filter({hasText:'跟随当前对话'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.ariaLabel(name));}
-  await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   const liveModel=page.locator(S.chatRail).getByRole('combobox',{name:'选择模型',exact:true});await liveModel.click();await page.getByRole('option',{name:'Local acceptance · Legacy',exact:true}).click();await liveModel.filter({hasText:'Legacy'}).waitFor();
   const fallbackAt=report.calls.length;assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));assert.equal((await rpc('/manuscript','patch.complete',payload)).text,'她将旧信收进抽屉，轻轻合上。');
   assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='completion').model,'fixture-legacy');assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='rewrite').model,'fixture-legacy');assert.equal(await editor.innerText(),before);
   report.checks.push('follow-current routes use the live pending session choice before another chat turn commits it, without writing author text');
-  dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+  dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   await page.screenshot({path:resolve(output,'02-writing.png'),fullPage:true});
   const settingText=await readFile(patch,'utf8');assert.ok(settingText.includes('fixture-new'));
   await stopHost();url=await startHost();await page.goto(url);await page.locator(S.shell).waitFor({timeout:60000});
-  dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();await dialog.getByRole('combobox',{name:'补全模型',exact:true}).filter({hasText:'New'}).waitFor();
+  dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();await dialog.getByRole('combobox',{name:'补全模型',exact:true}).filter({hasText:'New'}).waitFor();
   report.checks.push('real host restart preserves the native writing model selection');
   if(process.env.E2E_OPTIONAL_INSTALL === '1' || process.argv.includes('--optional-install')) {
     await page.keyboard.press('Escape');

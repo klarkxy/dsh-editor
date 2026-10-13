@@ -215,7 +215,8 @@ try {
   await closePluginsPage(page)
   if (process.argv.includes('--staged')) { report.ok=true; throw Object.assign(new Error('staged checks complete'), { stagedComplete: true }) }
   await page.locator(S.nativeSettingsButton).click()
-  await page.getByRole('tab',{name:'快捷键',exact:true}).click()
+  await page.locator(S.settingsDialog).waitFor({ state: 'visible' })
+  await page.locator(S.settingsNavSection('shortcuts')).click()
   await page.getByRole('button',{name:'编辑快捷键',exact:true}).click()
   await page.screenshot({path:resolve(output,'shortcuts.png')})
   assert((await page.locator(S.body).innerText()).includes('新建窗口'))
