@@ -6,6 +6,7 @@ import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChar
 import { errorMessage, partialApplyDetails, safeRpcCall, snapshotTimeLabel, type RevealRequest, type ShellContext } from './shared.ts'
 import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { saveOpenEditor, type EditorSaveBlockReason } from '../wrap-up-view.ts'
+import { createNavSaveGate } from '../model/nav-save-gate.ts'
 import { toRevealRequest, type SearchHit } from '../model/search-panel.ts'
 import { t, type MessageKey } from '../i18n/index.ts'
 import type { Dispatch, SetStateAction } from 'react'
@@ -45,8 +46,10 @@ export function useRootDocuments({ ctx, fileSession, path, setPath, setWorkbench
   const editorHandleRef = useRef<EditorCoreHandle | null>(null)
   /* 返回首页/切换作品/新建/打开/树内导航前，先通过当前编辑器句柄保存：保存成功才继续。
      不依赖滞后的 dirty 布尔状态——句柄里存在与当前选择一致的有效文档就走保存
-     （干净缓冲区内部直接放行，不落盘）；组字/冲突/失败/保存期间新输入/身份变化都留在原处。 */
-  const navSaveBusyRef = useRef(false)
+     （干净缓冲区内部直接放行，不落盘）；组字/冲突/失败/保存期间新输入/身份变化都留在原处。
+     保存进行中到来的请求排队等同一个在飞保存，结束后只放行最后一个，
+     不再发第二次保存（nav-save-gate）。 */
+  const navSaveGate = useRef(createNavSaveGate()).current
   const latestDocRef = useRef({ path: '', fileSessionId: '' })
   latestDocRef.current = { path, fileSessionId: fileSession?.sessionId ?? '' }
   const saveEditorBeforeAction = async (): Promise<boolean> => {
@@ -55,21 +58,19 @@ export function useRootDocuments({ ctx, fileSession, path, setPath, setWorkbench
     const latest = latestDocRef.current
     /* 空白稿纸/未选中文件等无有效当前文档：无可保存，放行。 */
     if (!handle || !doc || doc.sessionId !== latest.fileSessionId || doc.path !== latest.path) return true
-    if (navSaveBusyRef.current) return false
-    navSaveBusyRef.current = true
-    const result = await saveOpenEditor(handle, { sessionId: doc.sessionId, path: doc.path })
-    navSaveBusyRef.current = false
-    if (!result.ok) {
-      setWorkbenchNote(t(SAVE_STAY_NOTE[result.reason]))
-      return false
-    }
-    /* await 之后复核：句柄文档身份与 root 当前文档/会话都不能变；保存期间发生的切换优先，
-       旧请求不得替新作品/新章节导航。 */
-    const after = handle.getDocument()
-    const now = latestDocRef.current
-    if (!after || after.sessionId !== doc.sessionId || after.path !== doc.path
-      || now.fileSessionId !== doc.sessionId || now.path !== doc.path) return false
-    return true
+    return navSaveGate(async () => {
+      const result = await saveOpenEditor(handle, { sessionId: doc.sessionId, path: doc.path })
+      if (!result.ok) {
+        setWorkbenchNote(t(SAVE_STAY_NOTE[result.reason]))
+        return false
+      }
+      /* await 之后复核：句柄文档身份与 root 当前文档/会话都不能变；保存期间发生的切换优先，
+         旧请求不得替新作品/新章节导航。 */
+      const after = handle.getDocument()
+      const now = latestDocRef.current
+      return Boolean(after && after.sessionId === doc.sessionId && after.path === doc.path
+        && now.fileSessionId === doc.sessionId && now.path === doc.path)
+    })
   }
   /* 编辑器 dirty 状态经 React 回传有滞后；是否真有未保存内容直接读句柄实时缓冲区。 */
   const editorHasUnsavedText = () => {
