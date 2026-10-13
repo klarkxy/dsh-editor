@@ -480,6 +480,29 @@ export function canSubmitComposer(input: { draft: string; connected: boolean; re
   return Boolean(input.draft.trim()) && input.connected && !input.removed && (!input.outgoingState || input.outgoingState === 'failed')
 }
 
+/*
+ * 发送按钮禁用原因（§5）：判禁与 canSubmitComposer 同一组输入，外加
+ * 语音接管与原生输入未就绪两条组件层条件。返回 null 表示可发送。
+ */
+export type ComposerSubmitBlock = 'empty' | 'offline' | 'removed' | 'busy' | 'voice' | 'preparing'
+export function composerSubmitBlock(input: {
+  draft: string
+  connected: boolean
+  removed: boolean
+  outgoingState?: 'sending' | 'accepted' | 'failed'
+  voiceActive?: boolean
+  nativeInputReady?: boolean
+}): ComposerSubmitBlock | null {
+  if (input.removed) return 'removed'
+  if (!input.connected) return 'offline'
+  if (input.voiceActive) return 'voice'
+  /* 组件层总是传布尔；可选入参缺省时不当未就绪处理。 */
+  if (input.nativeInputReady === false) return 'preparing'
+  if (!input.draft.trim()) return 'empty'
+  if (input.outgoingState === 'sending' || input.outgoingState === 'accepted') return 'busy'
+  return null
+}
+
 /** Keep the Host's idempotent-create ownership answer; the controller drops `created`. */
 export async function createFlowWorkspace(
   ctx: Pick<ShellContext, 'remote'>,

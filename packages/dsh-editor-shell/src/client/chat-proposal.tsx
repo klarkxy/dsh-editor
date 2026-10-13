@@ -17,6 +17,7 @@ import {
   type ShellContext,
 } from './shared.ts'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
+import { Disclosure } from '../ui/disclosure.tsx'
 import {
   buildExpectedVersions,
   proposalBasisItems,
@@ -565,24 +566,23 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     {props.proposal.summary}
   </Text>
   if (settled) {
+    /* §5：已结算卡折叠成单行 Disclosure —— chevron + 路径/标题/状态一行，
+       展开后仍是 diff + 操作行（deferred 的重新核对在展开内容里）。 */
     return (
       <Card className={`proposal-card ${state} proposal-card-settled`} size="2" aria-label={t('chat.fileProposal')}>
-        <details>
-          <summary>
-            <Flex direction="column" gap="1" minWidth="0">
-              {metaBlock}
-              <Flex align="center" justify="between" gap="2" wrap="wrap">
-                {titleBlock}
-                <Text size="1" color="gray" className="proposal-status" role="status">
-                  {state === 'applied' || state === 'undone' ? <SuccessMark /> : null}
-                  {note}
-                </Text>
-              </Flex>
-            </Flex>
-          </summary>
+        <Disclosure
+          className="proposal-settled"
+          summary={<Flex className="proposal-settled__row" align="center" gap="2" minWidth="0">
+            {metaBlock}
+            {titleBlock}
+            <Text size="1" color="gray" className="proposal-status" role="status">
+              {state === 'applied' || state === 'undone' ? <SuccessMark /> : null}
+              {note}
+            </Text>
+          </Flex>}>
           {renderBody()}
           {footer}
-        </details>
+        </Disclosure>
       </Card>
     );
   }

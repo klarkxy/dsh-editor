@@ -50,6 +50,7 @@ describe('production plugin visual boundaries', () => {
   })
 
   it('retains the sidebar entry animation on real contribution children', () => {
-    expect(componentStyles).toContain('.shell .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel)')
+    /* 抽屉是 Portal，工具页签也可能出现在 .dsh-drawer 宿主里。 */
+    expect(componentStyles).toContain(':is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel)')
   })
 })

@@ -167,10 +167,10 @@ export const componentStyles = `
 
 /* Sidebar/tree/search rules moved to src/app/files/files-rail.styles.ts (§3). */
 ${historyStyles}
-.shell .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; }
-.shell .pinned-header { border-bottom: 1px solid var(--gray-a5); }
-.shell .pinned-body { min-height: 0; flex: 1 1 auto; }
-.shell .pinned-markdown { min-width: 0; overflow-wrap: anywhere; }
+:is(.shell, .dsh-drawer) .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; }
+:is(.shell, .dsh-drawer) .pinned-header { border-bottom: 1px solid var(--gray-a5); }
+:is(.shell, .dsh-drawer) .pinned-body { min-height: 0; flex: 1 1 auto; }
+:is(.shell, .dsh-drawer) .pinned-markdown { min-width: 0; overflow-wrap: anywhere; }
 
 .radix-themes .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--gray-3); color: var(--gray-11); font-style: normal; }
 .radix-themes .export-summary { min-width: 0; }
@@ -326,7 +326,8 @@ ${historyStyles}
 .radix-themes .proposal-conflict { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--gray-a5); font-size: var(--font-size-1); color: var(--red-9); }
 
 /* ── Chat ───────────────────────────────────────────────── */
-.shell .chat {
+/* 窄窗抽屉是 Portal，挂在 .shell 之外；聊天然结构规则对抽屉同样生效。 */
+:is(.shell, .dsh-drawer) .chat {
   height: 100%;
   position: relative;
   width: 100%;
@@ -339,16 +340,16 @@ ${historyStyles}
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--color-panel-solid);
 }
-.shell .chat > * { min-width: 0; max-width: 100%; }
-.shell .chat[hidden] { display: none !important; pointer-events: none; }
-.shell .chat-header {
+:is(.shell, .dsh-drawer) .chat > * { min-width: 0; max-width: 100%; }
+:is(.shell, .dsh-drawer) .chat[hidden] { display: none !important; pointer-events: none; }
+:is(.shell, .dsh-drawer) .chat-header {
   min-height: var(--space-8);
   border-bottom: 1px solid var(--gray-a5);
 }
-.shell .chat-history { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
-.shell .chat-history .rt-ScrollAreaViewport { overscroll-behavior: contain; }
+:is(.shell, .dsh-drawer) .chat-history { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
+:is(.shell, .dsh-drawer) .chat-history .rt-ScrollAreaViewport { overscroll-behavior: contain; }
 .radix-themes .chat-row { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.shell .proposal-card pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+:is(.shell, .dsh-drawer) .proposal-card pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .radix-themes .chat-row.chat-row-enter { animation: shell-message-in 200ms both; }
 ${chatMessageStyles}
 .radix-themes .workspace-checking { grid-column: 1 / -1; grid-row: 1 / -1; }
@@ -628,9 +629,9 @@ ${chatMessageStyles}
 
 .radix-themes .models-writing-route-controls > .select { flex: 0 1 18rem; min-width: 12rem; max-width: 100%; }
 .radix-themes .models-writing-route .model-effort .select-trigger { width: auto; }
-.shell .sidebar-tools { min-width: 0; }
+:is(.shell, .dsh-drawer) .sidebar-tools { min-width: 0; }
 @keyframes shell-panel-enter { from { opacity: 0; transform: translateY(6px); } }
-.shell .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms ${EASE}; }
+:is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms ${EASE}; }
 .radix-themes .models-rows { margin: 0; padding: 0; list-style: none; }
 .radix-themes .models-add-card { border: 0; }
 .radix-themes .models-editor { display: grid; gap: var(--space-3); }

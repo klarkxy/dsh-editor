@@ -112,9 +112,9 @@ try {
     const paragraph = getComputedStyle(el.querySelector('p'))
     return {size:paragraph.fontSize,weight:paragraph.fontWeight,lineHeight:paragraph.lineHeight,heading:getComputedStyle(el.querySelector('h2')).fontSize,listSpacing:getComputedStyle(el.querySelector('li')).marginTop}
   })
-  assert.equal(readingType.size,'17px')
+  assert.equal(readingType.size,'14px')
   assert.equal(readingType.weight,'400')
-  assert(parseFloat(readingType.lineHeight) >= 28)
+  assert(parseFloat(readingType.lineHeight) >= 23)
   assert(parseFloat(readingType.heading) > parseFloat(readingType.size))
   assert.equal(readingType.listSpacing,'8px')
   await assertRoundShapes(page)

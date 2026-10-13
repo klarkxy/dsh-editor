@@ -193,14 +193,17 @@ export const componentStyles = [
   r(['.ghost.is-loading'], 'color: var(--dsh-ui-muted); background: none; animation: none;'),
 
   // Conversation: open assistant prose, one bubble fill, grouped process rows.
-  r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-sidebar);'),
+  /* 抽屉是 Portal（挂 .shell 之外）；.chat 的栏内外观对两种宿主一致。 */
+  r(['.shell .chat', '.dsh-drawer .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-sidebar);'),
   r(['.chat-header'], 'flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: 0; background: var(--dsh-ui-sidebar);'),
   r(['.chat-status'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
   r(['.chat > .chat-history'], 'flex: 1 1 0%; min-height: 0; height: auto; overflow: hidden;'),
   r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-6); padding: var(--dsh-ui-space-5);'),
   r(['.chat-row'], 'min-width: 0; max-width: 100%; overflow-wrap: anywhere;'),
   r(['.chat-row.user'], 'align-self: flex-end; width: fit-content; max-width: 92%;'),
-  r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-regular); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
+  /* 搭档回复与作者气泡同用 UI 正文号（无独立聊天字号设置；原稿
+     基准字号 14px），标题/列表在 prose 内保持相对层级。 */
+  r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-regular); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
   r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-4);'),
   r(['.chat-markdown li'], 'margin-block: var(--dsh-ui-space-2);'),
   r(['.chat-markdown > :last-child'], 'margin-bottom: 0;'),
@@ -243,8 +246,18 @@ export const componentStyles = [
   r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-5);'),
   r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-md); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text); display: block; margin-bottom: var(--dsh-ui-space-3);'),
   r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-4); margin-top: var(--dsh-ui-space-4); border-top: 0.5px solid var(--dsh-ui-line);'),
-  r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
+  r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
   r(['.proposal-path-line'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted); margin: var(--dsh-ui-space-1) 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'),
+  /* §5 已结算卡：Disclosure 摘要单行 —— chevron + 路径/标题/状态。 */
+  r(['.proposal-card-settled .dsh-disclosure__summary'], 'min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-md); padding-inline: var(--dsh-ui-space-1);'),
+  r(['.proposal-card-settled .dsh-disclosure__summary:hover'], 'background: var(--dsh-ui-hover);'),
+  r(['.proposal-card-settled .dsh-disclosure__summary:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px;'),
+  r(['.proposal-settled__row'], 'flex: 1 1 auto; min-width: 0; flex-wrap: nowrap;'),
+  r(['.proposal-settled__row .proposal-meta'], 'flex: none; flex-wrap: nowrap; min-width: 0;'),
+  r(['.proposal-settled__row .proposal-path'], 'max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'),
+  r(['.proposal-settled__row .proposal-heading'], 'flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0;'),
+  r(['.proposal-settled__row .proposal-status'], 'flex: none;'),
+  r(['.proposal-card-settled .dsh-disclosure__content'], 'min-width: 0; margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line);'),
   r(['.proposal-conflict'], 'background: var(--dsh-ui-raised); color: var(--dsh-ui-text); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
 

@@ -162,7 +162,10 @@ async function measure(page) {
     const composerEl = [...document.querySelectorAll(SEL.composer)].find((el) => visible(rect(el)))
     const composer = composerEl ? {
       rect: rect(composerEl),
-      container: rect(composerEl.closest('.dsh-aux-rail, .dsh-drawer, .dsh-pane')),
+      /* Prefer the real chrome container over the adopted pane: an
+         unstretched .dsh-pane would mask a floating composer (C35). */
+      container: rect(composerEl.closest(SEL.dshDrawer) ?? composerEl.closest('.dsh-aux-rail') ?? composerEl.closest('.dsh-pane')),
+      inDrawer: Boolean(composerEl.closest(SEL.dshDrawer)),
       thread: rect(composerEl.closest('.chat')?.querySelector('.chat-history')),
     } : null
     const cm = rect(document.querySelector('.cm-content'))
@@ -228,8 +231,9 @@ function assertProbe(label, m) {
   }
 
   if (m.composer) {
-    if (m.composer.container && Math.abs(m.composer.container.bottom - m.composer.rect.bottom) > 24) {
-      fail(`composer bottom ${m.composer.rect.bottom.toFixed(1)} not within 24px of container bottom ${m.composer.container.bottom.toFixed(1)}`)
+    const anchorLimit = m.composer.inDrawer ? 12 : 24
+    if (m.composer.container && Math.abs(m.composer.container.bottom - m.composer.rect.bottom) > anchorLimit) {
+      fail(`composer bottom ${m.composer.rect.bottom.toFixed(1)} not within ${anchorLimit}px of container bottom ${m.composer.container.bottom.toFixed(1)}`)
     }
     if (m.composer.thread && !(m.composer.rect.top > m.composer.thread.top)) {
       fail(`composer top ${m.composer.rect.top.toFixed(1)} not below thread top ${m.composer.thread.top.toFixed(1)}`)
@@ -597,6 +601,129 @@ try {
     failures.push(`margin-rules/color: left rule ${ruleColors.left} != right rule ${ruleColors.right}`)
   } else {
     note('margin-rules/color', `both rules ${ruleColors.left}`)
+  }
+
+  // ---- §5 composer toolbar stays one row at 1440 (rail still open). ----
+  {
+    const t = await page.evaluate(() => {
+      const toolbar = document.querySelector('aside.chat .composer-toolbar')
+      const send = document.querySelector('aside.chat .composer-actions .send')
+      if (!toolbar || !send) return null
+      const ts = toolbar.getBoundingClientRect()
+      /* 单行判定：所有可见子项共享同一条横向带（align=center 下不同高度
+         的子项 top 本来就不同，不能比 top）。换行时新行子项的 top 会
+         越过其他子项的 bottom。 */
+      const kids = [...toolbar.children].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0)
+      return {
+        wrap: kids.length > 1 && Math.max(...kids.map((k) => k.top)) >= Math.min(...kids.map((k) => k.bottom)) - 1,
+        rightGap: ts.right - send.getBoundingClientRect().right,
+      }
+    })
+    if (!t) failures.push('toolbar/1440: composer toolbar missing')
+    else {
+      if (t.wrap) failures.push('toolbar/1440: composer toolbar wrapped to a second row')
+      if (Math.abs(t.rightGap) > 2) failures.push(`toolbar/1440: send right edge ${t.rightGap.toFixed(1)}px off toolbar right`)
+    }
+  }
+
+  // ---- Partner Drawer at 760 / 390: C35 anchor (empty state), one-row
+  // toolbar, tab strip as the top row with the close button at its end,
+  // accessible name kept, no horizontal overflow. The long-thread variant
+  // is covered by the fixture shots (.dev/redesign/shoot-p44.mjs). ----
+  const describeActive = () => page.evaluate(() => {
+    const el = document.activeElement
+    return el ? `${el.tagName}.${el.className?.toString().slice(0, 40) || ''}${el.dataset?.testid ? '#' + el.dataset.testid : ''}` : 'none'
+  })
+  const openPartnerDrawer = async () => {
+    for (let i = 0; i < 8; i += 1) {
+      /* 宽度换档瞬间会闪挂一帧抽屉：要「稳定」可见才算开。 */
+      if (await page.locator(S.dshDrawer).isVisible().catch(() => false)) {
+        await page.waitForTimeout(1_400)
+        if (await page.locator(S.dshDrawer).isVisible().catch(() => false)
+          && await page.locator(`${S.dshDrawer} ${S.chatRail}`).isVisible().catch(() => false)) return 'already'
+      }
+      const launcher = page.locator(S.launcher)
+      const target = (await launcher.isVisible().catch(() => false)) ? launcher : page.locator(S.auxToggle)
+      await target.click().catch(() => undefined)
+      await page.locator(S.dshDrawer).waitFor({ state: 'visible', timeout: 4_000 }).catch(() => undefined)
+    }
+    return (await page.locator(S.dshDrawer).isVisible().catch(() => false)) ? 'clicked' : null
+  }
+  const drawerProbe = async (label) => {
+    const d = await page.evaluate(() => {
+      const drawer = document.querySelector('.dsh-drawer')
+      if (!drawer) return null
+      const chat = drawer.querySelector('aside.chat')
+      const composer = chat?.querySelector(':scope > .composer')
+      const toolbar = chat?.querySelector('.composer-toolbar')
+      const send = chat?.querySelector('.composer-actions .send')
+      const strip = drawer.querySelector('.dsh-aux-rail__tabs')
+      const header = drawer.querySelector('.dsh-drawer__header')
+      const close = drawer.querySelector('.dsh-drawer__close')
+      const dr = drawer.getBoundingClientRect()
+      const stripRect = strip?.getBoundingClientRect()
+      const closeRect = close?.getBoundingClientRect()
+      return {
+        drawerBottom: dr.bottom, drawerRight: dr.right, innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        composerBottom: composer ? composer.getBoundingClientRect().bottom : null,
+        toolbarWrap: toolbar
+          ? (() => {
+              const kids = [...toolbar.children].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0)
+              return kids.length > 1 && Math.max(...kids.map((k) => k.top)) >= Math.min(...kids.map((k) => k.bottom)) - 1
+            })()
+          : null,
+        sendRightGap: toolbar && send ? toolbar.getBoundingClientRect().right - send.getBoundingClientRect().right : null,
+        stripTop: stripRect ? stripRect.top - dr.top : null,
+        closeInStrip: Boolean(stripRect && closeRect
+          && closeRect.top >= stripRect.top - 1 && closeRect.bottom <= stripRect.bottom + 1
+          && closeRect.right <= dr.right + 1),
+        headerVisible: Boolean(header && header.getBoundingClientRect().height > 0),
+        named: Boolean(drawer.getAttribute('aria-label') || drawer.getAttribute('aria-labelledby')),
+      }
+    })
+    if (!d) return failures.push(`drawer/${label}: .dsh-drawer not mounted`)
+    if (d.composerBottom == null) failures.push(`drawer/${label}: composer not rendered`)
+    else if (Math.abs(d.drawerBottom - d.composerBottom) > 12) {
+      failures.push(`drawer/${label}: composer bottom ${d.composerBottom.toFixed(1)} not within space-3 of drawer bottom ${d.drawerBottom.toFixed(1)} (C35)`)
+    }
+    if (d.toolbarWrap) failures.push(`drawer/${label}: composer toolbar wrapped to a second row`)
+    if (d.sendRightGap == null) failures.push(`drawer/${label}: send button missing`)
+    else if (Math.abs(d.sendRightGap) > 2) failures.push(`drawer/${label}: send right edge ${d.sendRightGap.toFixed(1)}px off toolbar right`)
+    if (d.scrollWidth > d.innerWidth) failures.push(`drawer/${label}: scrollWidth ${d.scrollWidth} > innerWidth ${d.innerWidth}`)
+    if (d.drawerRight > d.innerWidth + 1) failures.push(`drawer/${label}: drawer right ${d.drawerRight.toFixed(1)} > innerWidth ${d.innerWidth}`)
+    if (d.headerVisible) failures.push(`drawer/${label}: visible .dsh-drawer__header still rendered`)
+    if (d.stripTop == null || d.stripTop > 4) failures.push(`drawer/${label}: tab strip is not the drawer top row (offset ${d.stripTop})`)
+    if (!d.closeInStrip) failures.push(`drawer/${label}: close button not on the tab-strip row`)
+    if (!d.named) failures.push(`drawer/${label}: dialog has no accessible name`)
+  }
+  for (const width of [760, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.waitForTimeout(1_000)
+    /* 换档时 aux.open 可能让抽屉自动挂载——那时焦点捕到的不是触发控件。
+       先确保关干净，再由「搭档」launcher 点开，焦点返回才有确定目标。 */
+    if (await page.locator(S.dshDrawer).isVisible().catch(() => false)) {
+      await page.keyboard.press('Escape').catch(() => undefined)
+      await page.waitForTimeout(800)
+    }
+    const openHow = await openPartnerDrawer()
+    if (openHow) {
+      note(`drawer/${width}`, `open=${openHow} activeAfterOpen=${await describeActive()}`)
+      await drawerProbe(String(width))
+      /* Escape 仍要关闭并把焦点还给触发它的控件。 */
+      await page.keyboard.press('Escape').catch(() => undefined)
+      await page.waitForTimeout(700)
+      if (await page.locator(S.dshDrawer).isVisible().catch(() => false)) {
+        failures.push(`drawer/${width}: Escape did not close the drawer`)
+      }
+      const focusBack = await page.evaluate(() => {
+        const el = document.activeElement
+        return el?.closest?.('[data-testid="dsh-shell-launcher"], [data-testid="dsh-shell-aux-toggle"]') ? 'control' : (el?.tagName ?? 'none')
+      })
+      if (focusBack !== 'control') failures.push(`drawer/${width}: focus returned to ${await describeActive()}, not the launcher/toggle (open=${openHow})`)
+    } else {
+      failures.push(`drawer/${width}: partner drawer did not open`)
+    }
   }
 } catch (error) {
   failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)

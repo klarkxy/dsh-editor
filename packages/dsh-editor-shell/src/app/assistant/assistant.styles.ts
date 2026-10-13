@@ -52,6 +52,12 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
   background: var(--dsh-ui-bubble); border-radius: var(--dsh-ui-radius-xl);
   padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4);
 }
+/* 气泡正文与搭档散文同一档：chat-markdown 正文 = text-base / relaxed。
+   气泡里的 Radix Text 自带 size 阶梯，显式覆盖正文行（detail/状态行
+   保持 size-1 小号）。 */
+.chat-row.user > .dsh-partner__bubble > .rt-Text:first-child {
+  font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);
+}
 
 /* ── 执行记录：单行 Disclosure，箭头移到行尾，内容缩进对齐标题 ── */
 .chat-step .dsh-disclosure__summary { min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-md); }
@@ -91,8 +97,15 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .composer .dsh-textarea:focus-visible { box-shadow: none; outline: 0; }
 .composer .composer-note { margin-block: var(--dsh-ui-space-1) 0; }
 
-/* 模型/思考芯片：长名截断（全称在 title）、思考档不再被压成「思…」。 */
-.composer-model .select-trigger { max-width: 100%; }
+/* 模型/思考芯片：长名截断（全称在 title）、思考档不再被压成「思…」。
+   窄栏（含 760/390 抽屉）里整条工具栏保持单行：模型芯片吃掉收缩量，
+   思考档不缩到标签以下，语音与发送钉在行尾。 */
+.composer-model { flex: 0 1 auto; min-width: 0; }
+.composer-model .select { min-width: 0; flex: 0 1 auto; display: flex; }
+.composer-model .select-trigger { min-width: 0; max-width: 100%; }
+.composer-model .select-trigger .rt-SelectTriggerInner {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .composer-model .model-effort .select-trigger { flex: none; min-width: max-content; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
 .composer-model .model-picker { min-width: 0; }
 `)

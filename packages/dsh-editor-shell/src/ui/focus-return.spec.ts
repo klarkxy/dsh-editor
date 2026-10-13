@@ -25,6 +25,26 @@ describe('dialog invoker capture', () => {
     expect(pickReturnFocus(undefined, captured)).toBe(captured)
   })
 
+  it('re-queries a disconnected invoker by its stable hook', async () => {
+    /* 打开抽屉时 launcher 退场，关闭后挂回的是新节点——捕获的旧节点断连，
+       按时恢复要落到新节点上。 */
+    const live = { isConnected: true, focused: false, focus(this: { focused: boolean }) { this.focused = true } }
+    const dead = { isConnected: false, dataset: { testid: 'dsh-shell-launcher' } } as unknown as HTMLElement
+    const original = globalThis.document
+    ;(globalThis as { document?: unknown }).document = {
+      querySelector: (selector: string) => (selector === '[data-testid="dsh-shell-launcher"]' ? live : null),
+    }
+    const generation = { current: 1 }
+    try {
+      scheduleReturnFocus(dead, generation)
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 10))
+      expect(live.focused).toBe(true)
+    } finally {
+      if (original === undefined) delete (globalThis as { document?: unknown }).document
+      else (globalThis as { document?: unknown }).document = original
+    }
+  })
+
   it('does not apply a stale restore after a newer generation', () => {
     const generation = { current: 1 }
     const calls: string[] = []

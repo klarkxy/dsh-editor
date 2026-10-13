@@ -203,6 +203,8 @@ export function Workbench(props: {
         open={layout.auxDrawerOpen}
         onOpenChange={(open) => { if (!open) layout.setAuxOpen(false) }}
         side="right"
+        /* §5：页签条即抽屉顶行（chrome 底），不再叠一条同名标题条。 */
+        bare
         title={auxDrawerTitle(layout.layout.aux.tab)}
         closeLabel={t('common.close')}>
         <div ref={auxDrawerSlotCb} className="dsh-pane-slot" />

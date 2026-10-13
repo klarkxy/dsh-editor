@@ -91,30 +91,30 @@ export const chatMessageStyles = `
   font-size: var(--font-size-1);
   color: var(--gray-12);
 }
-.shell .chat-markdown > :first-child { margin-top: 0; }
-.shell .chat-markdown > :last-child { margin-bottom: 0; }
-.shell .chat-markdown h1, .shell .chat-markdown h2, .shell .chat-markdown h3,
-.shell .chat-markdown h4, .shell .chat-markdown h5, .shell .chat-markdown h6 { margin: var(--space-3) 0 var(--space-2); font-weight: var(--dsh-ui-weight-strong); line-height: var(--line-height-2); }
-.shell .chat-markdown h1 { font-size: var(--font-size-4); line-height: var(--line-height-4); }
-.shell .chat-markdown h2 { font-size: var(--font-size-3); line-height: var(--line-height-3); }
-.shell .chat-markdown h3, .shell .chat-markdown h4, .shell .chat-markdown h5, .shell .chat-markdown h6 { font-size: var(--font-size-2); }
-.shell .chat-markdown p { margin: 0 0 var(--space-3); }
-.shell .chat-markdown ul, .shell .chat-markdown ol { margin: 0 0 var(--space-2); padding-left: var(--space-5); }
-.shell .chat-markdown li { margin: var(--space-1) 0; }
-.shell .chat-markdown blockquote {
+:is(.shell, .dsh-drawer) .chat-markdown > :first-child { margin-top: 0; }
+:is(.shell, .dsh-drawer) .chat-markdown > :last-child { margin-bottom: 0; }
+:is(.shell, .dsh-drawer) .chat-markdown h1, :is(.shell, .dsh-drawer) .chat-markdown h2, :is(.shell, .dsh-drawer) .chat-markdown h3,
+:is(.shell, .dsh-drawer) .chat-markdown h4, :is(.shell, .dsh-drawer) .chat-markdown h5, :is(.shell, .dsh-drawer) .chat-markdown h6 { margin: var(--space-3) 0 var(--space-2); font-weight: var(--dsh-ui-weight-strong); line-height: var(--line-height-2); }
+:is(.shell, .dsh-drawer) .chat-markdown h1 { font-size: var(--font-size-4); line-height: var(--line-height-4); }
+:is(.shell, .dsh-drawer) .chat-markdown h2 { font-size: var(--font-size-3); line-height: var(--line-height-3); }
+:is(.shell, .dsh-drawer) .chat-markdown h3, :is(.shell, .dsh-drawer) .chat-markdown h4, :is(.shell, .dsh-drawer) .chat-markdown h5, :is(.shell, .dsh-drawer) .chat-markdown h6 { font-size: var(--font-size-2); }
+:is(.shell, .dsh-drawer) .chat-markdown p { margin: 0 0 var(--space-3); }
+:is(.shell, .dsh-drawer) .chat-markdown ul, :is(.shell, .dsh-drawer) .chat-markdown ol { margin: 0 0 var(--space-2); padding-left: var(--space-5); }
+:is(.shell, .dsh-drawer) .chat-markdown li { margin: var(--space-1) 0; }
+:is(.shell, .dsh-drawer) .chat-markdown blockquote {
   margin: 0 0 var(--space-2);
   padding-left: var(--space-3);
   border-left: 2px solid var(--gray-a5);
   color: var(--gray-11);
 }
-.shell .chat-markdown hr { margin: var(--space-3) 0; border: 0; border-top: 1px solid var(--gray-a5); }
-.shell .chat-markdown code {
+:is(.shell, .dsh-drawer) .chat-markdown hr { margin: var(--space-3) 0; border: 0; border-top: 1px solid var(--gray-a5); }
+:is(.shell, .dsh-drawer) .chat-markdown code {
   padding: 0 var(--space-1);
   border-radius: var(--radius-2);
   background: var(--gray-3);
   font-family: var(--code-font-family);
 }
-.shell .chat-markdown pre {
+:is(.shell, .dsh-drawer) .chat-markdown pre {
   max-height: 15rem;
   overflow: auto;
   margin: 0 0 var(--space-2);
@@ -125,9 +125,9 @@ export const chatMessageStyles = `
   max-width: 100%;
   font-family: var(--code-font-family);
 }
-.shell .chat-markdown pre code { padding: 0; background: transparent; }
-.shell .chat-markdown a { color: var(--accent-11); }
-.shell .chat-markdown table { border-collapse: collapse; width: 100%; margin: 0 0 var(--space-2); }
-.shell .chat-markdown th, .shell .chat-markdown td { border: 1px solid var(--gray-5); padding: var(--space-1) var(--space-2); }
+:is(.shell, .dsh-drawer) .chat-markdown pre code { padding: 0; background: transparent; }
+:is(.shell, .dsh-drawer) .chat-markdown a { color: var(--accent-11); }
+:is(.shell, .dsh-drawer) .chat-markdown table { border-collapse: collapse; width: 100%; margin: 0 0 var(--space-2); }
+:is(.shell, .dsh-drawer) .chat-markdown th, :is(.shell, .dsh-drawer) .chat-markdown td { border: 1px solid var(--gray-5); padding: var(--space-1) var(--space-2); }
 
 `

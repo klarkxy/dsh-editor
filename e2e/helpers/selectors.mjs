@@ -198,7 +198,7 @@ export const S = Object.freeze({
   proposalCardApplied: '.proposal-card.applied',
   proposalCardExpired: '.proposal-card.expired',
   proposalCardSettled: (mode) => `.proposal-card.${mode}.proposal-card-settled`,
-  proposalCardSummary: '.proposal-card summary',
+  proposalCardSummary: '.proposal-card .dsh-disclosure__summary',
   proposalStatus: '.proposal-status',
 
   // ---- plugins page ----------------------------------------------------------

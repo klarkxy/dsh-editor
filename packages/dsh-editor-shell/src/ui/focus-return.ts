@@ -17,8 +17,18 @@ export function pickReturnFocus(supplied: HTMLElement | null | undefined, captur
 /** Ignore stale delayed restores after a later open/close generation. */
 export function scheduleReturnFocus(target: HTMLElement | null, generation: { current: number }): void {
   const expected = generation.current
+  /* 触发控件可能在弹层开着时被卸载重建（「搭档」launcher 在抽屉打开时退场，
+     关闭时又挂回新节点）。捕获节点断连时按稳定钩子重查一遍。 */
+  const requery = target && (target.dataset?.testid
+    ? `[data-testid="${target.dataset.testid}"]`
+    : target.id ? `#${target.id}` : null)
   globalThis.setTimeout(() => {
     if (generation.current !== expected) return
-    if (target?.isConnected) target.focus()
+    if (target?.isConnected) {
+      target.focus()
+      return
+    }
+    const again = requery ? globalThis.document?.querySelector<HTMLElement>(requery) : null
+    if (again?.isConnected) again.focus()
   }, 0)
 }

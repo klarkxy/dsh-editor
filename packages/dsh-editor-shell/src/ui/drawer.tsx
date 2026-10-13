@@ -1,9 +1,21 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { useRef, type ReactNode } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 import { IconButton } from './icon-button.tsx'
-import { useDshPortalContainer } from './shared.ts'
+import { cx, useDshPortalContainer } from './shared.ts'
 import './drawer.styles.ts'
+
+/* 视觉隐藏（.shell .sr-only 管不到 Portal 内容，这里内联自带；
+   与 command-palette 同一写法）。 */
+const visuallyHidden: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+}
 
 /** 窄窗覆盖栏用的侧滑抽屉（Radix Dialog）。 */
 export function Drawer(props: {
@@ -14,6 +26,9 @@ export function Drawer(props: {
   side?: 'left' | 'right'
   title: ReactNode
   closeLabel: string
+  /** 无标题条模式：标题进 VisuallyHidden，内容第一行（页签条）自己充当
+      抽屉顶行，关闭按钮绝对定位压在它的右端。 */
+  bare?: boolean
   children?: ReactNode
 }) {
   const container = useDshPortalContainer()
@@ -36,7 +51,7 @@ export function Drawer(props: {
                 DismissableLayer，第一次 Escape 会先被它吃掉。 */}
             <DialogPrimitive.Content
               ref={contentRef}
-              className="dsh-drawer"
+              className={cx('dsh-drawer', props.bare ? 'dsh-drawer--bare' : '')}
               data-side={props.side ?? 'right'}
               onOpenAutoFocus={(event) => {
                 event.preventDefault()
@@ -47,11 +62,25 @@ export function Drawer(props: {
                 scheduleReturnFocus(returnFocus.current, restoreGen)
               }}
             >
-              <div className="dsh-drawer__header">
-                <DialogPrimitive.Title className="dsh-drawer__title">{props.title}</DialogPrimitive.Title>
-                <DialogPrimitive.Close asChild><IconButton label={props.closeLabel} /></DialogPrimitive.Close>
-              </div>
-              <div className="dsh-drawer__body">{props.children}</div>
+              {props.bare ? (
+                <>
+                  <DialogPrimitive.Title style={visuallyHidden}>{props.title}</DialogPrimitive.Title>
+                  {/* 关闭钮压在页签条右端（抽屉内第一行）；Dialog.Title 只
+                      保留可访问名称。 */}
+                  <DialogPrimitive.Close asChild>
+                    <IconButton className="dsh-drawer__close" size="sm" label={props.closeLabel} />
+                  </DialogPrimitive.Close>
+                  <div className="dsh-drawer__body">{props.children}</div>
+                </>
+              ) : (
+                <>
+                  <div className="dsh-drawer__header">
+                    <DialogPrimitive.Title className="dsh-drawer__title">{props.title}</DialogPrimitive.Title>
+                    <DialogPrimitive.Close asChild><IconButton label={props.closeLabel} /></DialogPrimitive.Close>
+                  </div>
+                  <div className="dsh-drawer__body">{props.children}</div>
+                </>
+              )}
             </DialogPrimitive.Content>
           </>
         )

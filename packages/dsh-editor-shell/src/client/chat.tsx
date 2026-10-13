@@ -56,6 +56,7 @@ import { takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import {
   canSubmitComposer,
+  composerSubmitBlock,
   safeRpcCall,
   shouldSubmitComposer,
   type ShellContext,
@@ -395,6 +396,15 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     removed: snapshot.removed === true,
     outgoingState: outgoing?.state,
   })
+  /* 禁用原因同判禁条件一一对应，禁用态通过 title 暴露给作者。 */
+  const sendBlock = composerSubmitBlock({
+    draft,
+    connected: Boolean(connected),
+    removed: snapshot.removed === true,
+    outgoingState: outgoing?.state,
+    voiceActive,
+    nativeInputReady,
+  })
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
@@ -548,7 +558,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
           action={note === t('chat.defaultModelFailed') ? <UiButton variant="secondary" size="sm" type="button" onClick={onConfigure}>
             {t('chat.fixDefaultModel')}
           </UiButton> : undefined} /> : null}
-        <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
+        <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="nowrap" minWidth="0">
           <Box className="composer-model" flexGrow="1" minWidth="0">
             <ModelPicker
               key={`${session.sessionId}:${modelRevision}`}
@@ -576,7 +586,8 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
               className="send"
               type="submit"
               label={t('chat.send')}
-              disabled={!composerCanSubmit || voiceActive || !nativeInputReady}>
+              title={sendBlock ? t(`chat.sendBlocked.${sendBlock}`) : undefined}
+              disabled={sendBlock !== null}>
               <SendIcon size="sm" />
             </UiIconButton>
           </Flex>

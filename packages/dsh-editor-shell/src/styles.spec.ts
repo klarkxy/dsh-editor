@@ -11,8 +11,9 @@ describe('chrome type scale', () => {
     expect(redesignedStyles).not.toMatch(/--font-size-1:\s*\d+px/)
     expect(redesignedStyles).not.toMatch(/font-size:\s*1[123]px/)
     expect(redesignedStyles).not.toMatch(/font-size:\s*18px/)
-    expect(redesignedStyles).toContain('.shell .chat-markdown h1 { font-size: var(--font-size-4)')
-    expect(redesignedStyles).toContain('.shell .chat-markdown h2 { font-size: var(--font-size-3)')
+    /* 抽屉是 Portal：聊天然规则同时覆盖 .shell 与 .dsh-drawer 宿主。 */
+    expect(redesignedStyles).toContain(':is(.shell, .dsh-drawer) .chat-markdown h1 { font-size: var(--font-size-4)')
+    expect(redesignedStyles).toContain(':is(.shell, .dsh-drawer) .chat-markdown h2 { font-size: var(--font-size-3)')
   })
 })
 
@@ -43,7 +44,7 @@ describe('paper pane alignment', () => {
     // (dsh.surfaces layer); the chat header stays in the structural sheet.
     expect(filesRailStyles).toContain('.dsh-files-rail__head')
     expect(filesRailStyles).toMatch(/\.dsh-files-rail__head[^{]*\{[^}]*min-height: var\(--dsh-ui-header-height\)/)
-    expect(redesignedStyles).toContain('.shell .chat-header')
+    expect(redesignedStyles).toContain(':is(.shell, .dsh-drawer) .chat-header')
   })
 
   it('left-aligns file-tree rows instead of centering Radix button contents', () => {

@@ -79,8 +79,15 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 
 /* 辅助栏页签头 */
 .dsh-aux-rail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.dsh-aux-rail__tabs { flex: none; border-bottom: 0.5px solid var(--dsh-ui-line); }
-.dsh-aux-rail__tabs .dsh-tabs__list { padding-inline: var(--dsh-ui-space-2); }
+/* §5：chrome 底；抽屉里（bare）页签条兼任抽屉顶行，右端给关闭钮留位。 */
+.dsh-aux-rail__tabs {
+  flex: none; border-bottom: 0.5px solid var(--dsh-ui-line);
+  background: var(--dsh-ui-chrome);
+  padding-inline: var(--dsh-ui-space-2);
+}
+.dsh-drawer--bare .dsh-aux-rail__tabs {
+  padding-right: calc(var(--dsh-ui-control-sm) + var(--dsh-ui-space-3));
+}
 .dsh-aux-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dsh-aux-panel .chat { flex: 1 1 auto; min-height: 0; }
 .dsh-aux-panel__head {

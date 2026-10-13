@@ -29,6 +29,7 @@ export const inject = [
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
 export {
   canSubmitComposer,
+  composerSubmitBlock,
   claimInitialWorkspaceResume,
   consumeInitialWorkspaceResume,
   clampPanelWidth,
