@@ -80,16 +80,24 @@ describe('recentWorkRowMeta', () => {
   const fmt = (iso: string | undefined) => (iso ? `t:${iso}` : '')
   it('keeps time and chapter as two separate spans', () => {
     const { meta, lineInfo } = recentWorkRowMeta(
-      { updatedAt: '2026-10-13' },
+      { path: 'C:\\Writing\\ux-work', updatedAt: '2026-10-13' },
       { path: '正文/001.md', title: '雨日归家' },
       fmt,
     )
     expect(meta).toEqual(['t:2026-10-13', '雨日归家'])
-    expect(lineInfo).toBe('正文/001.md')
+    /* 右对齐信息是作品位置（目录末尾两段），不是章节路径。 */
+    expect(lineInfo).toBe('…\\Writing\\ux-work')
+  })
+
+  it('shortens a posix work path with an ellipsis', () => {
+    const { lineInfo } = recentWorkRowMeta({ path: '/home/ada/Writing/ux-work' }, undefined, fmt)
+    expect(lineInfo).toBe('…/Writing/ux-work')
   })
 
   it('omits missing pieces instead of joining placeholders', () => {
     expect(recentWorkRowMeta({}, undefined, fmt)).toEqual({ lineInfo: '', meta: [] })
-    expect(recentWorkRowMeta({ updatedAt: 'x' }, undefined, fmt).meta).toEqual(['t:x'])
+    expect(recentWorkRowMeta({ updatedAt: 'x' }, undefined, fmt)).toEqual({ lineInfo: '', meta: ['t:x'] })
+    /* 拿到相对的两段路径时原样展示（没有可截掉的前缀就不加 …）。 */
+    expect(recentWorkRowMeta({ path: 'Writing\\ux-work' }, undefined, fmt).lineInfo).toBe('Writing\\ux-work')
   })
 })

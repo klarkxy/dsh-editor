@@ -225,6 +225,11 @@ export function useRootWorkspaces({
     if (!recovery.ok) pending.warning = t('note.unverifiedImportIgnored')
     const initialPath = relocatedInitialPath ?? (await verifyWorkspaceSession(ctx, sessionId, knownTextFiles, pending.preferredPath))
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    /* preferredPath 已被删除/改名时 verify 回落到首章：记录里的章节已不存在，
+       顺手丢掉，首页不再指向失效文件。 */
+    if (!relocatedInitialPath && pending.preferredPath && initialPath !== pending.preferredPath) {
+      removeHomeResumeDoc(pending.workspace.workspaceId)
+    }
     if (!initialPath) {
       const allFiles = await collectWorkspaceFiles(ctx, sessionId)
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return

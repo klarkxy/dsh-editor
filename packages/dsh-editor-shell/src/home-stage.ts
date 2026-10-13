@@ -1,11 +1,13 @@
 import { t } from './i18n/index.ts'
 
-/** Short recent-work path: last two segments, so the disk root stays off the card. */
+/** 最近作品行的作品位置：保留路径自身的分隔符，超过两段时以「…」
+   起头只留末尾两段（如 …\Writing\ux-work）；完整路径仍在行 title 里。 */
 export function recentWorkPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
-  const parts = normalized.split('/').filter(Boolean)
-  if (parts.length <= 2) return normalized
-  return parts.slice(-2).join('/')
+  if (!path) return ''
+  const sep = path.includes('\\') ? '\\' : '/'
+  const parts = path.split(/[\\/]+/).filter(Boolean)
+  if (parts.length <= 2) return parts.join(sep)
+  return `…${sep}${parts.slice(-2).join(sep)}`
 }
 
 /* 把 WorkspaceView.updatedAt(ISO-8601)格式化为首页最近作品区使用的简短时间标签:

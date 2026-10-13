@@ -45,7 +45,7 @@ defineStyles('dsh.surfaces', 'dsh-home', `
 .dsh-home-continue__text { flex: 1 1 auto; min-width: 0; }
 .dsh-home-continue__label {
   display: block; font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-medium);
-  color: var(--dsh-ui-accent); margin-bottom: var(--dsh-ui-space-1);
+  color: var(--dsh-ui-muted); margin-bottom: var(--dsh-ui-space-1);
 }
 .dsh-home-continue__title {
   margin: 0; font-family: var(--dsh-ui-font-display);
@@ -94,7 +94,7 @@ defineStyles('dsh.surfaces', 'dsh-home', `
   display: flex; gap: var(--dsh-ui-space-4); flex-wrap: wrap;
   margin-top: var(--dsh-ui-space-1); font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);
 }
-.dsh-home-row__meta { min-width: 0; }
+.dsh-home-row__meta { min-width: 0; color: var(--dsh-ui-muted); }
 .dsh-home-row__manage {
   position: absolute; inset-inline-end: 0; top: var(--dsh-ui-space-3);
 }

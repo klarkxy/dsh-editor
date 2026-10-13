@@ -3,7 +3,7 @@ import type { WorkspaceView } from '../../dsh-compat.ts'
 import type { WorkspaceOpenState } from '../../client/shared.ts'
 import { startupResumeWorkspace } from '../../client/shared.ts'
 import { t, useLocale } from '../../i18n/index.ts'
-import { formatRecentTime, recentWorkPath } from '../../home-stage.ts'
+import { formatRecentTime } from '../../home-stage.ts'
 import {
   readHomeResumeMap,
   recentWorkRowMeta,
@@ -117,8 +117,10 @@ function RecentRow(props: {
         }}>
         <span className="dsh-home-row__line1">
           <span className="dsh-home-row__title">{workspace.title || workspace.path}</span>
-          <span className="dsh-home-row__leader" aria-hidden="true" />
-          <span className="dsh-home-row__info">{lineInfo || recentWorkPath(workspace.path)}</span>
+          {lineInfo ? <>
+            <span className="dsh-home-row__leader" aria-hidden="true" />
+            <span className="dsh-home-row__info">{lineInfo}</span>
+          </> : null}
         </span>
         {meta.length ? <span className="dsh-home-row__line2">
           {meta.map((item, index) => <span key={index} className="dsh-home-row__meta">{item}</span>)}
@@ -222,14 +224,14 @@ export function HomeScreen(props: {
         <div className="dsh-home__inner">
           <header className="dsh-home__head">
             <h1 className="dsh-home__title">{t('home.recent')}</h1>
-            <div className="dsh-home__actions">
+            {props.workspaces.length ? <div className="dsh-home__actions">
               <Button variant="secondary" disabled={busy} onClick={() => void props.onOpenWork()}>
                 {t('home.openWork')}
               </Button>
               <Button variant="secondary" disabled={busy} onClick={() => void props.onNewProject()}>
                 {t('home.newWork')}
               </Button>
-            </div>
+            </div> : null}
           </header>
           {latest ? <section className="dsh-home-continue" aria-label={t('home.continueWriting')}>
             <div className="dsh-home-continue__text">
@@ -283,7 +285,7 @@ export function HomeScreen(props: {
               className="dsh-home__empty"
               title={t('home.recentEmpty')}
               actions={<>
-                <Button variant="secondary" disabled={busy} onClick={() => void props.onNewProject()}>
+                <Button disabled={busy} onClick={() => void props.onNewProject()}>
                   {t('home.newWork')}
                 </Button>
                 <Button variant="secondary" disabled={busy} onClick={() => void props.onOpenWork()}>

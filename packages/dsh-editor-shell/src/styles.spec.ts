@@ -29,7 +29,8 @@ describe('paper pane alignment', () => {
     expect(redesignedStyles).toMatch(/\.radix-themes \.editor \{[^}]*background: var\(--paper-fill\)/)
     expect(redesignedStyles).toMatch(/\.shell \.editor-cell \{[^}]*background: var\(--paper-fill\)/)
     expect(redesignedStyles).toMatch(/\.settings-nav \.settings-tab\[data-state="active"\][^}]*background: var\(--accent-a3\)/)
-    expect(redesignedStyles).toMatch(/\.shell > \.chrome \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent-a5\)/)
+    /* 首页 chrome 与工作台顶栏同约定：底边只有 hairline，不再有 accent 条。 */
+    expect(redesignedStyles).not.toMatch(/\.shell > \.chrome \{[^}]*box-shadow/)
   })
 
   it('keeps the CodeMirror scroller top-start so a short chapter does not float', () => {

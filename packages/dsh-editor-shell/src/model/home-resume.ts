@@ -3,6 +3,7 @@
    （readableDocumentTitle：首个标题，退回文件名），摘录取首个非空正文行。
    localStorage 不可用时静默降级为不记忆。 */
 import { readableDocumentTitle } from '../wrap-up-view.ts'
+import { recentWorkPath } from '../home-stage.ts'
 
 export type HomeResumeDoc = {
   path: string
@@ -82,9 +83,12 @@ export function deriveHomeResumeDoc(path: string, text: string): HomeResumeDoc {
   return excerpt ? { path, title, excerpt } : { path, title }
 }
 
-/** 最近作品行的右对齐信息与第二行条目；第二行条目为两段独立 span。 */
+/** 最近作品行的右对齐信息与第二行条目；第二行条目为两段独立 span。
+   lineInfo 是作品位置（目录末尾两段，如 …\Writing\ux-work），不是章节路径：
+   章节名已经在第二行，再显示一遍还带扩展名反而重复。路径拿不到时返回空串，
+   由界面收起信息区与点线。 */
 export function recentWorkRowMeta(
-  workspace: { updatedAt?: string },
+  workspace: { path?: string; updatedAt?: string },
   resume: HomeResumeDoc | undefined,
   formatTime: (iso: string | undefined) => string,
 ): { lineInfo: string; meta: string[] } {
@@ -92,5 +96,5 @@ export function recentWorkRowMeta(
   const time = formatTime(workspace.updatedAt)
   if (time) meta.push(time)
   if (resume?.title) meta.push(resume.title)
-  return { lineInfo: resume?.path ?? '', meta }
+  return { lineInfo: recentWorkPath(workspace.path ?? ''), meta }
 }

@@ -73,7 +73,6 @@ export const componentStyles = `
   padding-left: var(--space-3);
   padding-right: 0;
   border-bottom: 1px solid var(--gray-a5);
-  box-shadow: inset 0 -2px 0 var(--accent-a5);
   background: var(--gray-2);
   -webkit-app-region: drag;
 }
