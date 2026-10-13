@@ -44,7 +44,6 @@ import { ReferenceLookupDialog } from './reference-lookup-dialog.tsx'
 import { Button as HostButton, isImeEvent } from './ui/index.ts'
 import { Button, Input, Notice, Popover } from '../ui/index.ts'
 import { Button as ThemesButton, Callout, Text } from '@radix-ui/themes'
-import { readableDocumentTitle } from '../wrap-up-view.ts'
 import {
   clipboardResultMessage,
   copyEditorSelection,
@@ -189,7 +188,6 @@ export function Editor(props: {
   const onHandle = useCallback((handle: EditorCoreHandle | null) => {
     handleRef.current = handle
     if (handle) {
-      setBufferText(handle.getText() ?? '')
       editorFocusTarget.current = handle.getFocusTarget()
     }
     onHandleOut?.(handle)
@@ -338,13 +336,9 @@ export function Editor(props: {
     handle.requestRewrite(instruction, target)
   }
   const runCustomRewrite = () => submitRewrite(customText)
-  const [bufferText, setBufferText] = useState('')
 
   const onStatusChange = useCallback((next: EditorCoreStatus) => {
     setStatus(next)
-    if (next === 'saved' || next === 'draft' || next === 'conflict' || next === 'empty') {
-      setBufferText(handleRef.current?.getText() ?? '')
-    }
   }, [])
 
   const reloadDisk = useCallback(async () => {
@@ -387,7 +381,6 @@ export function Editor(props: {
   useEffect(() => {
     setNote('')
     setReloadConfirm(false)
-    setBufferText('')
     setOverflowOpen(false)
     setContextMenu(null)
     setCustomRewriteOpen(false)
@@ -395,8 +388,6 @@ export function Editor(props: {
     setRewriteAnchor(null)
     setReferenceQuery(null)
   }, [path, session.sessionId, externalRevision])
-
-  const currentText = bufferText || handleRef.current?.getText() || ''
 
   useEffect(() => {
     if (!path || !reveal || reveal.path !== path) return
@@ -416,6 +407,52 @@ export function Editor(props: {
     const timer = globalThis.setTimeout(() => { apply() }, 80)
     return () => globalThis.clearTimeout(timer)
   }, [path, reveal?.nonce, reveal?.path, reveal?.version, externalRevision])
+
+  /* 版心竖线定位（§4）：从 .cm-content 的实际内容盒（边框盒减两侧内边距）
+     量出文字区左右缘，各向外让 24px 画线；跟随 paperWidth 与窗口尺寸。 */
+  const editorStackRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const host = editorStackRef.current
+    const paper = host?.querySelector<HTMLElement>('.paper-input')
+    if (!host || !paper) return
+    let content: HTMLElement | null = null
+    let raf = 0
+    const measure = () => {
+      raf = 0
+      if (!content) return
+      const inputRect = paper.getBoundingClientRect()
+      const contentRect = content.getBoundingClientRect()
+      const styles = globalThis.getComputedStyle(content)
+      const left = contentRect.left + (Number.parseFloat(styles.paddingLeft) || 0) - inputRect.left
+      const right = contentRect.right - (Number.parseFloat(styles.paddingRight) || 0) - inputRect.left
+      if (right <= left) return
+      /* 1px 线内缘距内容盒 24px。 */
+      paper.style.setProperty('--paper-rule-left', `${Math.round(left - 25)}px`)
+      paper.style.setProperty('--paper-rule-right', `${Math.round(right + 24)}px`)
+    }
+    const schedule = () => { if (!raf) raf = globalThis.requestAnimationFrame(measure) }
+    const observer = new ResizeObserver(schedule)
+    const sync = () => {
+      const next = host.querySelector<HTMLElement>('.cm-content')
+      if (next !== content) {
+        if (content) observer.unobserve(content)
+        content = next
+        if (content) observer.observe(content)
+      }
+      schedule()
+    }
+    const mutations = new MutationObserver(sync)
+    mutations.observe(paper, { childList: true, subtree: true })
+    observer.observe(paper)
+    globalThis.addEventListener('resize', schedule)
+    sync()
+    return () => {
+      mutations.disconnect()
+      observer.disconnect()
+      globalThis.removeEventListener('resize', schedule)
+      if (raf) globalThis.cancelAnimationFrame(raf)
+    }
+  }, [path, session.sessionId])
 
   if (!path) {
     const hasDocument = files.some((item) => isAuthorFacingDocumentPath(item))
@@ -438,6 +475,7 @@ export function Editor(props: {
       {/* .editor-stack 接管原 .editor 的直接子级网格座位（grid-row: 2，见 styles.ts），
          内联布局样式与原稿纸根一致：flex 列 + 100% 高，子级 .editor-pane/.editor 尺寸行为不变。 */}
       <div
+        ref={editorStackRef}
         className="editor-stack"
         style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div className="editor-pane">
@@ -476,12 +514,9 @@ export function Editor(props: {
             hostButton={HostButton}
             paperHeader={<div className="paper-page-header">
               <div className="paper-page-headline">
-                {/* paper-path 是沿用至今的测试钩子（原来就在内置页眉里被 sr-only 掉），
-                    页面标题继续显示可读文档名。 */}
+                {/* paper-path 是沿用至今的测试钩子；§4 修订后页眉不再显示标题
+                    文字（正文一级标题即章节名），只留右侧「⋯」稿纸菜单。 */}
                 <span className="sr-only" data-testid="paper-path">{path}</span>
-                <h1 className="paper-page-title" title={path}>
-                  {readableDocumentTitle(path, currentText)}
-                </h1>
                 <span className="paper-page-menu">
                   <EditorOverflowMenu
                     open={overflowOpen}
@@ -495,7 +530,6 @@ export function Editor(props: {
                     onCloseAutoFocus={focusEditorIfNeeded} />
                 </span>
               </div>
-              <div className="paper-tiantou" aria-hidden="true" />
             </div>}
             conflictNotice={<div data-testid="paper-conflict-guard">
               <Notice

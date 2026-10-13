@@ -114,7 +114,18 @@ export const paperTheme: Extension = EditorView.theme({
     color: 'var(--gray-10)',
   },
   /* Live-preview decorations. */
-  '.cm-lp-h1': { fontSize: 'var(--paper-h1-size, 1.6em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.5' },
+  /* 一级标题即章节标题（§4 修订）：display 字、26px、常规字重、居中，
+     下方天头细线；二到四级保持无衬线 600。 */
+  '.cm-lp-h1': {
+    fontSize: 'var(--paper-h1-size, 26px)',
+    fontWeight: 'var(--dsh-ui-weight-regular, 400)',
+    fontFamily: 'var(--dsh-ui-font-display, var(--paper-font-family))',
+    lineHeight: '1.5',
+    textAlign: 'center',
+    textIndent: '0',
+    paddingBottom: '0.4em',
+    borderBottom: '1px solid var(--dsh-ui-line, var(--gray-6))',
+  },
   '.cm-lp-h2': { fontSize: 'var(--paper-h2-size, 1.35em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.55' },
   '.cm-lp-h3': { fontSize: 'var(--paper-h3-size, 1.15em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.6' },
   '.cm-lp-h4': { fontSize: 'var(--paper-h4-size, 1.05em)', fontWeight: 'var(--paper-heading-weight, 600)' },
@@ -159,14 +170,30 @@ export const paperTheme: Extension = EditorView.theme({
   '.cm-ghost': { color: 'var(--gray-9)', whiteSpace: 'pre-wrap' },
   /* 正文段落：firstLineIndent 偏好映射为 --paper-first-indent（0 或 2em）。 */
   '.cm-lp-para': { textIndent: 'var(--paper-first-indent, 0)' },
-  /* 分节符 / 中文小节号：居中、display 字、上下留白；不改文本。 */
+  /* 分节符 / 中文小节号：居中、上下留白；不改文本。
+     中文数字用 display 字；* ＊ ※ ◇ 是符号不是字，走 font-ui 并强制
+     font-variant-emoji:text，否则 ※ 会被彩色 emoji 字形接管。 */
   '.cm-lp-section': {
     textAlign: 'center',
     textIndent: '0',
-    fontFamily: 'var(--dsh-ui-font-display, var(--paper-font-family))',
     fontSize: 'var(--paper-section-size, 18px)',
-    paddingTop: '1.5em',
-    paddingBottom: '1.5em',
+    paddingTop: '1em',
+    paddingBottom: '1em',
+  },
+  '.cm-lp-section--cjk': {
+    fontFamily: 'var(--dsh-ui-font-display, var(--paper-font-family))',
+  },
+  '.cm-lp-section--symbol': {
+    fontFamily: 'var(--dsh-ui-font-ui, var(--paper-font-family))',
+    fontVariantEmoji: 'text',
+    color: 'var(--s-muted, var(--gray-11))',
+  },
+  /* 段间空行（§4）：两个非空行之间的空行收为段距高；光标行恢复原行高。 */
+  '.cm-lp-blank': {
+    height: 'var(--paper-paragraph-spacing, 0.25em)',
+    lineHeight: '0',
+    paddingBottom: '0',
+    overflow: 'hidden',
   },
 })
 
@@ -263,21 +290,31 @@ export function toggleTaskMarker(state: EditorState, pos: number): TransactionSp
 
 const bulletDeco = Decoration.replace({ widget: new BulletWidget() })
 const paraLine = Decoration.line({ class: 'cm-lp-para' })
-const sectionLine = Decoration.line({ class: 'cm-lp-section' })
+const sectionCjkLine = Decoration.line({ class: 'cm-lp-section cm-lp-section--cjk' })
+const sectionSymbolLine = Decoration.line({ class: 'cm-lp-section cm-lp-section--symbol' })
+const blankCollapsedLine = Decoration.line({ class: 'cm-lp-blank' })
 
 /*
  * 分节符候选字符：中文数字与排版小节符号。段内允许空白（「※ ※ ※」），
- * 但去空白后不能为空，也不能混入其他文字。
+ * 但去空白后不能为空，也不能混入其他文字。含小节符号时整体按 symbol
+ * 渲染（font-ui + emoji 文本字形），纯中文数字才用 display 字。
  */
-const SECTION_MARK_CHARS = new Set([...'〇零一二三四五六七八九十百千万两', '*', '＊', '※', '◇'])
-function isSectionMarkText(text: string): boolean {
+const SECTION_NUMERAL_CHARS = new Set([...'〇零一二三四五六七八九十百千万两'])
+const SECTION_SYMBOL_CHARS = new Set(['*', '＊', '※', '◇'])
+function sectionMarkKind(text: string): 'cjk' | 'symbol' | null {
   let seen = false
+  let symbol = false
   for (const char of text) {
     if (char === ' ' || char === '\t' || char === '　') continue
-    if (!SECTION_MARK_CHARS.has(char)) return false
+    if (SECTION_SYMBOL_CHARS.has(char)) {
+      symbol = true
+      seen = true
+      continue
+    }
+    if (!SECTION_NUMERAL_CHARS.has(char)) return null
     seen = true
   }
-  return seen
+  return seen ? (symbol ? 'symbol' : 'cjk') : null
 }
 
 function listItemHasTask(item: { firstChild: { name: string; nextSibling: unknown } | null }): boolean {
@@ -348,13 +385,16 @@ export function buildLivePreview(view: LivePreviewHost, options: LivePreviewOpti
           /* 顶层正文段落才参与首行缩进与分节符装饰；列表项、引用块、
              Setext 标题里的 Paragraph 一律跳过（父节点不是 Document）。 */
           if (node.node.parent?.name !== 'Document') return undefined
-          const section = centerSectionMarks && isSectionMarkText(view.state.doc.sliceString(from, to))
+          const section = centerSectionMarks ? sectionMarkKind(view.state.doc.sliceString(from, to)) : null
           for (let pos = from; pos <= to; ) {
             const line = view.state.doc.lineAt(pos)
             const lineActive = active(line.from, line.to)
-            /* 分节符：非光标行渲染为居中 display 字；光标行显示原文
+            /* 分节符：非光标行渲染为居中装饰；光标行显示原文
                （与标题规则一致，同时保留普通段落缩进类）。 */
-            pushLineDeco(line.from, section && !lineActive ? sectionLine : paraLine)
+            pushLineDeco(
+              line.from,
+              section && !lineActive ? (section === 'symbol' ? sectionSymbolLine : sectionCjkLine) : paraLine,
+            )
             if (line.to >= to) break
             pos = line.to + 1
           }
@@ -472,6 +512,18 @@ export function buildLivePreview(view: LivePreviewHost, options: LivePreviewOpti
         return undefined
       },
     })
+    /* 段间空行（§4）：夹在两个非空行之间的空行收为段距高；空行不进
+       语法树，单独按行扫。光标落在空行上时不收（active 判空行 from==to
+       仍然成立）。多个连续空行各自看相邻行，只有两端皆非空的才收。 */
+    const first = view.state.doc.lineAt(Math.min(vFrom, view.state.doc.length))
+    for (let number = first.number; number <= view.state.doc.lines; number += 1) {
+      const line = view.state.doc.line(number)
+      if (line.from > vTo) break
+      if (line.text.trim() !== '' || active(line.from, line.to)) continue
+      const prevNonBlank = line.number > 1 && view.state.doc.line(line.number - 1).text.trim() !== ''
+      const nextNonBlank = line.number < view.state.doc.lines && view.state.doc.line(line.number + 1).text.trim() !== ''
+      if (prevNonBlank && nextNonBlank) pushLineDeco(line.from, blankCollapsedLine)
+    }
   }
   // RangeSet.of with sort=true accepts decorations collected in tree order
   // even when line decorations share a position with mark decorations.

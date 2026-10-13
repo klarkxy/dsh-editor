@@ -112,11 +112,18 @@ async function dismissNativeOnboarding(page) {
   if (await later.isVisible({ timeout: 2_000 }).catch(() => false)) await later.click()
 }
 
+function makePng() {
+  // Tiny valid PNG used only to exercise the official resource preview.
+  return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAATSURBVBhXY/iPA4Y5c+ZwwgAAdiEFhWkR5bIAAAAASUVORK5CYII=', 'base64')
+}
+
 function seedWorkspace() {
   return Promise.all([
     mkdir(resolve(targetWorkspace, '正文'), { recursive: true }),
+    mkdir(resolve(targetWorkspace, '资料'), { recursive: true }),
     writeFile(resolve(targetWorkspace, '正文', '第一章.md'),
       '# 第一章 青石镇的雨\n\n' + '雨落了一整夜。\n'.repeat(200), 'utf8'),
+    writeFile(resolve(targetWorkspace, '资料', 'map.png'), makePng()),
     writeFile(resolve(targetWorkspace, '大纲.md'), '# 全书大纲\n\n- 第一章：雨日归家\n', 'utf8'),
   ])
 }
@@ -380,6 +387,84 @@ try {
   } else {
     failures.push('identity: __cmView or .cm-editor not found on paper editor')
   }
+
+  // ---- §4 margin rules: every .cm-line lies strictly between the two
+  // rule x positions with >= 8px clearance. Rules are measured off the
+  // .cm-content content box; check at 1440 and 1024 and (where the
+  // 写作 scope Select cooperates) across narrow / medium / wide.
+  const marginRuleCheck = async (label) => {
+    const m = await page.evaluate(() => {
+      const paper = document.querySelector('.paper-input')
+      if (!paper) return null
+      const rect = paper.getBoundingClientRect()
+      const leftRule = parseFloat(getComputedStyle(paper).getPropertyValue('--paper-rule-left'))
+      const rightRule = parseFloat(getComputedStyle(paper).getPropertyValue('--paper-rule-right'))
+      const ruleL = rect.left + leftRule
+      const ruleR = rect.left + rightRule
+      const lines = [...paper.querySelectorAll('.cm-line')]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0)
+        .map((r) => ({ left: r.left, right: r.right }))
+      return { ruleL, ruleR, lines }
+    })
+    if (!m) return failures.push(`margin-rules/${label}: .paper-input missing`)
+    if (!Number.isFinite(m.ruleL) || !Number.isFinite(m.ruleR)) {
+      return failures.push(`margin-rules/${label}: --paper-rule-left/right not measured`)
+    }
+    if (!(m.ruleR - m.ruleL > 40)) failures.push(`margin-rules/${label}: rules only ${(m.ruleR - m.ruleL).toFixed(0)}px apart`)
+    for (const [index, line] of m.lines.entries()) {
+      if (line.left - m.ruleL < 8) {
+        failures.push(`margin-rules/${label}: .cm-line #${index} left ${line.left.toFixed(1)} is only ${(line.left - m.ruleL).toFixed(1)}px right of left rule ${m.ruleL.toFixed(1)}`)
+      }
+      if (m.ruleR - line.right < 8) {
+        failures.push(`margin-rules/${label}: .cm-line #${index} right ${line.right.toFixed(1)} is only ${(m.ruleR - line.right).toFixed(1)}px left of right rule ${m.ruleR.toFixed(1)}`)
+      }
+    }
+    note('margin-rules', `${label}: ${m.lines.length} lines between ${m.ruleL.toFixed(0)} and ${m.ruleR.toFixed(0)}`)
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(900)
+  await marginRuleCheck('1440/medium')
+
+  // paperWidth variants through the real 写作 settings Select.
+  const setPaperWidth = async (label, optionText) => {
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const nav = page.locator(S.settingsNav)
+    await nav.getByRole('tab', { name: '写作', exact: true }).click()
+    await page.locator(S.combobox('稿纸宽度')).click()
+    await page.getByRole('option', { name: optionText, exact: true }).click()
+    await page.getByRole('button', { name: '关闭设置', exact: true }).click()
+    await page.waitForTimeout(900)
+    await marginRuleCheck(`1440/${label}`)
+  }
+  await setPaperWidth('narrow', '窄栏')
+  await setPaperWidth('wide', '通栏')
+  await setPaperWidth('medium', '中栏')
+
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await page.waitForTimeout(900)
+  await marginRuleCheck('1024/medium')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(700)
+
+  // ---- rightbar regression: clicking a resource must open the official
+  // preview in the aux 资料 tab (slot stays mounted), with no error notice.
+  const mapRow = page.locator('[data-tree-path="资料/map.png"]')
+  if (!(await mapRow.isVisible().catch(() => false))) {
+    await page.locator('[data-tree-path="资料"]').first().click()
+    await page.waitForTimeout(500)
+  }
+  await page.locator('[data-tree-path="资料/map.png"]').click()
+  await waitFor(async () => {
+    const preview = await page.locator(`${S.referencePanel} ${S.officialResourcePanelVisible}`).evaluate(
+      (el) => el.getBoundingClientRect().width > 0 && el.children.length > 0,
+    ).catch(() => false)
+    return preview
+  }, 'official resource preview mounted in 资料 tab', 15_000)
+  const alerts = await page.locator(`${S.filesRail} [role="alert"]`).count()
+  if (alerts > 0) failures.push(`rightbar preview: ${alerts} alert(s) in files rail after opening map.png`)
+  note('rightbar', 'map.png preview mounted in 资料 tab, no alerts')
 } catch (error) {
   failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)
 } finally {

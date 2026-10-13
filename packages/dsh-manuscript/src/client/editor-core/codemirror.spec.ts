@@ -121,19 +121,22 @@ describe('paper live preview', () => {
   it('centers standalone section-mark lines and keeps them raw at the caret', () => {
     const doc = '前文\n\n一\n\n※ ※ ※\n\n第十章 标题\n\n普通段落\n'
     const off = preview(doc, 0)
-    const sections = off.styled.filter((item) => item.class === 'cm-lp-section')
-    /* 「一」与「※ ※ ※」两段居中；「第十章 标题」含非小节字符，不装饰。 */
+    const sections = off.styled.filter((item) => item.class.split(' ').includes('cm-lp-section'))
+    /* 「一」与「※ ※ ※」两段居中；「第十章 标题」含非小节字符，不装饰。
+       中文数字走 --cjk（display 字），符号行走 --symbol（font-ui + emoji 文本字形）。 */
     expect(sections).toHaveLength(2)
+    expect(off.styled.some((item) => item.class === 'cm-lp-section cm-lp-section--cjk')).toBe(true)
+    expect(off.styled.some((item) => item.class === 'cm-lp-section cm-lp-section--symbol')).toBe(true)
     expect(off.styled.some((item) => item.class === 'cm-lp-para')).toBe(true)
 
     const markStart = doc.lastIndexOf('\n', doc.indexOf('一')) + 1
     const onMark = preview(doc, doc.indexOf('一'))
     /* 光标行（一）保持原文；其它小节行（※ ※ ※）仍然装饰。 */
-    expect(onMark.styled.filter((item) => item.class === 'cm-lp-section')).toHaveLength(1)
-    expect(onMark.styled.some((item) => item.class === 'cm-lp-section' && item.from === markStart)).toBe(false)
+    expect(onMark.styled.filter((item) => item.class.split(' ').includes('cm-lp-section'))).toHaveLength(1)
+    expect(onMark.styled.some((item) => item.class.split(' ').includes('cm-lp-section') && item.from === markStart)).toBe(false)
 
     const onText = preview(doc, doc.indexOf('普通'))
-    expect(onText.styled.some((item) => item.class === 'cm-lp-section')).toBe(true)
+    expect(onText.styled.some((item) => item.class.split(' ').includes('cm-lp-section'))).toBe(true)
   })
 
   it('leaves section marks raw when centerSectionMarks is disabled', () => {
@@ -146,7 +149,7 @@ describe('paper live preview', () => {
     ).between(0, doc.length, (_from, _to, deco) => {
       if (typeof deco.spec.class === 'string' && deco.spec.class) styled.push(deco.spec.class)
     })
-    expect(styled).not.toContain('cm-lp-section')
+    expect(styled.some((cls) => cls.split(' ').includes('cm-lp-section'))).toBe(false)
     expect(styled).toContain('cm-lp-para')
   })
 
@@ -155,8 +158,23 @@ describe('paper live preview', () => {
     const off = preview(doc, 0)
     /* 段落内混有其他文字的不算；行首「* 」被 markdown 解析为无序列表项
        （非顶层 Paragraph，按规格的列表项排除规则不装饰）；「＊＊＊」算。 */
-    expect(off.styled.filter((item) => item.class === 'cm-lp-section')).toHaveLength(1)
-    expect(off.styled.some((item) => item.class === 'cm-lp-section' && doc.slice(item.from, item.from + 3) === '＊＊＊')).toBe(true)
+    expect(off.styled.filter((item) => item.class.split(' ').includes('cm-lp-section'))).toHaveLength(1)
+    expect(off.styled.some((item) => item.class === 'cm-lp-section cm-lp-section--symbol' && doc.slice(item.from, item.from + 3) === '＊＊＊')).toBe(true)
+  })
+
+  it('collapses blank lines between non-blank lines and restores them at the caret', () => {
+    const doc = '甲\n\n乙\n\n\n丙\n\n'
+    const off = preview(doc, doc.length)
+    /* 第 2 行（甲、乙之间的空行）收起；第 4、5 行是连续空行，两端不同时
+       非空，不收；文末第 7 行没有下一行，不收。 */
+    const blanks = off.styled.filter((item) => item.class === 'cm-lp-blank')
+    expect(blanks).toHaveLength(1)
+    expect(doc.slice(blanks[0]!.from, blanks[0]!.to)).toBe('')
+    const blankLineStart = doc.indexOf('\n') + 1
+    expect(blanks[0]!.from).toBe(blankLineStart)
+
+    const onBlank = preview(doc, blankLineStart)
+    expect(onBlank.styled.some((item) => item.class === 'cm-lp-blank')).toBe(false)
   })
 
   it('toggleTaskMarker flips the marker char and refuses non-markers or readOnly', () => {

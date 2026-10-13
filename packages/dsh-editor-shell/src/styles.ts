@@ -242,13 +242,12 @@ ${historyStyles}
 /* ── Editor / paper ─────────────────────────────────────── */
 .radix-themes .editor { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--paper-fill); position: relative; z-index: 1; --paper-pad-inline: 64px; --paper-pad-block: 36px; --paper-header-space: 96px; }
 
-/* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶）。 */
+/* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶）。
+   页眉不显示标题文字（正文一级标题即章节名），只留右侧「⋯」菜单；
+   天头细线改由 live-preview 一级标题的底线承担。 */
 .radix-themes .paper-page-header { height: 100%; box-sizing: border-box; padding-top: 28px; color: var(--dsh-ui-text, var(--gray-12)); }
 .radix-themes .paper-page-headline { position: relative; max-width: var(--paper-measure, 100%); margin-inline: auto; padding-inline: var(--paper-pad-inline); box-sizing: border-box; }
-.radix-themes .paper-page-title { margin: 0; font-family: var(--dsh-ui-font-display, "Kaiti SC", "STKaiti", "KaiTi", "楷体", serif); font-size: var(--dsh-ui-text-2xl); font-weight: var(--dsh-ui-weight-medium); line-height: 1.4; text-align: center; }
 .radix-themes .paper-page-menu { position: absolute; inset-inline-end: var(--paper-pad-inline); top: 0; display: inline-flex; align-items: center; }
-/* 天头线：横贯版心宽度，两端接到版心竖线。 */
-.radix-themes .paper-tiantou { height: 1px; background: var(--dsh-ui-line, var(--gray-a5)); max-width: var(--paper-measure, 100%); margin: 14px auto 0; }
 
 .radix-themes .editor-action-menu { min-width: 220px; }
 
@@ -268,7 +267,9 @@ ${historyStyles}
   background: transparent;
   color: var(--gray-12);
 }
-/* 版心两侧各一条 1px margin-rule 竖线：跟随 --paper-measure（paperWidth），
+/* 版心两侧各一条 1px margin-rule 竖线：横坐标由 editor.tsx 按 .cm-content
+   实际内容盒量出后写进 --paper-rule-left / --paper-rule-right（线内缘距
+   文字区 24px）；变量未写入时退回 --paper-measure 中线推算。
    pointer-events 关掉，不遮挡选区与光标。 */
 .radix-themes .paper-input::before,
 .radix-themes .paper-input::after {
@@ -280,8 +281,8 @@ ${historyStyles}
   background: var(--dsh-ui-margin-rule);
   pointer-events: none;
 }
-.radix-themes .paper-input::before { left: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); }
-.radix-themes .paper-input::after { right: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); }
+.radix-themes .paper-input::before { left: var(--paper-rule-left, max(0px, calc(50% - var(--paper-measure, 100%) / 2))); }
+.radix-themes .paper-input::after { right: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); left: var(--paper-rule-right, auto); }
 .radix-themes .paper-input .cm-editor { width: 100%; height: 100%; background: transparent; }
 .radix-themes .paper-input .cm-scroller {
   align-items: flex-start !important;
@@ -387,9 +388,8 @@ ${chatMessageStyles}
 .shell .shell-panel.editor-cell { background: var(--paper-fill); }
 .shell .editor-cell { position: relative; background: var(--paper-fill); }
 .shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: flex; flex-direction: column; }
-/* 覆盖层外框（§4）：shell 自己的标题栏在插件面之外，标题读遮罩根的 aria-label。 */
-.shell .center-overlay-titlebar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-2) 0 var(--space-4); background: var(--color-panel-solid); border-bottom: 0.5px solid var(--dsh-ui-line, var(--gray-a5)); color: var(--gray-12); flex: none; pointer-events: auto; }
-.shell .center-overlay-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-2); font-weight: var(--dsh-ui-weight-medium); }
+/* 覆盖层外框（§4 修订）：只提供底色与边距；标题与关闭由插件自带，
+   shell 不叠标题栏。 */
 .shell .center-overlay-surface { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .shell .center-overlays [data-dsh-center-overlay] { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--color-panel-solid); pointer-events: auto; }
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,

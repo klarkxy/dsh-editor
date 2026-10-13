@@ -63,6 +63,9 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 .dsh-pane > .sidebar, .dsh-pane > .chat, .dsh-pane > .dsh-aux-rail { flex: 1 1 auto; height: 100%; min-height: 0; }
 .dsh-pane .pinned-pane { flex: 1 1 auto; height: 100%; min-height: 0; }
 .dsh-reference { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* rightbar 会话表面常驻挂载：display:flex 需要显式 [hidden] 兜底才会真正隐藏。 */
+.dsh-reference__preview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dsh-reference__preview[hidden] { display: none; }
 
 /* 输入淡化：两侧栏与抽屉随 data-typing 淡出。 */
 .dsh-root .dsh-pane, .dsh-root .dsh-topbar {
@@ -87,8 +90,12 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 .dsh-aux-panel__empty {
   padding: var(--dsh-ui-space-4); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);
 }
-.dsh-aux-panel .official-resource-panel {
+/* 官方资源面板在资料页签内退成静态块（旧 .official-resource-panel aside
+   已退役，面板自身钩子改为 data-sidebar-right-panel）。 */
+.dsh-aux-panel [data-sidebar-right-panel] {
   position: static; inset: auto; width: auto; flex: 1 1 auto; min-height: 0; border-left: 0;
+  /* 面板内联 width: min(680px, viewport)，栏宽不足时收窄不溢出。 */
+  max-width: 100%;
 }
 
 /* 启动按钮：稿纸右下角。 */

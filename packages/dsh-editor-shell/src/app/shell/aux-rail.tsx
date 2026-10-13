@@ -71,7 +71,10 @@ export function ReferencePanel(props: {
             ]} />
         </div>
       ) : null}
-      {shown === 'preview' ? props.preview : (
+      {/* 官方 rightbar 会话表面必须常驻挂载（旧 shell 的 aside 也是 hidden 常驻）：
+          卸载后再打开会得到「sidebarRight: no session surface is mounted」。 */}
+      <div className="dsh-reference__preview" hidden={shown !== 'preview'}>{props.preview}</div>
+      {shown === 'preview' ? null : (
         props.pinnedPath ? props.pinned : (
           <div className="dsh-aux-panel__empty" role="status">{t('aux.referenceEmpty')}</div>
         )

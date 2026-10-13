@@ -1,10 +1,10 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo } from 'react'
 import { Box } from '@radix-ui/themes'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
-import { t, useLocale } from '../i18n/index.ts'
+import { useLocale } from '../i18n/index.ts'
 import { type RevealRequest, type ShellContext } from './shared.ts'
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
@@ -139,60 +139,16 @@ export const ChatColumn = memo(function ChatColumn(props: {
   );
 })
 
-/* 遮罩自带关闭控件的查找顺序：显式 dismiss 标记 → 遮罩顶栏首个按钮 → Escape。
-   插件按 seats 合同自管开态（渲染 null 即关闭），shell 不复制插件状态，
-   外框的关闭按钮统一委托给插件自己的关闭控件。 */
-function findOverlayDismiss(overlay: HTMLElement): HTMLElement | null {
-  const tagged = overlay.querySelector<HTMLElement>('[data-dsh-overlay-dismiss]')
-  if (tagged) return tagged
-  const header = overlay.querySelector<HTMLElement>(':scope > header, :scope [class*="header"]')
-  return header?.querySelector<HTMLElement>('button, [role="button"]') ?? null
-}
-
+/* 遮罩外框只提供底色与边距（§4 修订）：标题与关闭按钮由插件自管，
+   shell 不再叠一条标题栏，避免与插件页头重复。 */
 export const CenterOverlays = memo(function CenterOverlays(props: {
   show: boolean
   renderSlot?: SettingsRenderSlot
   seatContext: ShellToolSeatContext
 }) {
-  /* 标题栏文字随语言刷新。 */
-  useLocale()
-  const surfaceRef = useRef<HTMLDivElement>(null)
-  const [overlay, setOverlay] = useState<HTMLElement | null>(null)
-  useEffect(() => {
-    const host = surfaceRef.current
-    if (!host) return
-    const scan = () => {
-      const candidates = [...host.querySelectorAll<HTMLElement>('[data-dsh-center-overlay]')]
-      setOverlay(candidates.find((el) => el.offsetParent !== null) ?? candidates[0] ?? null)
-    }
-    scan()
-    const observer = new MutationObserver(scan)
-    /* aria-label 变化也要重扫：插件提供的标题写在遮罩根的 aria-label 上。 */
-    observer.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label'] })
-    return () => observer.disconnect()
-  }, [])
-  const closeOverlay = () => {
-    if (!overlay) return
-    const dismiss = findOverlayDismiss(overlay)
-    if (dismiss) {
-      dismiss.click()
-      return
-    }
-    overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
-  }
   return props.show
     ? <Box className="center-overlays">
-    {overlay ? <div className="center-overlay-titlebar">
-      <span className="center-overlay-title">{overlay.getAttribute('aria-label') ?? ''}</span>
-      <button
-        type="button"
-        className="icon-button center-overlay-close"
-        aria-label={t('common.close')}
-        onClick={closeOverlay}>
-        ×
-      </button>
-    </div> : null}
-    <div ref={surfaceRef} className="center-overlay-surface" data-dsh-plugin-surface="">
+    <div className="center-overlay-surface" data-dsh-plugin-surface="">
       {props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null}
     </div>
   </Box>

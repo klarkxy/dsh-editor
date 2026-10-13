@@ -273,10 +273,12 @@ export const S = Object.freeze({
   manuscriptClose: '[data-testid="manuscript-close"]',
 
   // ---- official resource preview panel -----------------------------------------
-  officialResourcePanel: '.official-resource-panel',
-  officialResourcePanelVisible: '.official-resource-panel:not([hidden])',
-  officialResourcePanelCanvas: '.official-resource-panel canvas',
-  officialResourcePanelImg: '.official-resource-panel img',
-  officialResourcePanelFailed: '.official-resource-panel [data-textpreview-failed]',
-  officialResourcePanelButton: '.official-resource-panel button',
+  /* Phase 4.1 起宿主不再包 .official-resource-panel aside；官方 rightbar
+     会话面常驻挂载在资料页签内，面板自身的稳定钩子是这个 data 属性。 */
+  officialResourcePanel: '[data-sidebar-right-panel]',
+  officialResourcePanelVisible: '[data-sidebar-right-panel][data-sidebar-right-open="true"]',
+  officialResourcePanelCanvas: '[data-sidebar-right-panel] canvas',
+  officialResourcePanelImg: '[data-sidebar-right-panel] img',
+  officialResourcePanelFailed: '[data-sidebar-right-panel] [data-textpreview-failed]',
+  officialResourcePanelButton: '[data-sidebar-right-panel] button',
 })
