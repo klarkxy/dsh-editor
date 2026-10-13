@@ -65,8 +65,12 @@ export const componentStyles = `
    .chrome 规则只服务首页 HomeChrome（4.1 不动首页内部结构）。 */
 .shell > .chrome {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   height: var(--topbar-h);
   min-width: 0;
+  padding-left: var(--space-3);
   padding-right: 0;
   border-bottom: 1px solid var(--gray-a5);
   box-shadow: inset 0 -2px 0 var(--accent-a5);
@@ -80,8 +84,8 @@ export const componentStyles = `
   display: flex;
   align-items: center;
 }
-.shell .chrome-main { flex: 1 1 auto; min-width: 0; height: 100%; }
-.shell .topbar-actions { flex-shrink: 0; height: 100%; }
+.shell .chrome-main { flex: 1 1 auto; min-width: 0; height: 100%; gap: var(--space-3); }
+.shell .topbar-actions { flex-shrink: 0; height: 100%; gap: var(--space-2); }
 .shell .topbar-actions { padding-right: var(--space-3); }
 .shell .topbar-actions:has(+ .window-controls) { padding-right: var(--space-1); }
 .shell > .chrome .palette-trigger {
@@ -388,54 +392,12 @@ ${chatMessageStyles}
 .shell.no-session { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
 .shell.no-session > .chrome { grid-column: 1; grid-row: 1; }
 .shell.no-session > .empty-paper { grid-column: 1; grid-row: 2; overflow: auto; padding: clamp(40px, 8vw, 112px) var(--space-5); background: var(--paper-fill); }
-.home-stage-cluster {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-5);
-  width: min(1180px, 100%);
-}
-.home-stage.has-mascot .home-card { flex: 0 1 720px; width: min(720px, 100%); }
-.radix-themes .home-command-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  align-items: stretch;
-}
-.radix-themes .home-command-bar > * { display: flex; min-width: 0; }
-.radix-themes .home-entry-card {
-  flex: 1 1 auto;
-  width: 100%;
-  height: 100%;
-  text-align: start;
-  transition: box-shadow 220ms ${EASE}, border-color 200ms ${EASE};
-}
-.radix-themes .home-entry-card:hover { box-shadow: var(--shadow-4); }
+/* 首页版式在 app/home/home.styles.ts（dsh.surfaces）；吉祥物只留设置「关于」。 */
 .radix-themes .app-mascot {
   display: block;
   height: auto;
   user-select: none;
   pointer-events: none;
-}
-/* The mascot is a brand mark beside the lobby's actual task, so it is sized
-   as a companion rather than allowed to fill the stage on its own. */
-.radix-themes .app-mascot-home {
-  width: min(260px, 28vw);
-  flex: none;
-}
-.radix-themes .home-recent .workspace-row .tree-row {
-  justify-content: flex-start;
-  width: 100%;
-  text-align: start;
-}
-/* Row entrance translates overflow past the list edge; clip it inside the list
-   so the transformed paint never inflates the ScrollArea viewport's scrollable
-   area (ResizeObserver cannot see transforms, so the scrollbar state would
-   latch from the transient overflow). */
-.radix-themes .home-recent .workspace-list { overflow: clip; }
-@media (max-width: 1180px) {
-  .home-stage-cluster { flex-direction: column; align-items: center; }
-  .radix-themes .app-mascot-home { width: min(180px, 40vw); }
 }
 
 /* ── Command palette (Cmd/Ctrl+K) ────────────────────────── */

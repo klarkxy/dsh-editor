@@ -1,22 +1,5 @@
 import { t } from './i18n/index.ts'
 
-/** Copy the home stage interpolates. Keep in sync with HomeScreen. */
-export function homeStageCopy(): {
-  intro: string
-  openWork: string
-  openWorkDesc: string
-  newWork: string
-  newWorkDesc: string
-} {
-  return {
-    intro: t('home.intro'),
-    openWork: t('home.openWork'),
-    openWorkDesc: t('home.openWorkDesc'),
-    newWork: t('home.new'),
-    newWorkDesc: t('home.newDesc'),
-  }
-}
-
 /** Short recent-work path: last two segments, so the disk root stays off the card. */
 export function recentWorkPath(path: string): string {
   const normalized = path.replace(/\\/g, '/')

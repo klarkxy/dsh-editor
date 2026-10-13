@@ -80,8 +80,19 @@ export const S = Object.freeze({
   sideDocumentTools: '.side-document-tools',
 
   // ---- home ---------------------------------------------------------------
+  // 4.5：.home-stage 只挂首页主区（编辑器空态稿纸是 .paper-stage）；
+  // .home-recent 是目录式作品列表（ul.dsh-home__list 内 li.dsh-home-row）。
   homeStage: '.home-stage',
   homeRecent: '.home-recent',
+  homeContinue: '.dsh-home-continue',
+  homeContinueButton: '.dsh-home-continue__action',
+  homeRow: '.dsh-home-row',
+  homeRowMain: '.dsh-home-row__main',
+  homeRowTitle: '.dsh-home-row__title',
+  homeRowLeader: '.dsh-home-row__leader',
+  homeRowInfo: '.dsh-home-row__info',
+  homeRowMeta: '.dsh-home-row__meta',
+  homeEmpty: '.dsh-home__empty',
   noSession: '.no-session',
   homeSidebar: '.no-session :is(.sidebar, .dsh-files-rail)',
   homeEmptyPaper: '.no-session > .empty-paper',

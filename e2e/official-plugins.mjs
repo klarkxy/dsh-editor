@@ -232,7 +232,7 @@ try {
   await page.locator(S.cmdkRoot).waitFor()
   await page.keyboard.press('Escape')
   check('edited shortcut executes Editor command')
-  await page.getByRole('button', { name: '新建', exact: true }).first().click()
+  await page.getByRole('button', { name: '新建作品' }).first().click()
   const projectDialog = page.getByRole('dialog', { name: '新建作品' })
   await projectDialog.getByLabel('作品名称').fill('official-fixture')
   await projectDialog.getByRole('button', { name: '创建', exact: true }).click()

@@ -15,7 +15,7 @@
  * the new home assertions below).
  */
 import { spawn } from 'node:child_process'
-import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, rename, rm, stat, writeFile, readFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
@@ -265,7 +265,7 @@ try {
   // the modal mask stops intercepting pointer events.
   await dismissNativeOnboarding(page)
   // Create a new project from the home stage.
-  await page.getByRole('button', { name: '新建', exact: true }).first().click()
+  await page.getByRole('button', { name: '新建作品' }).first().click()
   const newProject = page.getByRole('dialog', { name: '新建作品' })
   await newProject.waitFor({ state: 'visible' })
   await newProject.getByLabel('作品名称').fill('core-loop-workspace')
@@ -580,13 +580,78 @@ try {
     if (chatText.includes(leaked)) failures.push(`chat rail leaked internal string: ${leaked}`)
   }
 
-  // Return to home via the workspace menu, then reopen the project to prove
-  // the round-trip still works. The tree shows
-  // the existing files and the editor can restore its current chapter.)
+  // Return to home via the workspace menu. Phase 4.5 home: the 「继续写作」
+  // block must offer the last-opened chapter (正文/001.md, saved above).
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator(S.homeStage).waitFor({ state: 'visible' })
-  await page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  const continueBlock = page.locator(S.homeContinue)
+  await continueBlock.waitFor({ state: 'visible', timeout: 15_000 })
+  const continueText = await continueBlock.innerText()
+  if (!continueText.includes('继续写作')) failures.push(`home continue block missing label: ${continueText}`)
+  // 摘录取章节首个非空正文行；这里是刚保存的那句。
+  if (!continueText.includes('核心闭环保存验证')) failures.push(`home continue excerpt missing saved line: ${continueText}`)
+  await continueBlock.getByRole('button', { name: '继续', exact: true }).click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+  // 继续必须回到上次章节（正文/001.md）；等章节文本载入而不是只等节点挂载。
+  const lastChapter = await page.locator(S.cmContent)
+    .filter({ hasText: '核心闭环保存验证' })
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!lastChapter) {
+    const got = await page.locator(S.cmContent).first().innerText().catch(() => '(no editor)')
+    failures.push(`继续 did not reopen the last chapter; got: ${got.slice(0, 80)}`)
+  }
+
+  // Back home again: open the work from a TOC row, then exercise the row menu
+  // (移除) and the relocate path-fallback from the new rows.
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  const homeRow = page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).first()
+  await homeRow.locator(S.homeRowMain).click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+
+  // Relocate: move the workspace directory away, reopen the row, then point the
+  // fallback form at the moved directory.
+  const movedWorkspace = resolve(projectsRoot, 'core-loop-workspace-moved')
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  await rename(targetWorkspace, movedWorkspace)
+  const movedRow = page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).first()
+  await movedRow.locator(S.homeRowMain).click()
+  const relocateNotice = page.locator('.dsh-home-row__relocation')
+  await relocateNotice.waitFor({ state: 'visible', timeout: 30_000 })
+  await relocateNotice.getByRole('button', { name: '重新定位' }).click()
+  // The directory picker is unavailable headless → manual path fallback form.
+  await page.getByLabel('作品文件夹路径').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByLabel('作品文件夹路径').fill(movedWorkspace)
+  await page.getByRole('button', { name: '打开此目录', exact: true }).click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+
+  // Remove from recents via the new row's context/menu affordance.
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  const removeRow = page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).first()
+  await removeRow.getByRole('button', { name: '更多操作' }).click()
+  await page.getByRole('menuitem', { name: '从最近移除' }).click()
+  const removeConfirm = page.getByRole('alertdialog')
+  await removeConfirm.waitFor({ state: 'visible', timeout: 10_000 })
+  await removeConfirm.getByRole('button', { name: '从最近移除', exact: true }).click()
+  await page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).waitFor({ state: 'hidden', timeout: 15_000 })
+  if (await page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).count()) {
+    failures.push('removed work still listed in home recents')
+  }
+
+  // Reopen via 打开作品 → manual path fallback, proving the entry still lands
+  // on a work moved + removed from recents. Then final screenshot.
+  await page.getByRole('button', { name: '打开作品' }).first().click()
+  await page.getByLabel('作品文件夹路径').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByLabel('作品文件夹路径').fill(movedWorkspace)
+  await page.getByRole('button', { name: '打开此目录', exact: true }).click()
   await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 
   // Final screenshot: full workbench in light theme for the visual reference set.

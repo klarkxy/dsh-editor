@@ -233,7 +233,7 @@ try {
   await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.chatModelSelect);
   await screenshot('01-native-models-light');
   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
-  await page.getByRole('button',{name:'新建',exact:true}).first().click();
+  await page.getByRole('button',{name:'新建作品'}).first().click();
   const project=page.getByRole('dialog',{name:'新建作品',exact:true});await project.getByLabel('作品名称').fill('原生写作模型验收');await project.getByRole('button',{name:'创建',exact:true}).click();await project.waitFor({state:'detached'});
   await page.getByRole('button',{name:'写第一篇',exact:true}).click();
   const create=page.getByRole('dialog',{name:'新建文件',exact:true});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();

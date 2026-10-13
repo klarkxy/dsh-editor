@@ -97,6 +97,8 @@ export type PendingWorkspaceOpen = {
   registrationCreated: boolean
   sessionId?: SessionId
   replaceWorkspaceId?: WorkspaceId
+  /* 首页「继续写作」要求回到上次打开的章节；路径失效时回落到常规首章。 */
+  preferredPath?: string
   warning?: string
 }
 

@@ -295,7 +295,7 @@ try {
  const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
  let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await openWebSearchSettings(plugins);await closePluginsPage(page);
  evidence.checks.push('desktop launchers absent; native plugin manager lists the default web-search bundle and opens its configuration');
- await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000});
+ await page.getByRole('button',{name:'新建作品'}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000});
  await page.locator(S.treeEmpty).waitFor({state:'visible',timeout:20000});
  const tree=page.locator(S.tree);const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
  await tree.click({button:'right',position:{x:16,y:Math.max(12,treeBox.height-18)}});

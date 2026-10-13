@@ -108,7 +108,7 @@ try {
     report.checks.push(theme + ': settings isolated, plugin pages reachable, responsive, focus restored')
   }
   {
-    await page.getByRole('button', { name: '新建', exact: true }).first().click()
+    await page.getByRole('button', { name: '新建作品' }).first().click()
     const project = page.getByRole('dialog', { name: '新建作品' })
     await project.getByLabel('作品名称').fill('plugin-page-acceptance')
     await project.getByRole('button', { name: '创建', exact: true }).click()

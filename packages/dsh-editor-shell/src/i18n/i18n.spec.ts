@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatRecentTime, homeStageCopy, recentWorkPath } from '../home-stage.ts'
+import { formatRecentTime, recentWorkPath } from '../home-stage.ts'
 import {
   documentLang,
   en,
@@ -71,15 +71,15 @@ describe('i18n dictionaries', () => {
     expect(zh['common.search']).toBe('搜索')
   })
 
-  it('keeps home.intro in both dictionaries and interpolates it on the home stage', () => {
-    expect(zh['home.intro']).toBeTruthy()
-    expect(en['home.intro']).toBeTruthy()
-    expect(homeStageCopy().intro).toBe(t('home.intro'))
-    expect(homeStageCopy().intro).toBe(zh['home.intro'])
+  it('keeps the home copy in both dictionaries', () => {
+    for (const key of ['home.continueWriting', 'home.continue', 'home.newWork', 'home.openWork', 'home.rowMenu'] as const) {
+      expect(zh[key]).toBeTruthy()
+      expect(en[key]).toBeTruthy()
+    }
+    expect(t('home.continue')).toBe('继续')
     setLocale('en')
-    expect(homeStageCopy().intro).toBe(en['home.intro'])
-    expect(homeStageCopy().openWorkDesc).toBe(en['home.openWorkDesc'])
-    expect(homeStageCopy().newWorkDesc).toBe(en['home.newDesc'])
+    expect(t('home.continue')).toBe('Continue')
+    expect(t('home.newWork')).toBe('New work')
   })
 
   it('formats same-year recent dates with month and day, and shortens disk paths', () => {

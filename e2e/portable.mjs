@@ -248,7 +248,7 @@ try {
   await assertDefaultPluginPage(window, pluginsPage)
   await openWebSearchSettings(pluginsPage)
   await closePluginsPage(window)
-  await window.getByRole('button',{name:'新建',exact:true}).first().click()
+  await window.getByRole('button',{name:'新建作品'}).first().click()
   const project = window.getByRole('dialog',{name:'新建作品'})
   await project.getByLabel('作品名称').fill('便携组合验证')
   await project.getByRole('button',{name:'创建',exact:true}).click()

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { redesignedStyles } from './styles.ts'
 import { collectStyles } from './design-system/layers.ts'
 import './app/files/files-rail.styles.ts'
+import './app/home/home.styles.ts'
 
 const filesRailStyles = collectStyles()
 
@@ -53,16 +54,22 @@ describe('paper pane alignment', () => {
     expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-marker[^{]*\{[^}]*display: inline-flex/)
   })
 
-  it('keeps the two home entry cards on one stretched row', () => {
-    expect(redesignedStyles).toContain('.radix-themes .home-command-bar')
-    expect(redesignedStyles).toMatch(/\.home-command-bar \{[^}]*display: grid/)
-    expect(redesignedStyles).toMatch(/\.home-entry-card \{[^}]*height: 100%/)
+  it('keeps the home 继续写作 block and table-of-contents rows in the surfaces layer', () => {
+    // Phase 4.5: the home page moved to app/home/home.styles.ts — the continue
+    // block is a flat raised surface and recent works render as a book TOC
+    // (display type + dotted leader + right-aligned info).
+    const collected = collectStyles()
+    expect(collected).toContain('.dsh-home-continue')
+    expect(collected).toMatch(/\.dsh-home-continue__title \{[^}]*font-family: var\(--dsh-ui-font-display\)/)
+    expect(collected).toContain('.dsh-home-row__leader')
+    expect(collected).toMatch(/\.dsh-home-row__title \{[^}]*font-family: var\(--dsh-ui-font-display\)/)
+    expect(collected).toMatch(/\.dsh-home-row__info \{[^}]*color: var\(--dsh-ui-muted\)/)
   })
 
-  it('left-aligns home recent-work rows instead of centering Radix button contents', () => {
-    expect(redesignedStyles).toContain('.radix-themes .home-recent .workspace-row .tree-row')
-    expect(redesignedStyles).toMatch(/\.home-recent \.workspace-row \.tree-row \{[^}]*justify-content: flex-start/)
-    expect(redesignedStyles).toMatch(/\.home-recent \.workspace-row \.tree-row \{[^}]*text-align: start/)
+  it('keeps home recent-work rows as left-aligned text buttons, not centered controls', () => {
+    const collected = collectStyles()
+    expect(collected).toMatch(/\.dsh-home-row__main \{[^}]*text-align: start/)
+    expect(collected).toMatch(/\.dsh-home-row__main \{[^}]*width: 100%/)
   })
 
   it('keeps hidden rails out of the grid via the new shell pane styles', async () => {

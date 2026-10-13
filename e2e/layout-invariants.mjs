@@ -327,8 +327,31 @@ try {
   )
   await dismissNativeOnboarding(page)
 
+  // ---- home (§6)：无作品空态下四档宽度都无横向溢出；钩子唯一 ------------------
+  for (const vp of VIEWPORTS) {
+    await page.setViewportSize(vp)
+    await page.waitForTimeout(600)
+    const label = `home ${vp.width}x${vp.height}`
+    const probe = await page.evaluate((sel) => {
+      const stage = document.querySelectorAll(sel.homeStage).length
+      const recent = document.querySelectorAll(sel.homeRecent).length
+      const scroller = document.scrollingElement
+      return {
+        stage, recent,
+        docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        bodyOverflow: scroller ? scroller.scrollWidth > window.innerWidth + 1 : false,
+      }
+    }, { homeStage: S.homeStage, homeRecent: S.homeRecent })
+    if (probe.stage !== 1) fail(`${label}: .home-stage matched ${probe.stage} elements (hook must be unique)`)
+    if (probe.recent !== 1) fail(`${label}: .home-recent matched ${probe.recent} elements`)
+    if (probe.docOverflow || probe.bodyOverflow) fail(`${label}: home overflows horizontally`)
+    report.viewports.push({ label, metrics: { home: probe } })
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(400)
+
   // Create the work through the real dialog, seed a manuscript, reopen it.
-  await page.getByRole('button', { name: '新建', exact: true }).first().click()
+  await page.getByRole('button', { name: '新建作品' }).first().click()
   const newProject = page.getByRole('dialog', { name: '新建作品' })
   await newProject.waitFor({ state: 'visible' })
   await newProject.getByLabel('作品名称').fill('layout-inv')
@@ -340,6 +363,30 @@ try {
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  // ---- home 目录式行：题名（楷体）+ 点线 + 右对齐信息，第二行时间/章节分列 ----
+  const rowProbe = await page.evaluate((sel) => {
+    const rows = [...document.querySelectorAll(`${sel.homeRecent} ${sel.homeRow}`)]
+    const row = rows[0]
+    if (!row) return { rows: 0 }
+    const title = row.querySelector(sel.homeRowTitle)
+    const leader = row.querySelector(sel.homeRowLeader)
+    const info = row.querySelector(sel.homeRowInfo)
+    const metas = [...row.querySelectorAll(sel.homeRowMeta)]
+    const box = leader?.getBoundingClientRect()
+    return {
+      rows: rows.length,
+      titleFont: title ? getComputedStyle(title).fontFamily : '',
+      leaderVisible: Boolean(box && box.width > 0 && getComputedStyle(leader).display !== 'none'),
+      infoText: info?.textContent ?? '',
+      metaCount: metas.length,
+    }
+  }, { homeRecent: S.homeRecent, homeRow: S.homeRow, homeRowTitle: S.homeRowTitle, homeRowLeader: S.homeRowLeader, homeRowInfo: S.homeRowInfo, homeRowMeta: S.homeRowMeta })
+  if (rowProbe.rows < 1) fail('home recents: no .dsh-home-row after returning home')
+  else {
+    if (!rowProbe.titleFont.toLowerCase().includes('kai')) fail(`home row title not display font: ${rowProbe.titleFont}`)
+    if (!rowProbe.leaderVisible) fail('home row dot leader not rendered at 1440')
+    if (rowProbe.metaCount < 1) fail('home row second line has no meta spans')
+  }
   await page.locator(S.homeRecent).getByRole('button', { name: /layout-inv/ }).first().click()
   await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 

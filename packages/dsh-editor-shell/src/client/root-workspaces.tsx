@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { SessionFace, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import { WORKBENCH_RPC_CHANNEL, type ProjectInspectionResponse } from 'dsh-editor-workbench/contracts'
 import { firstOpenDocumentPath } from '../project-files.ts'
+import { removeHomeResumeDoc } from '../model/home-resume.ts'
 import { errorMessage, resumableConversationId, safeRpcCall, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, cleanupFlowWorkspace as cleanupOwnedFlowWorkspace } from './shared.ts'
 import { NewProjectDialog } from './dialogs.tsx'
 import { ActivityDots, Input } from './ui/index.ts'
@@ -33,11 +34,13 @@ export async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string
   return files
 }
 
-export async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId, knownFiles?: string[]): Promise<string | undefined> {
+export async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId, knownFiles?: string[], preferredPath?: string): Promise<string | undefined> {
   const files = knownFiles ?? (await collectWorkspaceFiles(ctx, sessionId))
   const textFiles = supportedWorkspaceTextPaths(files)
-  /* 根目录的项目规则文件是协作约定而非稿件：只有 AGENTS.md 时仍落在新建文件封面。 */
-  const initialPath = firstOpenDocumentPath(textFiles)
+  /* 根目录的项目规则文件是协作约定而非稿件：只有 AGENTS.md 时仍落在新建文件封面。
+     preferredPath 仍在正文清单里时优先用它（首页「继续写作」回到上次章节），
+     否则回落到常规首章。 */
+  const initialPath = (preferredPath && textFiles.includes(preferredPath)) ? preferredPath : firstOpenDocumentPath(textFiles)
   if (!initialPath) return undefined
   const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
     sessionId,
@@ -220,7 +223,7 @@ export function useRootWorkspaces({
       pending.warning = t('note.brokenImportIgnored')
     }
     if (!recovery.ok) pending.warning = t('note.unverifiedImportIgnored')
-    const initialPath = relocatedInitialPath ?? (await verifyWorkspaceSession(ctx, sessionId, knownTextFiles))
+    const initialPath = relocatedInitialPath ?? (await verifyWorkspaceSession(ctx, sessionId, knownTextFiles, pending.preferredPath))
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     if (!initialPath) {
       const allFiles = await collectWorkspaceFiles(ctx, sessionId)
@@ -254,9 +257,9 @@ export function useRootWorkspaces({
     const initialPath = await verifyWorkspaceSession(ctx, sessionId)
     await finishWorkspaceOpen(pending, sessionId, initialPath)
   }
-  const openRegisteredWorkspace = async (workspace: WorkspaceView, sessionId?: SessionId, replaceWorkspaceId?: WorkspaceId) => {
+  const openRegisteredWorkspace = async (workspace: WorkspaceView, sessionId?: SessionId, replaceWorkspaceId?: WorkspaceId, preferredPath?: string) => {
     const ticket = workspaceOpenGate.begin(`workspace:${workspace.workspaceId}:${workspace.path}`)
-    const pending: PendingWorkspaceOpen = { ticket, workspace, intent: 'open', registrationCreated: false, replaceWorkspaceId }
+    const pending: PendingWorkspaceOpen = { ticket, workspace, intent: 'open', registrationCreated: false, replaceWorkspaceId, preferredPath }
     pendingWorkspaceOpen.current = null
     setOpeningWorkspace(true)
     setHomeNote('')
@@ -493,6 +496,7 @@ export function useRootWorkspaces({
     if (openingWorkspace) return
     try {
       await ctx.workspaces.delete(workspace.workspaceId)
+      removeHomeResumeDoc(workspace.workspaceId)
       workspaceOpenGate.begin('home')
       setWorkspaceOpen({ kind: 'idle' })
       setHomeNote(t('note.removedFromRecent'))

@@ -148,28 +148,21 @@ export const componentStyles = [
   r(['.rt-TextFieldRoot:focus-within', '.rt-TextAreaRoot:focus-within', '.rt-SelectTrigger:focus-visible'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
   r(['.rt-TextFieldInput::placeholder', '.rt-TextAreaInput::placeholder'], 'color: var(--dsh-ui-muted); opacity: 1;'),
   r(['.rt-Badge'], 'font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0;'),
-  r(['.rt-Card', '.home-card', '.home-entry-card', '.settings-block.rt-Card'], cardSurface + ' transition: all var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
+  r(['.rt-Card', '.home-card', '.settings-block.rt-Card'], cardSurface + ' transition: all var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
   // Settings dialog blocks stay flat sections: the structural sheet zeroes their
   // padding, so the generic .rt-Card surface above left labels flush against a
   // visible border. Neutralize the chrome inside the settings dialog.
   r(['.settings-dialog .settings-block.rt-Card'], 'background: transparent; border: 0; border-radius: 0; box-shadow: none;'),
-  r(['.rt-Card::before', '.rt-Card::after', '.home-entry-card::before', '.home-entry-card::after'], 'backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;'),
-  r(['.home-entry-card:hover', '.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-prominent); transform: translateY(-2px);'),
-  r(['.home-entry-icon'], 'width: 40px; height: 40px; border-radius: var(--dsh-ui-radius-md); background: var(--dsh-ui-accent-soft); color: var(--dsh-ui-accent); display: flex; align-items: center; justify-content: center;'),
-  r(['.home-entry-title'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
-  r(['.home-hint', '.home-recent-empty'], 'color: var(--dsh-ui-muted);'),
+  r(['.rt-Card::before', '.rt-Card::after'], 'backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;'),
+  r(['.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-prominent); transform: translateY(-2px);'),
+  r(['.home-hint'], 'color: var(--dsh-ui-muted);'),
   r(['.icon-button:active', '.editor-tools button:active', '.editor-tools button:hover'], 'transform: none;'),
-  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
+  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.icon-button:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
   r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
   // Neutral navigation: location is not a primary action. File rail styles
-  // (sidebar head, tree rows, search panel) live in app/files/files-rail.styles.ts.
-  // Home recent-work rows stack a title, a path and a timestamp, so they keep the
-  // wrapping block. File-tree rows do not: one entry is one line, and the full name
-  // stays reachable through the row's title attribute.
-  r(['.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal;'),
-  r(['.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
-  r(['.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: inset 3px 0 0 var(--dsh-ui-accent);'),
+  // (sidebar head, tree rows, search panel) live in app/files/files-rail.styles.ts;
+  // 首页目录式行在 app/home/home.styles.ts。
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
   r(['.project-directory'], 'overflow-wrap: anywhere;'),

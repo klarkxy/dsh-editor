@@ -30,7 +30,9 @@ export function DeepSeekWhaleMark(props: { size?: number }) {
   )
 }
 
-export function PaperStage(props: { label: string; heading?: string; companion?: ReactNode; children?: ReactNode }) {
+/* .home-stage 只挂在首页主区（§6）；编辑器空章稿纸用 .paper-stage，避免
+   同一个钩子命中两个面。 */
+export function PaperStage(props: { label: string; heading?: string; children?: ReactNode }) {
   const card = (
     <Card className="home-card" size="3" style={{ width: 'min(720px, 100%)' }}>
       <Flex direction="column" gap="4">
@@ -43,7 +45,7 @@ export function PaperStage(props: { label: string; heading?: string; companion?:
   )
   return (
     <Flex
-      className={`empty-paper home-stage${props.companion ? ' has-mascot' : ''}`}
+      className="empty-paper paper-stage"
       role="region"
       aria-label={props.label}
       direction="column"
@@ -54,10 +56,7 @@ export function PaperStage(props: { label: string; heading?: string; companion?:
       minWidth="0"
       minHeight="0"
       p="6">
-      {props.companion ? <div className="home-stage-cluster">
-        {props.companion}
-        {card}
-      </div> : card}
+      {card}
     </Flex>
   );
 }

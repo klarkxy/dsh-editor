@@ -351,7 +351,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   if (!state.shell || state.officialHome || !state.editorName || !onboarding) {
     throw new Error(`multi-window home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding })}`)
   }
-  await ctx.window.getByRole('button', { name: '新建', exact: true }).click()
+  await ctx.window.getByRole('button', { name: '新建作品' }).first().click()
   const nameBox = ctx.window.getByLabel('作品名称')
   await nameBox.waitFor({ state: 'visible', timeout: 10_000 })
   await nameBox.fill('multi-window-workspace')

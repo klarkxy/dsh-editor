@@ -32,7 +32,7 @@ import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation }
 import { useTransientSuccessNote } from './transient-note.ts'
 import { ShellErrorBoundary, useObservable } from './components.tsx'
 import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarTools } from './root-columns.tsx'
-import { HomeScreen } from './root-home.tsx'
+import { HomeScreen } from '../app/home/home.tsx'
 import { CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { PluginWorkspace } from './plugins-page.tsx'
@@ -45,6 +45,7 @@ import type { EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
+import { deriveHomeResumeDoc, writeHomeResumeDoc } from '../model/home-resume.ts'
 
 import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
@@ -166,7 +167,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const chapterFiles = useMemo(() => sortChapterPaths(files), [files])
   /* 建议里《X》的显示标题与概览一致（首个标题，退回文件名）；
      惰性取：文档文本异步进编辑器；状态变化时重渲染重新解析。 */
-  const [, setDocStatus] = useState<EditorCoreStatus>('empty')
+  const [docStatus, setDocStatus] = useState<EditorCoreStatus>('empty')
+  /* 首页「继续写作」的上次位置：文档载入与保存落稳后记一条
+     { path, title, excerpt }（localStorage，多作品共存）。 */
+  const openWorkspaceIdNow = workspaceOpen.kind === 'ready' ? workspaceOpen.workspaceId : undefined
+  useEffect(() => {
+    if (!openWorkspaceIdNow || !path) return
+    if (docStatus !== 'saved' && docStatus !== 'draft') return
+    const handle = editorHandleRef.current
+    const text = handle?.getText() || handle?.getDocument()?.text || ''
+    writeHomeResumeDoc(openWorkspaceIdNow, deriveHomeResumeDoc(path, text))
+  }, [openWorkspaceIdNow, path, docStatus, editorHandleRef])
   const getActiveDocTitle = useCallback(() => {
     if (!path) return undefined
     const handle = editorHandleRef.current
@@ -241,8 +252,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   /* 工作区 <main> 的句柄。 */
   const shellMainRef = useRef<HTMLElement | null>(null)
   const pinValidatedSession = useRef<string | undefined>()
-  const homeCardOpen = useChromeMotion('card', 0)
-  const homeCardNew = useChromeMotion('card', 0.05)
+
   useEffect(() => { document.title = 'DSH Editor' }, [])
   const officialActionRef = useRef<Record<string, () => void>>({})
   officialActionRef.current = {
@@ -555,14 +565,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           newProjectBusy={Boolean(newProject)}
           onOpenWork={startWorkspaceFromPicker}
           onNewProject={startNewProject}
-          homeCardOpen={homeCardOpen}
-          homeCardNew={homeCardNew}
           pathFallbackForm={pathFallbackForm}
           onContinueIntent={continuePendingWorkspaceIntent}
           onCancelIntent={cancelPendingWorkspaceIntent}
           homeNote={homeNote}
           workspaces={workspaces.items}
-          onOpenWorkspace={(workspace) => void openRegisteredWorkspace(workspace)}
+          onOpenWorkspace={(workspace, preferredPath) => void openRegisteredWorkspace(workspace, undefined, undefined, preferredPath)}
           onRelocate={(workspace) => void relocateWorkspace(workspace)}
           removeRecentTarget={removeRecentTarget}
           onRequestRemoveRecent={requestRemoveRecent}

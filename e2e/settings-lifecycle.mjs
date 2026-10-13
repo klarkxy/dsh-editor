@@ -59,7 +59,7 @@ try {
     await closePluginsPage(page)
   }
   await sample('home')
-  await page.getByRole('button',{name:'新建',exact:true}).first().click()
+  await page.getByRole('button',{name:'新建作品'}).first().click()
   const create=page.getByRole('dialog',{name:'新建作品'});await create.getByLabel('作品名称').fill('settings-lifecycle');await create.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000})
   await sample('project')
 

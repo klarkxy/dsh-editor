@@ -123,7 +123,7 @@ try {
   }
   const later = page.getByRole('button', { name: '稍后配置', exact: true })
   if (await later.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false)) await later.click()
-  await page.getByRole('button', { name: '新建', exact: true }).click()
+  await page.getByRole('button', { name: '新建作品' }).first().click()
   await page.getByLabel('作品名称').fill('packaged-smoke-workspace')
   await page.getByRole('button', { name: '创建', exact: true }).click()
   const tree = page.getByRole('tree', { name: '稿件目录' })
