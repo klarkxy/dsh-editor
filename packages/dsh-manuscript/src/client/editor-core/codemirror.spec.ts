@@ -9,11 +9,11 @@ function preview(doc: string, cursor = 0, hasFocus = true) {
     extensions: [paperMarkdown],
   })
   const hidden: string[] = []
-  const styled: Array<{ class: string; text: string }> = []
+  const styled: Array<{ class: string; text: string; from: number; to: number }> = []
   const widgets: Array<{ text: string; checked: boolean | null }> = []
   buildLivePreview({ state, visibleRanges: [{ from: 0, to: doc.length }], hasFocus }).between(0, doc.length, (from, to, deco) => {
     const cls = typeof deco.spec.class === 'string' ? deco.spec.class : ''
-    if (cls) styled.push({ class: cls, text: from < to ? doc.slice(from, to) : '' })
+    if (cls) styled.push({ class: cls, text: from < to ? doc.slice(from, to) : '', from, to })
     else if (deco.spec.widget) {
       const widget = deco.spec.widget as { checked?: boolean }
       widgets.push({ text: from < to ? doc.slice(from, to) : '', checked: typeof widget.checked === 'boolean' ? widget.checked : null })
@@ -116,6 +116,47 @@ describe('paper live preview', () => {
     expect(onTask.widgets.some((widget) => widget.text === '[ ]')).toBe(false)
     expect(onTask.hidden.join('')).not.toContain('- [')
     expect(onTask.widgets.some((widget) => widget.text === '[x]')).toBe(true)
+  })
+
+  it('centers standalone section-mark lines and keeps them raw at the caret', () => {
+    const doc = '前文\n\n一\n\n※ ※ ※\n\n第十章 标题\n\n普通段落\n'
+    const off = preview(doc, 0)
+    const sections = off.styled.filter((item) => item.class === 'cm-lp-section')
+    /* 「一」与「※ ※ ※」两段居中；「第十章 标题」含非小节字符，不装饰。 */
+    expect(sections).toHaveLength(2)
+    expect(off.styled.some((item) => item.class === 'cm-lp-para')).toBe(true)
+
+    const markStart = doc.lastIndexOf('\n', doc.indexOf('一')) + 1
+    const onMark = preview(doc, doc.indexOf('一'))
+    /* 光标行（一）保持原文；其它小节行（※ ※ ※）仍然装饰。 */
+    expect(onMark.styled.filter((item) => item.class === 'cm-lp-section')).toHaveLength(1)
+    expect(onMark.styled.some((item) => item.class === 'cm-lp-section' && item.from === markStart)).toBe(false)
+
+    const onText = preview(doc, doc.indexOf('普通'))
+    expect(onText.styled.some((item) => item.class === 'cm-lp-section')).toBe(true)
+  })
+
+  it('leaves section marks raw when centerSectionMarks is disabled', () => {
+    const doc = '前文\n\n一\n'
+    const state = EditorState.create({ doc, selection: { anchor: 0 }, extensions: [paperMarkdown] })
+    const styled: string[] = []
+    buildLivePreview(
+      { state, visibleRanges: [{ from: 0, to: doc.length }], hasFocus: true },
+      { centerSectionMarks: false },
+    ).between(0, doc.length, (_from, _to, deco) => {
+      if (typeof deco.spec.class === 'string' && deco.spec.class) styled.push(deco.spec.class)
+    })
+    expect(styled).not.toContain('cm-lp-section')
+    expect(styled).toContain('cm-lp-para')
+  })
+
+  it('marks only whole-paragraph marks: inline symbols and mixed text stay plain', () => {
+    const doc = '含 * 星号\n\n* \n\n一、二\n\n＊＊＊\n'
+    const off = preview(doc, 0)
+    /* 段落内混有其他文字的不算；行首「* 」被 markdown 解析为无序列表项
+       （非顶层 Paragraph，按规格的列表项排除规则不装饰）；「＊＊＊」算。 */
+    expect(off.styled.filter((item) => item.class === 'cm-lp-section')).toHaveLength(1)
+    expect(off.styled.some((item) => item.class === 'cm-lp-section' && doc.slice(item.from, item.from + 3) === '＊＊＊')).toBe(true)
   })
 
   it('toggleTaskMarker flips the marker char and refuses non-markers or readOnly', () => {

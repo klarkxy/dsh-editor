@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, ReactNode, RefObject, SetStateAction, CSSProperties } from 'react'
-import { Button } from '@radix-ui/themes'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
+import { surfaceTokenVars } from 'dsh-editor-seats/tokens'
 import type { EditorView } from '@codemirror/view'
 import { SelectionDiff } from './selection-diff.tsx'
 import { normalizeTypography, typographyCssVariables } from './typography.ts'
@@ -10,6 +11,7 @@ import { isDirty } from './editor-state.ts'
 type EditorChromeProps = Pick<EditorCoreProps,
   'path' | 'paperClassName' | 'paperStyle' | 'compactControls' | 'enableRewriteSelection' |
   'completionEnabled' | 'onRewriteSelection' | 'testIdPrefix' | 'headerExtras' | 'footerExtras' |
+  'paperHeader' | 'conflictNotice' | 'hostButton' |
   'showGhostTip' | 'enablePatch' | 'showProposalDiff' | 'onReloadDisk' | 'onSaveConflictCopy' | 'typography'
 > & {
   slotClassName: NonNullable<EditorCoreProps['slotClassName']>
@@ -49,6 +51,34 @@ type EditorChromeProps = Pick<EditorCoreProps,
   setProposal: Dispatch<SetStateAction<{ ticket: SelectionTicket; text: string } | null>>
 }
 
+/* editor-core の inline default スタイルはホスト可搬性のため残しつつ、
+   見た目リテラルはモジュール定数に集約する（クラス/スロット上書きが常に優先）。 */
+const PROPOSAL_STYLE: CSSProperties = {
+  padding: 12,
+  border: '1px solid var(--s-line-strong)',
+  borderRadius: 'var(--radius-3)',
+}
+const CONFLICT_STYLE: CSSProperties = {
+  padding: '6px 8px',
+  borderTop: '1px solid var(--s-line-strong)',
+  fontSize: 'var(--font-size-1)',
+}
+const ERROR_NOTICE_STYLE: CSSProperties = {
+  padding: 8,
+  color: 'var(--s-danger)',
+  fontSize: 'var(--font-size-1)',
+}
+const STATUS_TEXT_STYLE: CSSProperties = { color: 'var(--s-muted)' }
+const FOOTER_STATUS_STYLE: CSSProperties = {
+  marginLeft: 'auto',
+  marginRight: 'auto',
+  display: 'flex',
+  gap: 12,
+  alignItems: 'baseline',
+  fontSize: 'var(--font-size-1)',
+  color: 'var(--s-muted)',
+}
+
 function describeStatus(state: SaveState, conflict: boolean): string {
   if (state === 'empty') return ''
   if (state === 'loading') return '读取中…'
@@ -73,7 +103,8 @@ function draftBackupLabel(backup: EditorCoreDraftBackup, index: number): string 
 export function EditorChrome({
   path, paperClassName, paperStyle, slotClassName, slotStyle, compactControls,
   enableRewriteSelection, completionEnabled, onRewriteSelection, testIdPrefix,
-  headerExtras, footerExtras, showGhostTip, enablePatch, showProposalDiff,
+  headerExtras, footerExtras, paperHeader, conflictNotice, hostButton,
+  showGhostTip, enablePatch, showProposalDiff,
   onReloadDisk, onSaveConflictCopy, typography, maxGhostCandidates,
   doc, textRef, selection, hasSelection, wordCount, state, loadingFim, patching,
   conflict, error, note, ghost, ghostCandidates, ghostIndex, proposal, backups,
@@ -85,8 +116,19 @@ export function EditorChrome({
 
   const cls = (slot: EditorCoreSlot) => slotClassName[slot]
   const sty = (slot: EditorCoreSlot) => slotStyle[slot]
-  const showFooter = Boolean(footerExtras) || loadingFim || patching || ghost || conflict || (!compactControls && (proposal || note))
+  const showFooter = Boolean(paperHeader) || Boolean(footerExtras) || loadingFim || patching || ghost || conflict || (!compactControls && (proposal || note))
   const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
+  const statusText = loadingFim ? '正在补全…' : patching ? '正在改写…' : describeStatus(state, conflict)
+  /* 页脚状态行只显示一次：宿主页眉（paperHeader）模式下页脚承载「N 字 + 保存状态」，
+     独立宿主沿用页头状态区，两处 testid 不变。 */
+  const statusLine = <>
+    <span data-testid={`${testIdPrefix}-wordcount`} style={STATUS_TEXT_STYLE}>
+      {`${wordCount} 字`}
+    </span>
+    <span data-testid={`${testIdPrefix}-save-state`} style={STATUS_TEXT_STYLE}>
+      {statusText}
+    </span>
+  </>
 
   return (
     <section
@@ -97,11 +139,12 @@ export function EditorChrome({
         flexDirection: 'column',
         height: '100%',
         '--paper-dim-opacity': '0.35',
+        ...surfaceTokenVars,
         ...paperVars,
         ...paperStyle,
         ...sty('outer'),
       } as CSSProperties}>
-      <header
+      {paperHeader ? null : <header
         className={cls('header')}
         style={{
           fontSize: 'var(--font-size-1)',
@@ -117,11 +160,8 @@ export function EditorChrome({
           style={{ opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {doc?.path || path}
         </span>
-        {!compactControls && enableRewriteSelection && completionEnabled ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        {!compactControls && enableRewriteSelection && completionEnabled ? <SeatButton
+          host={hostButton}
           data-testid={`${testIdPrefix}-rewrite`}
           disabled={!hasSelection}
           onClick={() => {
@@ -130,24 +170,17 @@ export function EditorChrome({
             void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
           }}>
           改这段
-        </Button> : null}
-        {!compactControls && completionEnabled ? <Button
-          type="button"
-          variant={loadingFim ? 'soft' : 'solid'}
-          color={loadingFim ? 'gray' : undefined}
-          size="1"
+        </SeatButton> : null}
+        {!compactControls && completionEnabled ? <SeatButton
+          host={hostButton}
+          variant={loadingFim ? undefined : 'primary'}
           data-testid={`${testIdPrefix}-fim`}
           onClick={() => { if (loadingFim) stopCompletion(); else void complete(false) }}>
           {loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'}
-        </Button> : null}
-        <span data-testid={`${testIdPrefix}-wordcount`} style={{ color: 'var(--gray-11)' }}>
-          {`${wordCount} 字`}
-        </span>
-        <span data-testid={`${testIdPrefix}-save-state`} style={{ color: 'var(--gray-11)' }}>
-          {loadingFim ? '正在补全…' : patching ? '正在改写…' : describeStatus(state, conflict)}
-        </span>
+        </SeatButton> : null}
+        {statusLine}
         {headerExtras}
-      </header>
+      </header>}
       <div
         className={cls('textarea')}
         style={{ position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') }}>
@@ -168,7 +201,7 @@ export function EditorChrome({
         ref={proposalRef}
         className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
         aria-label="选段修改建议"
-        style={{ padding: 12, border: '1px solid var(--gray-6)', borderRadius: 'var(--radius-3)', ...sty('proposal') }}>
+        style={{ ...PROPOSAL_STYLE, ...sty('proposal') }}>
         <strong>
           选段修改建议
         </strong>
@@ -176,28 +209,26 @@ export function EditorChrome({
           {proposal.text}
         </p>}
         <div className="proposal-actions">
-          <Button type="button" variant="solid" className="primary-action" size="1" onClick={acceptPatch}>
+          <SeatButton host={hostButton} variant="primary" onClick={acceptPatch}>
             应用修改
-          </Button>
-          <Button
-            type="button"
-            variant="soft"
-            color="red"
+          </SeatButton>
+          <SeatButton
+            host={hostButton}
+            variant="danger"
             className="proposal-dismiss"
-            size="1"
             onClick={() => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() }}>
             放弃
-          </Button>
+          </SeatButton>
         </div>
       </div> : null}
-      {conflict ? <div
+      {conflict ? (conflictNotice ?? <div
         data-testid={`${testIdPrefix}-conflict-guard`}
         className={cls('conflict')}
-        style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 'var(--font-size-1)', ...sty('conflict') }}>
+        style={{ ...CONFLICT_STYLE, ...sty('conflict') }}>
         <span>
           草稿与磁盘版本不一致，已保留本地内容。
         </span>
-      </div> : null}
+      </div>) : null}
       {note && sty('notice')?.display !== 'none' ? <div
         data-testid={`${testIdPrefix}-notice`}
         className={cls('notice')}
@@ -207,7 +238,7 @@ export function EditorChrome({
       </div> : null}
       {error ? <div
         className={cls('notice')}
-        style={{ padding: 8, color: 'var(--red-11)', fontSize: 'var(--font-size-1)', ...sty('notice') }}>
+        style={{ ...ERROR_NOTICE_STYLE, ...sty('notice') }}>
         {error}
       </div> : null}
       {/* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
@@ -219,54 +250,41 @@ export function EditorChrome({
         <span>
           {`发现 ${backups.length} 份其他窗口的未保存备份（采纳后原备份保留）：`}
         </span>
-        {backups.map((backup, index) => <Button
+        {backups.map((backup, index) => <SeatButton
           key={`${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`}
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+          host={hostButton}
           disabled={isDirty(doc, textRef.current) || conflict}
           title={isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿'}
           onClick={() => adoptBackup(backup)}>
           {draftBackupLabel(backup, index)}
-        </Button>)}
+        </SeatButton>)}
       </div> : null}
       {showFooter ? <footer
         className={cls('footer')}
         style={{ padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') }}>
-        {!compactControls ? <Button
-          type="button"
-          variant="solid"
-          size="1"
+        {!compactControls ? <SeatButton
+          host={hostButton}
+          variant="primary"
           disabled={!doc || textRef.current === doc.text || conflict}
           onClick={() => void save()}>
           保存
-        </Button> : null}
-        {loadingFim ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        </SeatButton> : null}
+        {loadingFim ? <SeatButton
+          host={hostButton}
           onClick={stopCompletion}>
           停止补全
-        </Button> : null}
-        {patching ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        </SeatButton> : null}
+        {patching ? <SeatButton
+          host={hostButton}
           onClick={stopPatch}>
           停止改写
-        </Button> : null}
-        {!compactControls && enablePatch && completionEnabled ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        </SeatButton> : null}
+        {!compactControls && enablePatch && completionEnabled ? <SeatButton
+          host={hostButton}
           disabled={!doc || conflict || loadingFim || selection.start === selection.end}
           onClick={() => { void requestPatch() }}>
           修改选段
-        </Button> : null}
+        </SeatButton> : null}
         {ghost ? <div
           style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <strong>
@@ -275,65 +293,58 @@ export function EditorChrome({
           <small>
             {`候选 ${ghostIndex + 1}/${ghostCandidates.length}`}
           </small>
-          <Button type="button" variant="solid" size="1" onClick={acceptGhost}>
+          <SeatButton host={hostButton} variant="primary" onClick={acceptGhost}>
             接受补全
-          </Button>
-          {ghostCandidates.length < maxGhostCandidates ? <Button type="button" variant="soft" color="gray" size="1" disabled={loadingFim} onClick={() => void complete(true)}>
+          </SeatButton>
+          {ghostCandidates.length < maxGhostCandidates ? <SeatButton host={hostButton} disabled={loadingFim} onClick={() => void complete(true)}>
             再来一个
-          </Button> : <span style={{ opacity: 0.55 }}>
+          </SeatButton> : <span style={{ opacity: 0.55 }}>
             {`已满 ${maxGhostCandidates} 条`}
           </span>}
-          <Button
-            type="button"
-            variant="soft"
-            color="red"
-            size="1"
+          <SeatButton
+            host={hostButton}
+            variant="danger"
             onClick={() => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() }}>
             放弃
-          </Button>
+          </SeatButton>
           {ghostCandidates.length > 1 ? <nav aria-label="切换补全候选" style={{ display: 'flex', gap: 4 }}>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
+            <SeatButton
+              host={hostButton}
               disabled={ghostIndex <= 0}
               onClick={() => setGhostIndex((old) => Math.max(0, old - 1))}>
               上一条
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
+            </SeatButton>
+            <SeatButton
+              host={hostButton}
               disabled={ghostIndex >= ghostCandidates.length - 1}
               onClick={() => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1))}>
               下一条
-            </Button>
+            </SeatButton>
           </nav> : null}
         </div> : null}
-        {conflict ? <Button type="button" variant="soft" color="red" size="1" onClick={discard}>
+        {/* 冲突操作：宿主提供 conflictNotice 时由宿主 Notice 承载（重新载入/另存冲突副本），
+            否则沿用内置三个按钮。 */}
+        {!conflictNotice && conflict ? <SeatButton host={hostButton} variant="danger" onClick={discard}>
           放弃草稿并重新读取
-        </Button> : null}
-        {conflict && onReloadDisk ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        </SeatButton> : null}
+        {!conflictNotice && conflict && onReloadDisk ? <SeatButton
+          host={hostButton}
           data-testid={`${testIdPrefix}-reload-disk`}
           onClick={onReloadDisk}>
           重新载入磁盘版本
-        </Button> : null}
-        {conflict && onSaveConflictCopy ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
+        </SeatButton> : null}
+        {!conflictNotice && conflict && onSaveConflictCopy ? <SeatButton
+          host={hostButton}
           data-testid={`${testIdPrefix}-save-conflict-copy`}
           onClick={onSaveConflictCopy}>
           另存冲突副本
-        </Button> : null}
+        </SeatButton> : null}
         {loadingFim || patching ? null : footerExtras}
+        {paperHeader ? <div
+          className="paper-footer-status"
+          style={FOOTER_STATUS_STYLE}>
+          {statusLine}
+        </div> : null}
       </footer> : null}
     </section>
   );

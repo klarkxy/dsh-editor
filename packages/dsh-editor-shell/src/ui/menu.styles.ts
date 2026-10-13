@@ -24,6 +24,7 @@ defineStyles('dsh.components', 'dsh-menu', `
 .dsh-menu__item-desc { display: block; font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted); }
 .dsh-menu__check { display: inline-flex; flex: none; width: var(--dsh-ui-icon-md); }
 .dsh-menu__shortcut { flex: none; margin-left: auto; }
+.dsh-menu__sub-arrow { flex: none; margin-left: auto; display: inline-flex; color: var(--dsh-ui-muted); }
 .dsh-menu__separator { height: 0.5px; margin: var(--dsh-ui-space-1) var(--dsh-ui-space-2); background: var(--dsh-ui-line); }
 .dsh-menu__label { padding: var(--dsh-ui-space-1) var(--dsh-ui-space-2); font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted); }
 @media (forced-colors: active) {

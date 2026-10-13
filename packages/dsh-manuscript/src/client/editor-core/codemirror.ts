@@ -68,9 +68,11 @@ export const paperThemeSpec = {
     lineHeight: 'inherit',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
+    /* In-document chrome (page header host) anchors inside the scroller. */
+    position: 'relative',
   },
   '.cm-content': {
-    padding: `var(--paper-pad-block, ${PAPER_PAD_BLOCK}) var(--paper-pad-inline, ${PAPER_PAD_INLINE}) 32px`,
+    padding: `calc(var(--paper-pad-block, ${PAPER_PAD_BLOCK}) + var(--paper-header-space, 0px)) var(--paper-pad-inline, ${PAPER_PAD_INLINE}) 32px`,
     caretColor: 'var(--accent-9)',
     boxSizing: 'border-box',
     width: '100%',
@@ -83,6 +85,15 @@ export const paperThemeSpec = {
   '.cm-line': {
     paddingBottom: 'var(--paper-paragraph-spacing, 0em)',
     textAlign: 'start',
+  },
+  /* 页内页眉宿主：绝对定位贴文档起点，随内容滚走（不吸顶）。 */
+  '.cm-paper-header-host': {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    right: '0',
+    height: 'var(--paper-header-space, 0px)',
+    overflow: 'visible',
   },
 }
 
@@ -146,6 +157,17 @@ export const paperTheme: Extension = EditorView.theme({
   },
   /* FIM ghost inline widget. */
   '.cm-ghost': { color: 'var(--gray-9)', whiteSpace: 'pre-wrap' },
+  /* 正文段落：firstLineIndent 偏好映射为 --paper-first-indent（0 或 2em）。 */
+  '.cm-lp-para': { textIndent: 'var(--paper-first-indent, 0)' },
+  /* 分节符 / 中文小节号：居中、display 字、上下留白；不改文本。 */
+  '.cm-lp-section': {
+    textAlign: 'center',
+    textIndent: '0',
+    fontFamily: 'var(--dsh-ui-font-display, var(--paper-font-family))',
+    fontSize: 'var(--paper-section-size, 18px)',
+    paddingTop: '1.5em',
+    paddingBottom: '1.5em',
+  },
 })
 
 /* Base syntax colors for markdown tokens the live preview leaves alone
@@ -240,6 +262,23 @@ export function toggleTaskMarker(state: EditorState, pos: number): TransactionSp
 }
 
 const bulletDeco = Decoration.replace({ widget: new BulletWidget() })
+const paraLine = Decoration.line({ class: 'cm-lp-para' })
+const sectionLine = Decoration.line({ class: 'cm-lp-section' })
+
+/*
+ * 分节符候选字符：中文数字与排版小节符号。段内允许空白（「※ ※ ※」），
+ * 但去空白后不能为空，也不能混入其他文字。
+ */
+const SECTION_MARK_CHARS = new Set([...'〇零一二三四五六七八九十百千万两', '*', '＊', '※', '◇'])
+function isSectionMarkText(text: string): boolean {
+  let seen = false
+  for (const char of text) {
+    if (char === ' ' || char === '\t' || char === '　') continue
+    if (!SECTION_MARK_CHARS.has(char)) return false
+    seen = true
+  }
+  return seen
+}
 
 function listItemHasTask(item: { firstChild: { name: string; nextSibling: unknown } | null }): boolean {
   for (let child = item.firstChild; child; child = child.nextSibling as typeof child) {
@@ -282,7 +321,13 @@ export type LivePreviewHost = {
   hasFocus?: boolean
 }
 
-export function buildLivePreview(view: LivePreviewHost): DecorationSet {
+export type LivePreviewOptions = {
+  /** 分节符居中 live preview 装饰（写作偏好 centerSectionMarks）。 */
+  centerSectionMarks?: boolean
+}
+
+export function buildLivePreview(view: LivePreviewHost, options: LivePreviewOptions = {}): DecorationSet {
+  const centerSectionMarks = options.centerSectionMarks !== false
   const ranges: { from: number; to: number; deco: Decoration }[] = []
   const selection = view.state.selection
   /* Only a focused editor keeps the caret line raw: on blur the whole paper
@@ -299,6 +344,22 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
       to: vTo,
       enter(node) {
         const { name, from, to } = node
+        if (name === 'Paragraph') {
+          /* 顶层正文段落才参与首行缩进与分节符装饰；列表项、引用块、
+             Setext 标题里的 Paragraph 一律跳过（父节点不是 Document）。 */
+          if (node.node.parent?.name !== 'Document') return undefined
+          const section = centerSectionMarks && isSectionMarkText(view.state.doc.sliceString(from, to))
+          for (let pos = from; pos <= to; ) {
+            const line = view.state.doc.lineAt(pos)
+            const lineActive = active(line.from, line.to)
+            /* 分节符：非光标行渲染为居中 display 字；光标行显示原文
+               （与标题规则一致，同时保留普通段落缩进类）。 */
+            pushLineDeco(line.from, section && !lineActive ? sectionLine : paraLine)
+            if (line.to >= to) break
+            pos = line.to + 1
+          }
+          return undefined
+        }
         if (name in headingLine) {
           const line = view.state.doc.lineAt(from)
           if (active(line.from, line.to)) return false
@@ -417,26 +478,30 @@ export function buildLivePreview(view: LivePreviewHost): DecorationSet {
   return RangeSet.of(ranges.map((r) => r.deco.range(r.from, r.to)), true)
 }
 
-export const livePreview: Extension = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet
-    constructor(view: EditorView) {
-      this.decorations = buildLivePreview(view)
-    }
-    update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.selectionSet ||
-        update.viewportChanged ||
-        update.focusChanged ||
-        syntaxTree(update.startState) !== syntaxTree(update.state)
-      ) {
-        this.decorations = buildLivePreview(update.view)
+export function livePreviewExtension(options: LivePreviewOptions = {}): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = buildLivePreview(view, options)
       }
-    }
-  },
-  { decorations: (value) => value.decorations },
-)
+      update(update: ViewUpdate) {
+        if (
+          update.docChanged ||
+          update.selectionSet ||
+          update.viewportChanged ||
+          update.focusChanged ||
+          syntaxTree(update.startState) !== syntaxTree(update.state)
+        ) {
+          this.decorations = buildLivePreview(update.view, options)
+        }
+      }
+    },
+    { decorations: (value) => value.decorations },
+  )
+}
+
+export const livePreview: Extension = livePreviewExtension()
 
 /* ── Ghost widget ──────────────────────────────────────────────────── */
 

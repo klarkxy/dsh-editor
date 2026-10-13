@@ -1,7 +1,7 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu'
 import * as Context from '@radix-ui/react-context-menu'
 import type { ReactNode } from 'react'
-import { CheckIcon } from './icons.tsx'
+import { CheckIcon, ChevronRightIcon } from './icons.tsx'
 import { Kbd } from './kbd.tsx'
 import { cx, useDshPortalContainer } from './shared.ts'
 import './menu.styles.ts'
@@ -16,6 +16,8 @@ export type MenuItemProps = {
   disabled?: boolean
   checked?: boolean
   title?: string
+  className?: string
+  'data-testid'?: string
   onSelect?(): void
   children?: ReactNode
 }
@@ -68,10 +70,11 @@ export function MenuContent(props: {
 export function MenuItem(props: MenuItemProps) {
   return (
     <Dropdown.Item
-      className="dsh-menu__item"
+      className={cx('dsh-menu__item', props.className)}
       data-tone={props.tone === 'danger' ? 'danger' : undefined}
       disabled={props.disabled}
       title={props.title}
+      data-testid={props['data-testid']}
       onSelect={props.onSelect}
     >
       {itemMarkup(props)}
@@ -79,8 +82,8 @@ export function MenuItem(props: MenuItemProps) {
   )
 }
 
-export function MenuSeparator() {
-  return <Dropdown.Separator className="dsh-menu__separator" />
+export function MenuSeparator(props: { className?: string }) {
+  return <Dropdown.Separator className={cx('dsh-menu__separator', props.className)} />
 }
 
 export function MenuLabel(props: { children?: ReactNode }) {
@@ -93,8 +96,14 @@ export function MenuSub(props: { children?: ReactNode }) {
 
 export function MenuSubTrigger(props: MenuItemProps) {
   return (
-    <Dropdown.SubTrigger className="dsh-menu__item" disabled={props.disabled}>
+    <Dropdown.SubTrigger
+      className={cx('dsh-menu__item', props.className)}
+      disabled={props.disabled}
+      title={props.title}
+      data-testid={props['data-testid']}
+    >
       {itemMarkup(props)}
+      <span className="dsh-menu__sub-arrow" aria-hidden="true"><ChevronRightIcon size="sm" /></span>
     </Dropdown.SubTrigger>
   )
 }
@@ -130,10 +139,11 @@ export function ContextMenuContent(props: { children?: ReactNode; 'aria-label'?:
 export function ContextMenuItem(props: MenuItemProps) {
   return (
     <Context.Item
-      className="dsh-menu__item"
+      className={cx('dsh-menu__item', props.className)}
       data-tone={props.tone === 'danger' ? 'danger' : undefined}
       disabled={props.disabled}
       title={props.title}
+      data-testid={props['data-testid']}
       onSelect={props.onSelect}
     >
       {itemMarkup(props)}
@@ -141,6 +151,6 @@ export function ContextMenuItem(props: MenuItemProps) {
   )
 }
 
-export function ContextMenuSeparator() {
-  return <Context.Separator className="dsh-menu__separator" />
+export function ContextMenuSeparator(props: { className?: string }) {
+  return <Context.Separator className={cx('dsh-menu__separator', props.className)} />
 }

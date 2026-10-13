@@ -165,6 +165,25 @@ describe('author memory normalization and decode', () => {
       mode: 'host',
     })).toMatchObject({ fontSize: 14, lineHeight: 2.4, paperWidth: 'medium', typewriter: false })
   })
+
+  it('defaults firstLineIndent off and centerSectionMarks on for legacy snapshots', () => {
+    expect(DEFAULT_WRITING_PREFERENCES.paragraphSpacing).toBe(0.25)
+    expect(DEFAULT_WRITING_PREFERENCES.firstLineIndent).toBe(false)
+    expect(DEFAULT_WRITING_PREFERENCES.centerSectionMarks).toBe(true)
+    expect(decodeWritingPreferences({
+      completion: 'manual',
+      authorPreferences: '',
+      authorMemory: '',
+    })).toMatchObject({ firstLineIndent: false, centerSectionMarks: true })
+    /* 已保存的值透传，不被默认值吞掉。 */
+    expect(decodeWritingPreferences({
+      completion: 'manual',
+      authorPreferences: '',
+      authorMemory: '',
+      firstLineIndent: true,
+      centerSectionMarks: false,
+    })).toMatchObject({ firstLineIndent: true, centerSectionMarks: false })
+  })
 })
 
 

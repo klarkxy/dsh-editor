@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { Button } from '@radix-ui/themes'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { asClient, type ManuscriptClient } from '../host.ts'
 import { activeWorkspaceFromSessionList, type ActiveWorkspace } from './session-cwd.ts'
@@ -111,12 +111,10 @@ function Tree(props: {
         const expanded = open[child] !== undefined
         return (
           <div key={child}>
-            <Button
+            <SeatButton
               type="button"
-              variant="ghost"
-              color="gray"
               className="manuscript-tree-button"
-              aria-expanded={expanded ? 'true' : 'false'}
+              aria-expanded={expanded}
               style={{ paddingLeft: 12 + depth * 12 }}
               onClick={() => {
                 if (expanded) setOpen((cur) => { const next = { ...cur }; delete next[child]; return next })
@@ -124,24 +122,22 @@ function Tree(props: {
               }}>
               <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
               {` ${entry.name}`}
-            </Button>
+            </SeatButton>
             {expanded ? render(child, depth + 1) : null}
           </div>
         );
       }
       const isActive = props.active === child
       return (
-        <Button
+        <SeatButton
           key={child}
           type="button"
-          variant="ghost"
-          color="gray"
           className={`manuscript-tree-row${isActive ? ' is-active' : ''}`}
           aria-current={isActive ? 'page' : undefined}
           onClick={() => props.onOpen(child)}
           style={{ paddingLeft: 12 + depth * 12 }}>
           {entry.name}
-        </Button>
+        </SeatButton>
       );
     });
   }
@@ -346,56 +342,50 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   return (
     <ManuscriptTheme>
     <div data-testid="manuscript-overlay" data-state={open ? 'open' : 'closed'}>
-      {!open ? <Button
+      {!open ? <SeatButton
         type="button"
-        variant="soft"
-        color="gray"
         className="manuscript-toggle"
         data-testid="manuscript-open"
         onClick={() => setOpen(true)}>
         稿纸
-      </Button> : <section className="manuscript-panel">
+      </SeatButton> : <section className="manuscript-panel">
         <header className="manuscript-panel-header">
           <h2 className="manuscript-panel-title">
             稿纸
           </h2>
           <div className="manuscript-panel-actions">
             {confirmClose ? <>
-              <Button type="button" variant="soft" color="red" data-testid="manuscript-close" onClick={requestClose}>
+              <SeatButton type="button" variant="danger" data-testid="manuscript-close" onClick={requestClose}>
                 确认关闭？
-              </Button>
-              <Button type="button" variant="ghost" color="gray" onClick={resetConfirmClose}>
+              </SeatButton>
+              <SeatButton type="button" onClick={resetConfirmClose}>
                 取消
-              </Button>
-            </> : <Button type="button" variant="ghost" color="gray" data-testid="manuscript-close" onClick={requestClose}>
+              </SeatButton>
+            </> : <SeatButton type="button" data-testid="manuscript-close" onClick={requestClose}>
               关闭
-            </Button>}
-            <Button
+            </SeatButton>}
+            <SeatButton
               type="button"
-              variant="solid"
+              variant="primary"
               data-testid="manuscript-new"
               disabled={!cwd}
               onClick={createFile}>
               新建
-            </Button>
-            <Button
+            </SeatButton>
+            <SeatButton
               type="button"
-              variant="ghost"
-              color="gray"
               data-testid="manuscript-prev"
               disabled={siblingIndex <= 0}
               onClick={() => go(-1)}>
               上一篇
-            </Button>
-            <Button
+            </SeatButton>
+            <SeatButton
               type="button"
-              variant="ghost"
-              color="gray"
               data-testid="manuscript-next"
               disabled={siblingIndex < 0 || siblingIndex >= siblings.length - 1}
               onClick={() => go(1)}>
               下一篇
-            </Button>
+            </SeatButton>
           </div>
         </header>
         <aside className="manuscript-panel-tree">
@@ -412,12 +402,12 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
                 if (event.key === 'Escape') cancelCreate()
               }}
               style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-1)', padding: '4px 8px', border: 0, borderRadius: 'var(--s-radius-md)', boxShadow: 'var(--s-elevate-soft)', background: 'var(--s-surface)', color: 'var(--s-text)' }} />
-            <Button type="button" variant="solid" size="1" onClick={submitCreate}>
+            <SeatButton type="button" variant="primary" onClick={submitCreate}>
               创建
-            </Button>
-            <Button type="button" variant="soft" color="gray" size="1" onClick={cancelCreate}>
+            </SeatButton>
+            <SeatButton type="button" onClick={cancelCreate}>
               取消
-            </Button>
+            </SeatButton>
           </div> : null}
           {createError ? <div
             data-testid="manuscript-create-error"
@@ -482,20 +472,20 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             <span>
               AI 补全能力不可用，补全与选段改写已暂停。
             </span>
-            <Button type="button" variant="soft" color="gray" onClick={() => { void loadCapability() }}>
+            <SeatButton type="button" onClick={() => { void loadCapability() }}>
               重试
-            </Button>
+            </SeatButton>
           </div> : null}
           {pendingTarget ? <div data-testid="manuscript-switch-guard" className="manuscript-switch-guard">
             <span>
               目标已变更，当前草稿尚未处理。
             </span>
-            <Button type="button" variant="solid" onClick={() => { void acceptPendingSave() }}>
+            <SeatButton type="button" variant="primary" onClick={() => { void acceptPendingSave() }}>
               保存后切换
-            </Button>
-            <Button type="button" variant="soft" color="red" onClick={acceptPendingDiscard}>
+            </SeatButton>
+            <SeatButton type="button" variant="danger" onClick={acceptPendingDiscard}>
               放弃修改并切换
-            </Button>
+            </SeatButton>
           </div> : null}
         </main>
       </section>}

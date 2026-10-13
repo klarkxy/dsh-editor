@@ -456,7 +456,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const authorMemory = useMemo(() => normalizeAuthorMemory(writing.authorMemory), [writing.authorMemory])
   const typography = useMemo(
     () => writingTypography(writing),
-    [writing.fontSize, writing.lineHeight, writing.fontFamily, writing.paragraphSpacing, writing.paperWidth],
+    [writing.fontSize, writing.lineHeight, writing.fontFamily, writing.paragraphSpacing, writing.paperWidth, writing.firstLineIndent, writing.centerSectionMarks],
   )
   const exportDocuments = async (directory?: string) => {
     closeWorkspaceChrome()

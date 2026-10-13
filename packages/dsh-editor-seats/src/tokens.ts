@@ -73,6 +73,7 @@ const lightPalette = `
   --red-a6: #ec13134d;
   --green-9: #22c55e;
   --green-11: #178a45;
+  --green-a3: #22c55e24;
   --amber-9: #f59e0b;
   --amber-a4: #f59e0b33;
   --amber-a6: #f59e0b55;
@@ -120,6 +121,7 @@ const darkPalette = `
   --red-a6: #f25a5a55;
   --green-9: #22c55e;
   --green-11: #4ed17e;
+  --green-a3: #22c55e24;
   --amber-9: #f59e0b;
   --amber-a4: #f59e0b33;
   --amber-a6: #f59e0b55;
@@ -144,44 +146,56 @@ ${darkPalette}}`
  * Local semantic names for plugin and standalone chrome.
  * Declared on a component root so they inherit. They do not redefine
  * `--dsh-ui-*` or `--dsw-*`, and they contain no theme selector.
+ *
+ * `surfaceTokenVars` is the same map as a JS object: components that set
+ * inline styles (e.g. editor-chrome's host-independent chrome) spread it
+ * onto the section root so `--s-*` resolves inside any host. Stylesheets
+ * keep using `surfaceTokenAliases`, generated from the same entries.
  */
+export const surfaceTokenVars: Record<string, string> = {
+  '--s-text': 'var(--dsh-ui-text, var(--dsw-alias-label-primary, var(--gray-12)))',
+  '--s-muted': 'var(--dsh-ui-muted, var(--dsw-alias-label-secondary, var(--gray-11)))',
+  '--s-faint': 'var(--dsh-ui-faint, var(--dsw-alias-label-tertiary, var(--gray-10)))',
+  '--s-bg': 'var(--dsh-ui-bg, var(--dsw-alias-bg-base, var(--color-background)))',
+  '--s-surface': 'var(--dsh-ui-surface, var(--dsw-alias-bg-layer-1, var(--color-surface)))',
+  '--s-raised': 'var(--dsh-ui-raised, var(--dsw-alias-bg-layer-2, var(--color-panel-solid)))',
+  '--s-sidebar': 'var(--dsh-ui-sidebar, var(--dsw-specific-sidebar-fill, var(--gray-2)))',
+  '--s-sunken': 'var(--dsh-ui-sunken, var(--dsw-alias-bg-module-platform, var(--gray-3)))',
+  '--s-line': 'var(--dsh-ui-line, var(--dsw-alias-border-l2, var(--gray-a5)))',
+  '--s-line-strong': 'var(--dsh-ui-line-strong, var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, var(--gray-6))))',
+  '--s-hover': 'var(--dsh-ui-hover, var(--dsw-alias-interactive-bg-hover, var(--gray-a3)))',
+  '--s-selected': 'var(--dsh-ui-selected, var(--dsw-specific-sidebar-nav-item-active, var(--gray-a4)))',
+  '--s-accent': 'var(--dsh-ui-accent, var(--dsw-alias-link, var(--accent-9)))',
+  '--s-accent-hover': 'var(--dsh-ui-accent-hover, var(--dsw-alias-button-info-hover, var(--accent-10)))',
+  '--s-accent-soft': 'var(--dsh-ui-accent-soft, var(--dsw-alias-state-business-tertiary, var(--accent-a3)))',
+  '--s-on-accent': 'var(--dsh-ui-on-accent, var(--dsw-alias-label-primary-foreground, var(--accent-contrast)))',
+  '--s-brand': 'var(--dsh-ui-brand, var(--dsw-alias-button-primary-fill, var(--gray-12)))',
+  '--s-on-brand': 'var(--dsh-ui-on-brand, var(--dsw-alias-label-primary-foreground, var(--color-background)))',
+  '--s-brand-hover': 'var(--dsh-ui-brand-hover, var(--dsw-alias-button-primary-hover, color-mix(in srgb, var(--s-brand) 86%, var(--s-on-brand))))',
+  '--s-danger': 'var(--dsh-ui-danger, var(--dsw-alias-state-error-primary, var(--red-11)))',
+  '--s-danger-soft': 'var(--dsh-ui-danger-soft, var(--dsw-alias-state-error-secondary, var(--red-a3)))',
+  '--s-warning': 'var(--dsh-ui-warning, var(--dsw-alias-state-warn-primary, var(--amber-9)))',
+  '--s-warning-soft': 'var(--dsh-ui-warning-soft, var(--dsw-alias-state-warn-secondary, var(--amber-a4)))',
+  '--s-success': 'var(--dsh-ui-success, var(--dsw-alias-state-success-primary, var(--green-9)))',
+  '--s-success-soft': 'var(--dsh-ui-success-soft, var(--dsw-alias-state-success-secondary, var(--green-a3)))',
+  '--s-font': 'var(--dsh-ui-font-ui, var(--dsw-font-family, var(--default-font-family)))',
+  '--s-mono': 'var(--dsh-ui-font-mono, var(--ds-font-family-code, var(--code-font-family)))',
+  '--s-radius-xs': 'var(--dsh-ui-radius-xs, var(--dsw-radius-xs, var(--radius-1, 4px)))',
+  '--s-radius-sm': 'var(--dsh-ui-radius-sm, var(--dsw-radius-sm, var(--radius-2)))',
+  '--s-radius-md': 'var(--dsh-ui-radius-md, var(--dsw-radius-md, var(--radius-3)))',
+  '--s-radius-lg': 'var(--dsh-ui-radius-lg, var(--dsw-radius-lg, var(--radius-4, 16px)))',
+  '--s-radius-xl': 'var(--dsh-ui-radius-xl, var(--dsw-radius-xl, var(--radius-5, 20px)))',
+  '--s-radius-panel': 'var(--dsh-ui-radius-2xl, var(--dsw-radius-panel, var(--radius-6, 28px)))',
+  '--s-elevate': 'var(--dsh-ui-shadow-lg, var(--dsw-elevation-panel, var(--shadow-4)))',
+  '--s-elevate-soft': 'var(--dsh-ui-shadow-sm, var(--dsw-elevation-soft, var(--shadow-2)))',
+  '--s-focus-shadow': 'var(--dsh-ui-elevation-focus, 0 0 0 2px var(--s-accent))',
+  '--s-control': 'var(--dsh-ui-control-md, 36px)',
+  '--s-control-sm': 'var(--dsh-ui-control-sm, 32px)',
+  '--s-track': 'var(--dsh-ui-sunken, var(--dsw-alias-bg-module-platform, var(--gray-7)))',
+  '--s-track-on': 'var(--dsh-ui-accent-solid, var(--dsw-alias-state-business-primary, var(--accent-9)))',
+  '--s-thumb': 'var(--dsw-alias-switch-thumb, var(--gray-1))',
+}
+
 export const surfaceTokenAliases = `
-  --s-text: var(--dsh-ui-text, var(--dsw-alias-label-primary, var(--gray-12)));
-  --s-muted: var(--dsh-ui-muted, var(--dsw-alias-label-secondary, var(--gray-11)));
-  --s-faint: var(--dsh-ui-faint, var(--dsw-alias-label-tertiary, var(--gray-10)));
-  --s-bg: var(--dsh-ui-bg, var(--dsw-alias-bg-base, var(--color-background)));
-  --s-surface: var(--dsh-ui-surface, var(--dsw-alias-bg-layer-1, var(--color-surface)));
-  --s-raised: var(--dsh-ui-raised, var(--dsw-alias-bg-layer-2, var(--color-panel-solid)));
-  --s-sidebar: var(--dsh-ui-sidebar, var(--dsw-specific-sidebar-fill, var(--gray-2)));
-  --s-sunken: var(--dsh-ui-sunken, var(--dsw-alias-bg-module-platform, var(--gray-3)));
-  --s-line: var(--dsh-ui-line, var(--dsw-alias-border-l2, var(--gray-a5)));
-  --s-line-strong: var(--dsh-ui-line-strong, var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, var(--gray-6))));
-  --s-hover: var(--dsh-ui-hover, var(--dsw-alias-interactive-bg-hover, var(--gray-a3)));
-  --s-selected: var(--dsh-ui-selected, var(--dsw-specific-sidebar-nav-item-active, var(--gray-a4)));
-  --s-accent: var(--dsh-ui-accent, var(--dsw-alias-link, var(--accent-9)));
-  --s-accent-hover: var(--dsh-ui-accent-hover, var(--dsw-alias-button-info-hover, var(--accent-10)));
-  --s-accent-soft: var(--dsh-ui-accent-soft, var(--dsw-alias-state-business-tertiary, var(--accent-a3)));
-  --s-on-accent: var(--dsh-ui-on-accent, var(--dsw-alias-label-primary-foreground, var(--accent-contrast)));
-  --s-brand: var(--dsh-ui-brand, var(--dsw-alias-button-primary-fill, var(--gray-12)));
-  --s-on-brand: var(--dsh-ui-on-brand, var(--dsw-alias-label-primary-foreground, var(--color-background)));
-  --s-brand-hover: var(--dsh-ui-brand-hover, var(--dsw-alias-button-primary-hover, color-mix(in srgb, var(--s-brand) 86%, var(--s-on-brand))));
-  --s-danger: var(--dsh-ui-danger, var(--dsw-alias-state-error-primary, var(--red-11)));
-  --s-warning: var(--dsh-ui-warning, var(--dsw-alias-state-warn-primary, var(--amber-9)));
-  --s-success: var(--dsh-ui-success, var(--dsw-alias-state-success-primary, var(--green-9)));
-  --s-font: var(--dsh-ui-font-ui, var(--dsw-font-family, var(--default-font-family)));
-  --s-mono: var(--dsh-ui-font-mono, var(--ds-font-family-code, var(--code-font-family)));
-  --s-radius-xs: var(--dsh-ui-radius-xs, var(--dsw-radius-xs, var(--radius-1, 4px)));
-  --s-radius-sm: var(--dsh-ui-radius-sm, var(--dsw-radius-sm, var(--radius-2)));
-  --s-radius-md: var(--dsh-ui-radius-md, var(--dsw-radius-md, var(--radius-3)));
-  --s-radius-lg: var(--dsh-ui-radius-lg, var(--dsw-radius-lg, var(--radius-4, 16px)));
-  --s-radius-xl: var(--dsh-ui-radius-xl, var(--dsw-radius-xl, var(--radius-5, 20px)));
-  --s-radius-panel: var(--dsh-ui-radius-2xl, var(--dsw-radius-panel, var(--radius-6, 28px)));
-  --s-elevate: var(--dsh-ui-shadow-lg, var(--dsw-elevation-panel, var(--shadow-4)));
-  --s-elevate-soft: var(--dsh-ui-shadow-sm, var(--dsw-elevation-soft, var(--shadow-2)));
-  --s-focus-shadow: var(--dsh-ui-elevation-focus, 0 0 0 2px var(--s-accent));
-  --s-control: var(--dsh-ui-control-md, 36px);
-  --s-control-sm: var(--dsh-ui-control-sm, 32px);
-  --s-track: var(--dsh-ui-sunken, var(--dsw-alias-bg-module-platform, var(--gray-7)));
-  --s-track-on: var(--dsh-ui-accent-solid, var(--dsw-alias-state-business-primary, var(--accent-9)));
-  --s-thumb: var(--dsw-alias-switch-thumb, var(--gray-1));
+${Object.entries(surfaceTokenVars).map(([name, value]) => `  ${name}: ${value};`).join('\n')}
 `

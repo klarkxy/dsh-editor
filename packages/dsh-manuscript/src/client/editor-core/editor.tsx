@@ -1,6 +1,7 @@
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
@@ -42,6 +43,7 @@ import {
   type StoredDraft,
 } from './editor-state.ts'
 import { automaticCompletionReady, type CompletionPreference } from './completion-preference.ts'
+import { normalizeTypography } from './typography.ts'
 
 // Re-exports keep the public surface of editor-core in a single barrel.
 export {
@@ -148,6 +150,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     enableBeforeUnload = false,
     headerExtras,
     footerExtras,
+    paperHeader,
+    conflictNotice,
+    hostButton,
     compactControls = false,
     onEditorContextMenu,
   } = props
@@ -831,6 +836,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         return view && isDocumentReady() ? openReplacePanel(view) : false
       },
       requestCompletion: () => { void complete(false) },
+      coordsAtPos: (pos) => {
+        const view = viewRef.current
+        if (!view || !isDocumentReady()) return null
+        const paperPos = Math.max(0, Math.min(view.state.doc.length, pos - paperOffsetRef.current))
+        return view.coordsAtPos(paperPos)
+      },
     }
     onHandle(handle)
     return () => onHandle(null)
@@ -919,15 +930,31 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     canEdit: isDocumentReady,
   }
 
+  const centerSectionMarks = normalizeTypography(typography).centerSectionMarks
+
   usePaperView({
     containerRef, viewRef, callbacksRef, paperOffsetRef, textFlushTimer,
-    typewriter, focusParagraph, documentReady, isDocumentReady,
+    typewriter, focusParagraph, centerSectionMarks, documentReady, isDocumentReady,
     path, paperProjection, textRef, documentGenerationRef, pendingCursorRef,
     paperText, renderGeneration, ghost, ghostAt, paperOffset, testIdPrefix, slotClassName,
   })
 
+  /* 页内页眉宿主：挂进 .cm-scroller 的绝对定位空节点，随文档滚动；React
+     侧只拿 DOM 引用，paperHeader 经 portal 渲染进去。 */
+  const [paperHeaderHost, setPaperHeaderHost] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    const scroller = containerRef.current?.querySelector('.cm-scroller')
+    if (!scroller) return
+    const host = document.createElement('div')
+    host.className = 'cm-paper-header-host'
+    scroller.prepend(host)
+    setPaperHeaderHost(host)
+    return () => { host.remove(); setPaperHeaderHost(null) }
+  }, [])
+
   if (!path) return null
-  return <EditorChrome
+  return <>
+    <EditorChrome
     path={path}
     paperClassName={paperClassName}
     paperStyle={paperStyle}
@@ -978,10 +1005,15 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     adoptBackup={adoptBackup}
     setGhostIndex={setGhostIndex}
     setProposal={setProposal}
+    paperHeader={paperHeader}
+    conflictNotice={conflictNotice}
+    hostButton={hostButton}
     stopPatch={() => {
       patchAbort.current?.abort()
       setPatching(false)
       report('已停止改写。')
     }}
   />
+    {paperHeader && paperHeaderHost ? createPortal(paperHeader, paperHeaderHost) : null}
+  </>
 }

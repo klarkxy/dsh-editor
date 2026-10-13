@@ -21,6 +21,7 @@ import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { S } from './helpers/selectors.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
@@ -335,6 +336,49 @@ try {
     assertProbe(label, m)
     await page.screenshot({ path: resolve(output, `probe-${vp.width}.png`) })
     note(label, `shell=${m.shell?.h.toFixed(0)} topbar=${m.topbar?.h.toFixed(0)} paper-bottom=${m.paper?.bottom.toFixed(0)} docked=${m.dockedSlots.length} tabs=${m.tabRoots.length} cm=${m.cm ? m.cm.h.toFixed(0) : '-'} launcher=${m.launcher ? 'yes' : 'no'}`)
+  }
+
+  // ---- C40 editor identity: theme + font-size changes must not remount
+  // the CodeMirror view (same __cmView instance and same .cm-editor node).
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(700)
+  const editorLoc = page.locator(S.paperEditor)
+  const captureCm = () => editorLoc.evaluate((el) => {
+    window.__cmViewProbe = el.__cmView
+    window.__cmDomProbe = el.querySelector('.cm-editor')
+    return Boolean(el.__cmView && el.querySelector('.cm-editor'))
+  })
+  const verifyCm = (label) => editorLoc.evaluate((el, lbl) => {
+    const sameView = el.__cmView === window.__cmViewProbe
+    const sameDom = el.querySelector('.cm-editor') === window.__cmDomProbe
+    return { label: lbl, sameView, sameDom }
+  }, label).then((r) => {
+    if (!r.sameView) failures.push(`identity/${r.label}: CodeMirror view object was remounted`)
+    if (!r.sameDom) failures.push(`identity/${r.label}: .cm-editor DOM node was replaced`)
+    return r
+  })
+  if (await captureCm()) {
+    const beforeTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+    await toggleTheme(page)
+    await page.waitForFunction((prev) => document.documentElement.getAttribute('data-theme') !== prev, beforeTheme, { timeout: 10_000 })
+    const r1 = await verifyCm('theme')
+    note('identity', `theme toggle: sameView=${r1.sameView} sameDom=${r1.sameDom}`)
+    // font-size change via the 写作 settings slider
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const settingsNav = page.locator(S.settingsNav)
+    await settingsNav.getByRole('tab', { name: '写作', exact: true }).click()
+    const fontSlider = page.locator(S.fontSizeSlider)
+    const oldSize = await fontSlider.getAttribute('aria-valuenow')
+    await fontSlider.focus()
+    await page.keyboard.press('ArrowRight')
+    await page.waitForFunction(({ old, sel }) => document.querySelector(sel)?.getAttribute('aria-valuenow') !== old,
+      { old: oldSize, sel: S.fontSizeSlider })
+    await page.getByRole('button', { name: '关闭设置', exact: true }).click()
+    const r2 = await verifyCm('font-size')
+    note('identity', `font-size change: sameView=${r2.sameView} sameDom=${r2.sameDom}`)
+    report.identity = { theme: r1, fontSize: r2 }
+  } else {
+    failures.push('identity: __cmView or .cm-editor not found on paper editor')
   }
 } catch (error) {
   failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)

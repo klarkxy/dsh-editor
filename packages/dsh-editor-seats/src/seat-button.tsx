@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentType, type MouseEvent, type ReactNode, type Ref } from 'react'
+import { forwardRef, type ComponentType, type CSSProperties, type MouseEvent, type ReactNode, type Ref } from 'react'
 import type { ShellButtonProps, ShellToolSeatContext } from './index.ts'
 
 /*
@@ -26,6 +26,9 @@ export const SeatButton = forwardRef<HTMLButtonElement, {
   'data-testid'?: string
   role?: string
   tabIndex?: number
+  /* 独立运行（无宿主按钮）时需要 style 的场景（如按树深度缩进）；宿主按钮
+     不接受 style 时会静默忽略，两种路径的语义差异仅限外观。 */
+  style?: CSSProperties
   children?: ReactNode
 }>(function SeatButton(props, ref) {
   const { host, variant, className, ...rest } = props

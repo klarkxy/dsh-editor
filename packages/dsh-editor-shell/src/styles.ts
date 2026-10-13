@@ -240,15 +240,26 @@ ${historyStyles}
 .shell .panel-resizer[data-separator="active"]::before { background: var(--dsh-ui-line-strong); }
 
 /* ── Editor / paper ─────────────────────────────────────── */
-.radix-themes .editor { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--paper-fill); position: relative; z-index: 1; --paper-pad-inline: 64px; --paper-pad-block: 36px; }
-.radix-themes .editor-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--space-8); padding: 0 var(--space-4); border-bottom: 1px solid var(--gray-a5); background: var(--paper-fill); color: var(--gray-11); font-size: var(--font-size-2); }
-.radix-themes .editor-header > [data-testid="paper-path"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.radix-themes .editor-doc-title { order: -1; flex: 1; min-width: 0; color: var(--gray-12); padding-inline-start: calc(var(--paper-pad-inline) - var(--space-4)); }
-.radix-themes .editor-header > [data-testid="paper-wordcount"],
-.radix-themes .editor-header > [data-testid="paper-save-state"] { margin-left: auto; white-space: nowrap; color: var(--gray-11); font-size: var(--font-size-1); }
-.radix-themes .paper-experience-toggles { display: inline-flex; align-items: center; gap: var(--space-1); }
-.radix-themes .editor-action-menu { z-index: 40; min-width: 220px; max-height: min(calc(100dvh - 24px), var(--radix-dropdown-menu-content-available-height, 90dvh)); overflow: auto; }
-.radix-themes .editor-action-dialog { max-width: min(440px, calc(100vw - 32px)); }
+.radix-themes .editor { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--paper-fill); position: relative; z-index: 1; --paper-pad-inline: 64px; --paper-pad-block: 36px; --paper-header-space: 96px; }
+
+/* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶）。 */
+.radix-themes .paper-page-header { height: 100%; box-sizing: border-box; padding-top: 28px; color: var(--dsh-ui-text, var(--gray-12)); }
+.radix-themes .paper-page-headline { position: relative; max-width: var(--paper-measure, 100%); margin-inline: auto; padding-inline: var(--paper-pad-inline); box-sizing: border-box; }
+.radix-themes .paper-page-title { margin: 0; font-family: var(--dsh-ui-font-display, "Kaiti SC", "STKaiti", "KaiTi", "楷体", serif); font-size: var(--dsh-ui-text-2xl); font-weight: var(--dsh-ui-weight-medium); line-height: 1.4; text-align: center; }
+.radix-themes .paper-page-menu { position: absolute; inset-inline-end: var(--paper-pad-inline); top: 0; display: inline-flex; align-items: center; }
+/* 天头线：横贯版心宽度，两端接到版心竖线。 */
+.radix-themes .paper-tiantou { height: 1px; background: var(--dsh-ui-line, var(--gray-a5)); max-width: var(--paper-measure, 100%); margin: 14px auto 0; }
+
+.radix-themes .editor-action-menu { min-width: 220px; }
+
+/* 稿纸页脚状态行：版心居中、12px muted，固定在可视稿纸下沿。 */
+.radix-themes .paper-footer-status { margin-inline: auto; display: flex; gap: 12px; align-items: baseline; font-size: var(--font-size-1); color: var(--s-muted, var(--gray-11)); }
+
+/* 选段改写浮层（§4）：预设一行 + 指令一行 + 操作行。 */
+.dsh-popover .rewrite-popover { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2, 8px); min-width: 300px; }
+.dsh-popover .rewrite-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.dsh-popover .rewrite-instruction { width: 100%; }
+.dsh-popover .rewrite-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 .radix-themes .paper-input {
   width: 100%;
@@ -257,6 +268,20 @@ ${historyStyles}
   background: transparent;
   color: var(--gray-12);
 }
+/* 版心两侧各一条 1px margin-rule 竖线：跟随 --paper-measure（paperWidth），
+   pointer-events 关掉，不遮挡选区与光标。 */
+.radix-themes .paper-input::before,
+.radix-themes .paper-input::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--dsh-ui-margin-rule);
+  pointer-events: none;
+}
+.radix-themes .paper-input::before { left: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); }
+.radix-themes .paper-input::after { right: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); }
 .radix-themes .paper-input .cm-editor { width: 100%; height: 100%; background: transparent; }
 .radix-themes .paper-input .cm-scroller {
   align-items: flex-start !important;
@@ -361,15 +386,17 @@ ${chatMessageStyles}
 .shell .shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--gray-2); }
 .shell .shell-panel.editor-cell { background: var(--paper-fill); }
 .shell .editor-cell { position: relative; background: var(--paper-fill); }
-.shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-.shell .center-overlays [data-dsh-center-overlay] { height: 100%; min-width: 0; min-height: 0; overflow: auto; background: var(--color-panel-solid); pointer-events: auto; }
+.shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: flex; flex-direction: column; }
+/* 覆盖层外框（§4）：shell 自己的标题栏在插件面之外，标题读遮罩根的 aria-label。 */
+.shell .center-overlay-titlebar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-2) 0 var(--space-4); background: var(--color-panel-solid); border-bottom: 0.5px solid var(--dsh-ui-line, var(--gray-a5)); color: var(--gray-12); flex: none; pointer-events: auto; }
+.shell .center-overlay-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-2); font-weight: var(--dsh-ui-weight-medium); }
+.shell .center-overlay-surface { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell .center-overlays [data-dsh-center-overlay] { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--color-panel-solid); pointer-events: auto; }
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
 .shell.layout-shell.focus-mode .center-overlays { display: none !important; }
-.shell.layout-shell.focus-mode .editor-header { justify-content: center; }
-.shell.layout-shell.focus-mode .editor-header [data-testid="paper-wordcount"],
-.shell.layout-shell.focus-mode .editor-header [data-testid="paper-save-state"] { opacity: .45; }
+.shell.layout-shell.focus-mode .paper-footer-status { opacity: .45; }
 .shell.layout-shell.focus-mode .editor {
   --paper-pad-block: 56px;
   --paper-pad-inline: 64px;

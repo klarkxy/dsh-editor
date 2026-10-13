@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
@@ -13,6 +12,7 @@ import type { SessionFace } from '../dsh-compat.ts'
 import {
   EditorCore,
   editorCommandState,
+  REWRITE_PRESETS,
   type EditorCommandState,
   type EditorContextMenuEvent,
   type EditorCoreHandle,
@@ -35,14 +35,16 @@ import {
 } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { isAuthorFacingDocumentPath } from '../project-files.ts'
-import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
+import { canPinPath } from '../pinned-pane-view.ts'
+import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction, presetLabelKey } from '../rewrite-presets-view.ts'
 import { t } from '../i18n/index.ts'
 import type { SearchHit } from '../model/search-panel.ts'
 import { normalizeReferenceQuery } from './reference-lookup.ts'
 import { ReferenceLookupDialog } from './reference-lookup-dialog.tsx'
-import { Button, Dialog, isImeEvent } from './ui/index.ts'
-import { Button as ThemesButton, Callout, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
-import { readableDocumentTitle, rewriteSelectionExcerpt } from '../wrap-up-view.ts'
+import { Button as HostButton, isImeEvent } from './ui/index.ts'
+import { Button, Input, Notice, Popover } from '../ui/index.ts'
+import { Button as ThemesButton, Callout, Text } from '@radix-ui/themes'
+import { readableDocumentTitle } from '../wrap-up-view.ts'
 import {
   clipboardResultMessage,
   copyEditorSelection,
@@ -91,6 +93,8 @@ export function Editor(props: {
     fontFamily?: 'serif' | 'sans' | 'mono' | string
     paragraphSpacing?: number
     maxWidth?: number
+    firstLineIndent?: boolean
+    centerSectionMarks?: boolean
   }
   onSaved(): void
   reveal: RevealRequest | null
@@ -140,6 +144,12 @@ export function Editor(props: {
   const [customRewriteOpen, setCustomRewriteOpen] = useState(false)
   const [customText, setCustomText] = useState('')
   const [customTarget, setCustomTarget] = useState<EditorTargetSnapshot | null>(null)
+  /* 改写浮层锚点：选区下沿的视口矩形（CodeMirror coordsAtPos），
+     打开时定格一次，滚动/排版变化不重新求值。 */
+  const [rewriteAnchor, setRewriteAnchor] = useState<{
+    getBoundingClientRect(): DOMRect
+  } | null>(null)
+  const rewriteInputRef = useRef<HTMLInputElement | null>(null)
   const [referenceQuery, setReferenceQuery] = useState<string | null>(null)
 
   // Serialize draft RPCs so a delayed put cannot land after save's delete.
@@ -244,10 +254,33 @@ export function Editor(props: {
     if (action === 'rewrite') {
       if (!canRewriteTarget) return
       afterMenu(() => {
+        /* 锚点取选区下沿：coordsAtPos(end) 返回该位置的插入符矩形，
+           其 bottom 即选区末行下沿；取不到坐标时回退到选区上沿。 */
+        const liveHandle = handleRef.current
+        const rect = target
+          ? liveHandle?.coordsAtPos(target.end) ?? liveHandle?.coordsAtPos(target.start)
+          : null
+        if (!rect) {
+          setNote(t('editor.rewriteLocked'))
+          return
+        }
+        /* coordsAtPos は {left,top,right,bottom}；Radix virtualRef の
+           Measurable は DOMRect 形を要求するため全フィールドを補う。 */
+        const domRect = {
+          x: rect.left, y: rect.top,
+          top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom,
+          width: rect.right - rect.left, height: rect.bottom - rect.top,
+          toJSON: () => rect,
+        } as DOMRect
+        setRewriteAnchor({ getBoundingClientRect: () => domRect })
         setCustomTarget(target)
         setCustomText('')
         setCustomRewriteOpen(true)
       })
+      return
+    }
+    if (action === 'pin') {
+      if (props.onPinReference && canPinPath(path)) props.onPinReference(path)
       return
     }
     const bridge = editorClipboardBridge()
@@ -288,10 +321,11 @@ export function Editor(props: {
     canRewritePath: canRewritePath(path) && completionEnabled,
     canSelectParagraph: menuState.canSelectAll && Boolean(handleRef.current?.selectParagraph),
     canLookupReferences: menuState.canCopy && Boolean(props.onOpenReference && props.onPinReference && normalizeReferenceQuery(menuTarget?.selectedText ?? '')),
+    canPin: Boolean(props.onPinReference) && canPinPath(path),
   }
 
-  const runCustomRewrite = () => {
-    const instruction = normalizeCustomInstruction(customText)
+  const submitRewrite = (raw: string) => {
+    const instruction = normalizeCustomInstruction(raw)
     if (!instruction) return
     const handle = handleRef.current
     const target = customTarget
@@ -303,6 +337,7 @@ export function Editor(props: {
     handle.restoreTarget(target)
     handle.requestRewrite(instruction, target)
   }
+  const runCustomRewrite = () => submitRewrite(customText)
   const [bufferText, setBufferText] = useState('')
 
   const onStatusChange = useCallback((next: EditorCoreStatus) => {
@@ -357,6 +392,7 @@ export function Editor(props: {
     setContextMenu(null)
     setCustomRewriteOpen(false)
     setCustomTarget(null)
+    setRewriteAnchor(null)
     setReferenceQuery(null)
   }, [path, session.sessionId, externalRevision])
 
@@ -437,21 +473,53 @@ export function Editor(props: {
             typography={typography}
             compactControls={true}
             onEditorContextMenu={onEditorContextMenu}
-            headerExtras={<Fragment>
-              <Heading as="h1" size="2" weight="medium" className="editor-doc-title" title={path} truncate>
-                {readableDocumentTitle(path, currentText)}
-              </Heading>
-              <EditorOverflowMenu
-                open={overflowOpen}
-                onOpenChange={(open: boolean) => {
-                  if (open && !snapshotMenu()) return
-                  setOverflowOpen(open)
-                  if (open) setContextMenu(null)
-                }}
-                model={menuModel}
-                onAction={runMenuAction}
-                onCloseAutoFocus={focusEditorIfNeeded} />
-            </Fragment>}
+            hostButton={HostButton}
+            paperHeader={<div className="paper-page-header">
+              <div className="paper-page-headline">
+                {/* paper-path 是沿用至今的测试钩子（原来就在内置页眉里被 sr-only 掉），
+                    页面标题继续显示可读文档名。 */}
+                <span className="sr-only" data-testid="paper-path">{path}</span>
+                <h1 className="paper-page-title" title={path}>
+                  {readableDocumentTitle(path, currentText)}
+                </h1>
+                <span className="paper-page-menu">
+                  <EditorOverflowMenu
+                    open={overflowOpen}
+                    onOpenChange={(open: boolean) => {
+                      if (open && !snapshotMenu()) return
+                      setOverflowOpen(open)
+                      if (open) setContextMenu(null)
+                    }}
+                    model={menuModel}
+                    onAction={runMenuAction}
+                    onCloseAutoFocus={focusEditorIfNeeded} />
+                </span>
+              </div>
+              <div className="paper-tiantou" aria-hidden="true" />
+            </div>}
+            conflictNotice={<div data-testid="paper-conflict-guard">
+              <Notice
+                tone="danger"
+                title={t('editor.conflictNoticeTitle')}
+                action={<Fragment>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-testid="paper-reload-disk"
+                    onClick={() => setReloadConfirm(true)}>
+                    {t('editor.reloadDisk')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    data-testid="paper-save-conflict-copy"
+                    onClick={() => { void saveConflictCopy() }}>
+                    {t('editor.saveConflictCopy')}
+                  </Button>
+                </Fragment>}>
+                {t('editor.conflictNoticeBody')}
+              </Notice>
+            </div>}
             maxGhostCandidates={3}
             enablePatch={true}
             enableBeforeUnload={true}
@@ -491,48 +559,58 @@ export function Editor(props: {
         }}
         onClose={closeMenus}
         onCloseAutoFocus={focusEditorIfNeeded} /> : null}
-      <Dialog
+      {/* §4 选段改写：就近 Popover 替代模态窗；锚点是选区下沿的虚拟元素，
+          空间不足时 Radix 自动翻到上方，不遮住选区。 */}
+      {customRewriteOpen && rewriteAnchor ? <Popover
         open={customRewriteOpen}
-        onOpenChange={setCustomRewriteOpen}
-        title={t('editor.rewriteCustomTitle')}
-        className="file-dialog editor-action-dialog file-dialog-overlay"
-        returnFocusRef={editorFocusTarget}>
-        <Flex direction="column" gap="3">
-          <Heading as="h2" size="4">
-            {t('editor.rewriteCustomTitle')}
-          </Heading>
-          {customTarget?.selectedText ? <Text size="1" color="gray" className="rewrite-excerpt">
-            {t('rewrite.excerpt', { text: rewriteSelectionExcerpt(customTarget.selectedText) })}
-          </Text> : null}
-          <TextArea
+        onOpenChange={(open) => { if (!open) setCustomRewriteOpen(false) }}
+        anchor={rewriteAnchor}
+        side="bottom"
+        align="center"
+        aria-label={t('editor.rewrite')}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          rewriteInputRef.current?.focus()
+        }}
+        onCloseAutoFocus={focusEditorIfNeeded}
+        content={<div className="rewrite-popover" role="group" aria-label={t('editor.rewrite')}>
+          <div className="rewrite-presets" role="group" aria-label={t('rewrite.barLabel')}>
+            {REWRITE_PRESETS.map((preset) => <Button
+              key={preset.id}
+              variant="ghost"
+              size="sm"
+              onClick={() => submitRewrite(preset.instruction)}>
+              {t(presetLabelKey(preset.id))}
+            </Button>)}
+          </div>
+          <Input
+            ref={rewriteInputRef}
             className="rewrite-instruction"
             value={customText}
             maxLength={CUSTOM_INSTRUCTION_MAX}
-            rows={4}
             placeholder={t('rewrite.customPlaceholder')}
             aria-label={t('rewrite.customPlaceholder')}
-            autoFocus={true}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setCustomText(event.currentTarget.value)}
-            onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+            onChange={(value) => setCustomText(value)}
+            onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
               if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false); return }
-              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+              if (event.key === 'Enter' && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
                 event.preventDefault()
                 runCustomRewrite()
               }
             }} />
-          <Flex justify="end" gap="2">
-            <Button onClick={() => setCustomRewriteOpen(false)}>
+          <div className="rewrite-popover-actions">
+            <Button variant="ghost" size="sm" onClick={() => setCustomRewriteOpen(false)}>
               {t('common.cancel')}
             </Button>
             <Button
               variant="primary"
+              size="sm"
               disabled={!normalizeCustomInstruction(customText)}
               onClick={runCustomRewrite}>
               {t('rewrite.customRun')}
             </Button>
-          </Flex>
-        </Flex>
-      </Dialog>
+          </div>
+        </div>} /> : null}
       <ConfirmDialog
         open={Boolean(reloadConfirm)}
         id="reload-disk-confirm"

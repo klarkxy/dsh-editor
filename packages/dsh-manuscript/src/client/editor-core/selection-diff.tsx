@@ -1,12 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import { createTextDiff, type TextDiffPart } from './text-diff.ts'
+
+/* 差分ハイライトの seats トークン配色をモジュール定数に集約。 */
+const DIFF_DELETE_STYLE: CSSProperties = {
+  background: 'var(--s-danger-soft)',
+  color: 'var(--s-danger)',
+  textDecoration: 'line-through',
+}
+const DIFF_INSERT_STYLE: CSSProperties = {
+  background: 'var(--s-success-soft)',
+  color: 'var(--s-success)',
+  textDecoration: 'underline',
+}
 
 function DiffText(props: { parts: TextDiffPart[]; side: 'original' | 'revised' }) {
   return <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
     {props.parts.map((part, index) => {
       if (part.kind === 'equal') return <span key={index}>{part.text}</span>
-      if (part.kind === 'delete' && props.side === 'original') return <del key={index} style={{ background: 'var(--red-a3)', color: 'var(--red-11)', textDecoration: 'line-through' }}>{part.text}</del>
-      if (part.kind === 'insert' && props.side === 'revised') return <ins key={index} style={{ background: 'var(--green-a3)', color: 'var(--green-11)', textDecoration: 'underline' }}>{part.text}</ins>
+      if (part.kind === 'delete' && props.side === 'original') return <del key={index} style={DIFF_DELETE_STYLE}>{part.text}</del>
+      if (part.kind === 'insert' && props.side === 'revised') return <ins key={index} style={DIFF_INSERT_STYLE}>{part.text}</ins>
       return null
     })}
   </p>

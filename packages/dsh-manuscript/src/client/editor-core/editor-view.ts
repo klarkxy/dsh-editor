@@ -2,7 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
+import { externalSync, ghostField, livePreviewExtension, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
 import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, paperEscapePriority, paperSearch } from './search.ts'
 import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
 import { contextMenuSource, shouldPreserveSelectionOnContextMouseDown, type EditorContextMenuEvent } from './editor-clipboard.ts'
@@ -34,6 +34,7 @@ type PaperViewOptions = {
   textFlushTimer: MutableRefObject<ReturnType<typeof globalThis.setTimeout> | null>
   typewriter: boolean
   focusParagraph: boolean
+  centerSectionMarks: boolean
   documentReady: boolean
   isDocumentReady(): boolean
   path: string
@@ -53,7 +54,7 @@ type PaperViewOptions = {
 /** Owns one view and its reconfiguration; document changes never remount it. */
 export function usePaperView({
   containerRef, viewRef, callbacksRef, paperOffsetRef, textFlushTimer,
-  typewriter, focusParagraph, documentReady, isDocumentReady,
+  typewriter, focusParagraph, centerSectionMarks, documentReady, isDocumentReady,
   path, paperProjection, textRef, documentGenerationRef, pendingCursorRef,
   paperText, renderGeneration, ghost, ghostAt, paperOffset, testIdPrefix, slotClassName,
 }: PaperViewOptions): void {
@@ -61,6 +62,7 @@ export function usePaperView({
   const writingCompartments = useRef({
     typewriter: new Compartment(),
     focusParagraph: new Compartment(),
+    livePreview: new Compartment(),
     history: new Compartment(),
     editability: new Compartment(),
   })
@@ -82,7 +84,7 @@ export function usePaperView({
           paperMarkdown,
           paperHighlight,
           paperTheme,
-          livePreview,
+          writingCompartments.current.livePreview.of(livePreviewExtension({ centerSectionMarks })),
           ghostField,
           paperSearch(),
           writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
@@ -196,9 +198,10 @@ export function usePaperView({
       effects: [
         writingCompartments.current.typewriter.reconfigure(typewriterExtension({ enabled: typewriter })),
         writingCompartments.current.focusParagraph.reconfigure(focusParagraphExtension(focusParagraph)),
+        writingCompartments.current.livePreview.reconfigure(livePreviewExtension({ centerSectionMarks })),
       ],
     })
-  }, [typewriter, focusParagraph])
+  }, [typewriter, focusParagraph, centerSectionMarks])
 
   useEffect(() => {
     viewRef.current?.dispatch({ effects: writingCompartments.current.editability.reconfigure([

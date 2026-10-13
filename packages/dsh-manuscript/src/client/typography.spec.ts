@@ -17,8 +17,10 @@ describe('typography normalization', () => {
       fontSize: 17,
       lineHeight: 1.9,
       fontFamily: FONT_STACKS.sans,
-      paragraphSpacing: 0.4,
+      paragraphSpacing: 0.25,
       maxWidth: '76ch',
+      firstLineIndent: false,
+      centerSectionMarks: true,
     })
   })
 
@@ -29,6 +31,8 @@ describe('typography normalization', () => {
       fontFamily: FONT_STACKS.sans,
       paragraphSpacing: 0,
       maxWidth: '76ch',
+      firstLineIndent: false,
+      centerSectionMarks: true,
     })
     expect(normalizeTypography({ fontSize: 40, lineHeight: 3, paragraphSpacing: 2 })).toEqual({
       fontSize: 28,
@@ -36,6 +40,19 @@ describe('typography normalization', () => {
       fontFamily: FONT_STACKS.sans,
       paragraphSpacing: 1.5,
       maxWidth: '76ch',
+      firstLineIndent: false,
+      centerSectionMarks: true,
+    })
+  })
+
+  it('passes firstLineIndent and centerSectionMarks through when given', () => {
+    expect(normalizeTypography({ firstLineIndent: true, centerSectionMarks: false })).toMatchObject({
+      firstLineIndent: true,
+      centerSectionMarks: false,
+    })
+    expect(normalizeTypography({ firstLineIndent: 'yes' as unknown as boolean, centerSectionMarks: 0 as unknown as boolean })).toMatchObject({
+      firstLineIndent: false,
+      centerSectionMarks: true,
     })
   })
 
@@ -102,8 +119,10 @@ describe('typography CSS variables', () => {
       '--paper-font-size': '17px',
       '--paper-line-height': '1.9',
       '--paper-font-family': FONT_STACKS.sans,
-      '--paper-paragraph-spacing': '0.4em',
+      '--paper-paragraph-spacing': '0.25em',
       '--paper-max-width': '76ch',
+      '--paper-first-indent': '0',
+      '--paper-measure': '76ch',
     })
     expect(typographyCssVariables(normalizeTypography({
       fontSize: 18,
@@ -111,12 +130,19 @@ describe('typography CSS variables', () => {
       fontFamily: 'sans',
       paragraphSpacing: 0.5,
       maxWidth: 640,
+      firstLineIndent: true,
     }))).toEqual({
       '--paper-font-size': '18px',
       '--paper-line-height': '2.1',
       '--paper-font-family': FONT_STACKS.sans,
       '--paper-paragraph-spacing': '0.5em',
       '--paper-max-width': '640px',
+      '--paper-first-indent': '2em',
+      '--paper-measure': '640px',
+    })
+    expect(typographyCssVariables(normalizeTypography({ maxWidth: 0 }))).toMatchObject({
+      '--paper-max-width': 'none',
+      '--paper-measure': '100%',
     })
   })
 })

@@ -21,7 +21,10 @@ describe('production plugin visual boundaries', () => {
     const sidebar = renderToStaticMarkup(createElement(SidebarTools, { renderSlot, seatContext }))
     const center = renderToStaticMarkup(createElement(CenterOverlays, { show: true, renderSlot, seatContext }))
     expectHostBoundary(sidebar, 'sidebar-tools')
-    expectHostBoundary(center, 'center-overlays')
+    /* §4 中央遮罩外框：插件面是弹性列里的真实布局节点（display:contents
+       不能让外框标题栏正确占位）；标记本身与宿主边界不变。 */
+    expect(center).toMatch(/<[^>]+class="[^"]*center-overlays[^"]*"[^>]*><div class="center-overlay-surface" data-dsh-plugin-surface=""><button/)
+    expect(center.match(/data-dsh-plugin-surface/g)).toHaveLength(1)
     expect(renderSlot).toHaveBeenNthCalledWith(1, SIDEBAR_TOOLS_SLOT, seatContext)
     expect(renderSlot).toHaveBeenNthCalledWith(2, CENTER_OVERLAYS_SLOT, seatContext)
     expect(renderToStaticMarkup(createElement(CenterOverlays, { show: false, renderSlot, seatContext }))).toBe('')

@@ -24,6 +24,10 @@ export type WritingPreferences = {
   fontFamily: PaperFontFamily
   paragraphSpacing: number
   paperWidth: PaperWidth
+  /** 正文段落首行缩进两个汉字宽度。 */
+  firstLineIndent: boolean
+  /** 中文小节号 / 分节符居中（live preview 装饰）。 */
+  centerSectionMarks: boolean
 }
 
 /** Existing Host preference service; model consumers may wait for startup migration. */

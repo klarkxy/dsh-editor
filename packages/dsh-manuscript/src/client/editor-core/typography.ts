@@ -18,6 +18,10 @@ export type TypographyInput = {
   fontFamily?: 'serif' | 'sans' | 'mono' | string
   paragraphSpacing?: number
   maxWidth?: number
+  /** 正文段落首行缩进两个汉字宽度（2em）。 */
+  firstLineIndent?: boolean
+  /** 中文小节号 / 分节符居中（live preview 装饰，不改文本）。 */
+  centerSectionMarks?: boolean
 }
 
 export type ResolvedTypography = {
@@ -26,6 +30,8 @@ export type ResolvedTypography = {
   fontFamily: string
   paragraphSpacing: number
   maxWidth: string
+  firstLineIndent: boolean
+  centerSectionMarks: boolean
 }
 
 export const TYPOGRAPHY_LIMITS = {
@@ -39,8 +45,10 @@ export const DEFAULT_TYPOGRAPHY: ResolvedTypography = {
   fontSize: 17,
   lineHeight: 1.9,
   fontFamily: FONT_STACKS.sans,
-  paragraphSpacing: 0.4,
+  paragraphSpacing: 0.25,
   maxWidth: '76ch',
+  firstLineIndent: false,
+  centerSectionMarks: true,
 }
 
 const NAMED_FONTS = new Set<string>(['serif', 'sans', 'mono'])
@@ -80,6 +88,8 @@ export function normalizeTypography(input?: TypographyInput | null): ResolvedTyp
       ? clamp(src.paragraphSpacing, TYPOGRAPHY_LIMITS.paragraphSpacing.min, TYPOGRAPHY_LIMITS.paragraphSpacing.max)
       : DEFAULT_TYPOGRAPHY.paragraphSpacing,
     maxWidth: finiteNumber(src.maxWidth) ? formatMaxWidth(src.maxWidth) : DEFAULT_TYPOGRAPHY.maxWidth,
+    firstLineIndent: typeof src.firstLineIndent === 'boolean' ? src.firstLineIndent : DEFAULT_TYPOGRAPHY.firstLineIndent,
+    centerSectionMarks: typeof src.centerSectionMarks === 'boolean' ? src.centerSectionMarks : DEFAULT_TYPOGRAPHY.centerSectionMarks,
   }
 }
 
@@ -90,6 +100,9 @@ export function typographyCssVariables(resolved: ResolvedTypography): Record<str
     '--paper-font-family': resolved.fontFamily,
     '--paper-paragraph-spacing': `${resolved.paragraphSpacing}em`,
     '--paper-max-width': resolved.maxWidth,
+    '--paper-first-indent': resolved.firstLineIndent ? '2em' : '0',
+    /* 版心宽度的长度版（max-width 为 none 时取满宽），供稿纸两侧的版心线定位。 */
+    '--paper-measure': resolved.maxWidth === 'none' ? '100%' : resolved.maxWidth,
   }
 }
 

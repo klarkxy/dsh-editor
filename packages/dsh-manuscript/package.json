@@ -100,6 +100,7 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/themes": "^3.3.0",
+    "react-dom": "18.3.1",
     "zod": "^4.1.5",
     "@klarkxy/dsh-plugin-kit": "0.1.0"
   },

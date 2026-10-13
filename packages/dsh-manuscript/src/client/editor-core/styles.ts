@@ -35,7 +35,7 @@ ${radixFallbackTokens}
   --paper-font-size: 17px;
   --paper-line-height: 1.9;
   --paper-font-family: var(--paper-sans);
-  --paper-paragraph-spacing: 0.4em;
+  --paper-paragraph-spacing: 0.25em;
   --paper-max-width: 76ch;
   --paper-heading-weight: 600;
   --paper-h1-size: 1.6em;
@@ -44,6 +44,8 @@ ${radixFallbackTokens}
   --paper-h4-size: 1.05em;
   /* Legacy token. Nothing reads it. Do not point .cm-paper-dim at it or raise the alpha. */
   --paper-dim-opacity: 0.35;
+  /* 分节符 live preview 的 display 字号（spec §4：18px）。 */
+  --paper-section-size: 18px;
   --topbar-h: 52px;
   --control-h: 34px;
   --duration-quick: 150ms;

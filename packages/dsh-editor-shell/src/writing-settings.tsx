@@ -21,7 +21,7 @@ export { WRITING_SETTINGS_NAMESPACE, normalizeWritingEffort, normalizeWritingMod
 
 export const PAPER_FONT_SIZE = { min: 14, max: 28, default: 17 } as const
 export const PAPER_LINE_HEIGHT = { min: 1.4, max: 2.4, default: 1.9 } as const
-export const PAPER_PARAGRAPH_SPACING = { min: 0, max: 1.5, default: 0.4 } as const
+export const PAPER_PARAGRAPH_SPACING = { min: 0, max: 1.5, default: 0.25 } as const
 export const PAPER_WIDTH_CH = { narrow: 60, medium: 76 } as const
 
 export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
@@ -37,6 +37,8 @@ export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
   fontFamily: 'sans',
   paragraphSpacing: PAPER_PARAGRAPH_SPACING.default,
   paperWidth: 'medium',
+  firstLineIndent: false,
+  centerSectionMarks: true,
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
@@ -56,17 +58,19 @@ export function paperWidthToMaxWidth(width: PaperWidth): number | undefined {
   return width === 'wide' ? undefined : PAPER_WIDTH_CH[width]
 }
 
-export function writingTypography(prefs: Pick<WritingPreferences, 'fontSize' | 'lineHeight' | 'fontFamily' | 'paragraphSpacing' | 'paperWidth'>) {
+export function writingTypography(prefs: Pick<WritingPreferences, 'fontSize' | 'lineHeight' | 'fontFamily' | 'paragraphSpacing' | 'paperWidth' | 'firstLineIndent' | 'centerSectionMarks'>) {
   return {
     fontSize: prefs.fontSize,
     lineHeight: prefs.lineHeight,
     fontFamily: prefs.fontFamily,
     paragraphSpacing: prefs.paragraphSpacing,
     maxWidth: paperWidthToMaxWidth(prefs.paperWidth),
+    firstLineIndent: prefs.firstLineIndent,
+    centerSectionMarks: prefs.centerSectionMarks,
   }
 }
 
-function normalizePaperPreferences(record: Record<string, unknown>): Pick<WritingPreferences, 'typewriter' | 'focusParagraph' | 'fontSize' | 'lineHeight' | 'fontFamily' | 'paragraphSpacing' | 'paperWidth'> {
+function normalizePaperPreferences(record: Record<string, unknown>): Pick<WritingPreferences, 'typewriter' | 'focusParagraph' | 'fontSize' | 'lineHeight' | 'fontFamily' | 'paragraphSpacing' | 'paperWidth' | 'firstLineIndent' | 'centerSectionMarks'> {
   return {
     typewriter: record.typewriter === true,
     focusParagraph: record.focusParagraph === true,
@@ -75,6 +79,8 @@ function normalizePaperPreferences(record: Record<string, unknown>): Pick<Writin
     fontFamily: normalizePaperFontFamily(record.fontFamily),
     paragraphSpacing: clampNumber(record.paragraphSpacing, PAPER_PARAGRAPH_SPACING.min, PAPER_PARAGRAPH_SPACING.max, PAPER_PARAGRAPH_SPACING.default),
     paperWidth: normalizePaperWidth(record.paperWidth),
+    firstLineIndent: record.firstLineIndent === true,
+    centerSectionMarks: record.centerSectionMarks !== false,
   }
 }
 

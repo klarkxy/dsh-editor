@@ -20,8 +20,10 @@ export const Config = Schema.object({
   fontSize: Schema.number().min(14).max(28).default(17).volatile(),
   lineHeight: Schema.number().min(1.4).max(2.4).default(1.9).volatile(),
   fontFamily: Schema.union(['serif', 'sans', 'mono']).default('sans').volatile(),
-  paragraphSpacing: Schema.number().min(0).max(1.5).default(0.4).volatile(),
+  paragraphSpacing: Schema.number().min(0).max(1.5).default(0.25).volatile(),
   paperWidth: Schema.union(['narrow', 'medium', 'wide']).default('medium').volatile(),
+  firstLineIndent: Schema.boolean().default(false).volatile(),
+  centerSectionMarks: Schema.boolean().default(true).volatile(),
 })
 
 

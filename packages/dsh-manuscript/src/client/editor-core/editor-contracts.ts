@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import type { ShellToolSeatContext } from 'dsh-editor-seats'
 import type { EditorCommandState, EditorContextMenuEvent, EditorTargetSnapshot } from './editor-clipboard.ts'
 import type { EditorDocument, SelectionTicket } from './editor-state.ts'
 import type { CompletionPreference } from './completion-preference.ts'
@@ -69,6 +70,12 @@ export type EditorCoreHandle = {
   openFind(): boolean
   openReplace(): boolean
   requestCompletion(): void
+  /**
+   * Viewport coordinates of a document position (full-file offset, matching
+   * the other handle APIs). Returns null while the position is not rendered.
+   * Used by hosts to anchor floating UI (e.g. the rewrite popover) to text.
+   */
+  coordsAtPos(pos: number): { left: number; top: number; right: number; bottom: number } | null
 }
 
 export type EditorCoreDraftBackup = {
@@ -180,6 +187,22 @@ export type EditorCoreProps = {
   // after the built-in controls.
   headerExtras?: ReactNode
   footerExtras?: ReactNode
+
+  /**
+   * In-document page header (原稿页眉): rendered through a React portal
+   * into a host element anchored at the start of `.cm-scroller`, so it
+   * scrolls away with the document instead of sticking. When provided, the
+   * built-in header bar is not rendered.
+   */
+  paperHeader?: ReactNode
+  /**
+   * Host-rendered conflict notice. When provided it replaces the built-in
+   * conflict strip and the conflict footer buttons (the host wires the same
+   * `onReloadDisk` / `onSaveConflictCopy` / discard flows).
+   */
+  conflictNotice?: ReactNode
+  /** Host button implementation (seats ShellToolSeatContext['Button']) for SeatButton chrome. */
+  hostButton?: ShellToolSeatContext['Button']
 
   /**
    * Hide the built-in always-on complete/save/rewrite buttons. Ghosts,

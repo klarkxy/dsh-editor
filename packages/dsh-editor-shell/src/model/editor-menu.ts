@@ -14,10 +14,13 @@ export type EditorMenuAction =
   | 'replace'
   | 'complete'
   | 'rewrite'
+  | 'pin'
 
 export type EditorMenuModel = {
   state: EditorCommandState
   canRewritePath: boolean
   canSelectParagraph?: boolean
   canLookupReferences?: boolean
+  /** 「钉在旁边」可用：当前文档路径可钉且宿主接了 onPinReference。 */
+  canPin?: boolean
 }
