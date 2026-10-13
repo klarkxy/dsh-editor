@@ -5,7 +5,8 @@ import type { CredentialView, SettingsNamespaceView, SettingsPathOpView } from '
 import { apiKeyFailure, deriveKeyRef, layoutOf, modelDrafts, pathOps, protocolChoices, providerIdOf, refFor, routeFailure, validateModels, type ProviderRow } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
-import { ActivityDots, Button } from './ui/index.ts'
+import { ActivityDots } from './ui/index.ts'
+import { Button } from '../ui/index.ts'
 import type { SettingsSchemaService, ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
 import { failureMessage, modelFailureLabel, targetLabel, text } from './settings-models-copy.ts'
@@ -305,6 +306,7 @@ export function ProviderEditor(props: {
       {isSetup || keyFailure === undefined && modelFailure === undefined
         ? <Flex className="models-editor-actions" gap="2" justify="end">
         <Button
+          variant="secondary"
           className="models-button"
           disabled={busy}
           onClick={() => onClose(false)}>
@@ -531,6 +533,7 @@ export function CustomProviderCard(props: {
       </Callout.Root> : null}
       <Flex className="models-editor-actions" gap="2" justify="end">
         <Button
+          variant="secondary"
           className="models-button"
           disabled={busy}
           onClick={() => onClose(false)}>

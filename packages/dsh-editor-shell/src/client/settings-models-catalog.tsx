@@ -6,7 +6,8 @@ import { reasoningChoiceOf, reasoningEffortsFor, type ReasoningChoice } from './
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
-import { ActivityDots, Button, Dialog } from './ui/index.ts'
+import { ActivityDots, Dialog } from './ui/index.ts'
+import { Button, IconButton } from '../ui/index.ts'
 import type { ShellContext } from './shared.ts'
 import { failureMessage, text } from './settings-models-copy.ts'
 
@@ -146,6 +147,7 @@ export function ModelListEditor(props: {
           {t.models}
         </Text>
         <Button
+          variant="secondary"
           className="models-button"
           disabled={disabled || busy || !fetchable}
           onClick={() => void fetch()}>
@@ -181,16 +183,16 @@ export function ModelListEditor(props: {
             aria-label={`${t.modelName} ${index + 1}`}
             disabled={disabled}
             onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { name: event.target.value === '' ? undefined : event.target.value })} />
-          <Button
-            variant="icon"
+          <IconButton
+            label={`${t.modelAdvanced} ${index + 1}`}
             className="models-button models-button-icon"
-            aria-label={`${t.modelAdvanced} ${index + 1}`}
             aria-expanded={expanded.has(index)}
             onClick={() => toggle(index)}>
             {expanded.has(index) ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-          </Button>
+          </IconButton>
           <Button
             variant="danger"
+            size="sm"
             className="models-button models-button-icon models-button-danger"
             aria-label={`${t.removeModel} ${index + 1}`}
             disabled={disabled}
@@ -271,6 +273,7 @@ export function ModelListEditor(props: {
         </Flex> : null}
       </Card>)}
       <Button
+        variant="secondary"
         className="models-button models-button-add"
         disabled={disabled}
         onClick={add}>
@@ -295,12 +298,12 @@ export function ModelListEditor(props: {
           <Text as="p" size="2" color="gray" className="models-candidate-description">
             {t.candidateDescription}
           </Text>
-          <Button className="models-button" onClick={closePicker}>
+          <Button variant="secondary" className="models-button" onClick={closePicker}>
             {t.candidateClose}
           </Button>
         </header>
         <Flex className="models-candidate-actions" justify="end" gap="2" mb="2">
-          <Button className="models-button" onClick={toggleAll}>
+          <Button variant="secondary" className="models-button" onClick={toggleAll}>
             {allPicked ? t.candidateDeselectAll : t.candidateSelectAll}
           </Button>
         </Flex>
@@ -326,7 +329,7 @@ export function ModelListEditor(props: {
         </Flex>
         <Flex asChild justify="end" gap="2">
           <footer>
-          <Button className="models-button" onClick={closePicker}>
+          <Button variant="secondary" className="models-button" onClick={closePicker}>
             {t.cancel}
           </Button>
           <Button variant="primary" className="models-button models-button-primary" onClick={adoptPicked}>

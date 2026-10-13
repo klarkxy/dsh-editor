@@ -6,7 +6,8 @@ import { Badge, Box, Callout, Card, Flex, Heading, Text } from '@radix-ui/themes
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ConfirmDialog } from './dialogs.tsx'
-import { ActivitySkeleton, ActivityText, Button } from './ui/index.ts'
+import { ActivitySkeleton, ActivityText } from './ui/index.ts'
+import { Button } from '../ui/index.ts'
 import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsSchemaService, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { RpcResult } from '../dsh-compat.ts'
@@ -160,7 +161,7 @@ export function SettingsEditorModelsSection(props: { ctx: ShellContext; writingS
   return <>
     {migrationBusy ? <ActivityText>{t('common.loading')}</ActivityText> : null}
     {migrationFailure ? <Callout.Root color="red" role="alert"><Callout.Text>{migrationFailure}</Callout.Text>
-      <Button disabled={migrationBusy} onClick={() => { void retryMigration() }}>{t('common.retry')}</Button>
+      <Button variant="secondary" disabled={migrationBusy} onClick={() => { void retryMigration() }}>{t('common.retry')}</Button>
     </Callout.Root> : null}
     <EditorModelSettings scope={props.writingScope} catalog={catalog} writable={!migrationBusy} />
     <Heading as="h3" size="3" mt="4" mb="3">{locale === 'en' ? 'Providers' : '供应商'}</Heading>
@@ -280,7 +281,7 @@ function Loaded(props: {
           <Callout.Text>
             {`${text().loadFailed}：${message}`}
           </Callout.Text>
-          <Button className="models-button" onClick={() => void store.load()}>
+          <Button variant="secondary" className="models-button" onClick={() => void store.load()}>
             {text().retry}
           </Button>
         </Callout.Root>
@@ -309,7 +310,7 @@ function Loaded(props: {
       {state.refreshing ? <ActivityText>{text().loading}</ActivityText> : null}
       {state.error ? <Callout.Root color="red" className="models-error" role="alert">
         <Callout.Text>{`${text().loadFailed}：${state.error}`}</Callout.Text>
-        <Button onClick={() => void store.load()}>{text().retry}</Button>
+        <Button variant="secondary" onClick={() => void store.load()}>{text().retry}</Button>
       </Callout.Root> : null}
       {section.deleteError ? <Callout.Root color="red" className="models-error" role="alert">
         <Callout.Text>
@@ -470,6 +471,7 @@ function Loaded(props: {
       </Card>
           : <Flex className="models-add-actions" gap="2">
         <Button
+          variant="secondary"
           className="models-button"
           disabled={!writable || addable.length === 0}
           onClick={() => {
@@ -480,6 +482,7 @@ function Loaded(props: {
           {text().add}
         </Button>
         <Button
+          variant="secondary"
           className="models-button"
           disabled={!writable || protocols.length === 0}
           onClick={() => setSection({ ...emptySectionState(), declaring: true })}>
@@ -552,6 +555,7 @@ function RowHead(props: {
       </Flex>
       <Flex className="models-row-actions" align="center" gap="2">
         <Button
+          variant="secondary"
           className="models-button"
           aria-label={formatTemplate(text().editProviderAria, label)}
           onClick={onEdit}>

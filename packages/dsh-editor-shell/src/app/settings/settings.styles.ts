@@ -105,10 +105,12 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 }
 /* 跳转型操作（查看全部快捷键等）按链接上色，不用 Radix 默认 accent。 */
 .dsh-settings-page .settings-link-button { color: var(--dsh-ui-link); }
-/* Radix ghost 按钮自带 -8px 光学外溢（让文字对齐内边距）；卡片内的可点
-   目标盒子仍须留在内边距里，关掉外溢而不是让点击区探出描边。 */
+/* Radix ghost 按钮自带 -8px 光学外溢 + 内边距（让文字对齐外缘）；卡片内的
+   可点目标盒子仍须留在内边距里、文字要与同列正文同一起点，外溢和内边距
+   都关掉。只作用在设置卡片内的 ghost 按钮，外面的光学对齐保持不变。 */
 .dsh-settings-page .settings-block .rt-Button.rt-variant-ghost {
   --margin-left-override: 0px; --margin-right-override: 0px;
+  padding-inline: 0;
 }
 
 /* ── 窄窗导航（<760px）：导航列收成「当前分区」触发行，抽屉里放同一棵导航树 ── */

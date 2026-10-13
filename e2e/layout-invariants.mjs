@@ -854,10 +854,35 @@ try {
           last.left - cr.left, cr.right - last.right,
         ]
         if (Math.min(...gaps) < 11.5) out.push({ cls: card.className.slice(0, 80), gaps: gaps.map((g) => +g.toFixed(1)) })
+        // 第一列内容左缘对齐：落在内容边缘（±2px）的链接/ghost 型控件，其
+        // 首个文字必须同样落在内容边缘上（ghost 内边距把文字挤右是缺陷）。
+        const contentLeft = cr.left + parseFloat(getComputedStyle(card).paddingLeft || '0')
+        const textLeft = (el) => {
+          const range = document.createRange()
+          let best = null
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent.trim()) continue
+            range.selectNodeContents(n)
+            const r = range.getBoundingClientRect()
+            if (r.width <= 0) continue
+            if (best === null || r.left < best) best = r.left
+          }
+          return best
+        }
+        for (const el of card.querySelectorAll('.settings-link-button, .rt-variant-ghost, [data-variant="ghost"]')) {
+          if (!(el instanceof HTMLElement) || el.offsetParent === null) continue
+          const er = el.getBoundingClientRect()
+          if (Math.abs(er.left - contentLeft) > 2) continue
+          const tl = textLeft(el)
+          if (tl !== null && tl - contentLeft > 2) {
+            out.push({ cls: `${card.className.slice(0, 40)} > ${el.className.slice(0, 40)}`, firstColumnText: +(tl - contentLeft).toFixed(1) })
+          }
+        }
       }
       return out
     })
-    for (const b of bad) failures.push(`settings-cards/${label}: child flush with card border ${JSON.stringify(b)}`)
+    for (const b of bad) failures.push(`settings-cards/${label}: child flush with card border or first-column text misaligned ${JSON.stringify(b)}`)
   }
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.waitForTimeout(600)
