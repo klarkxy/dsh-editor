@@ -20,3 +20,12 @@ defineStyles('dsh.components', 'dsh-tabs', `
   .dsh-tabs__tab[data-state='active']::after { background: Highlight; }
 }
 `)
+
+/*
+ * Radix forceMount 的 Content 永远 present，不写 hidden，唯一标记是
+ * data-state="inactive"。规则必须放最末层：栏位样式在 dsh.surfaces 给
+ * 面板写了 display:flex，同层或更浅的规则压不过去。
+ */
+defineStyles('dsh.state', 'dsh-tabs-state', `
+.dsh-tabs__panel[data-state='inactive'] { display: none; }
+`)

@@ -79,7 +79,6 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 .dsh-aux-rail__tabs { flex: none; border-bottom: 0.5px solid var(--dsh-ui-line); }
 .dsh-aux-rail__tabs .dsh-tabs__list { padding-inline: var(--dsh-ui-space-2); }
 .dsh-aux-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.dsh-aux-panel[hidden] { display: none; }
 .dsh-aux-panel .chat { flex: 1 1 auto; min-height: 0; }
 .dsh-aux-panel__head {
   flex: none; display: flex; align-items: center; gap: var(--dsh-ui-space-2);

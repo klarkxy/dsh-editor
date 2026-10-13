@@ -17,7 +17,6 @@ defineStyles('dsh.surfaces', 'dsh-files-rail', `
 }
 .dsh-files-rail__actions { display: flex; align-items: center; gap: var(--dsh-ui-space-1); flex: none; }
 .dsh-files-rail__panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.dsh-files-rail .dsh-tabs__panel[hidden] { display: none; }
 .dsh-files-rail__files { overflow: hidden; }
 .dsh-files-rail__notice { margin: var(--dsh-ui-space-2) var(--dsh-ui-space-3) 0; flex: none; }
 .dsh-files-rail__search { padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3) var(--dsh-ui-space-3); gap: var(--dsh-ui-space-2); overflow-x: hidden; overflow-y: auto; }

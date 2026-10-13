@@ -1,0 +1,353 @@
+/**
+ * Pixel-geometry invariants for the Phase-4 workbench shell.
+ *
+ * Boots the pinned DSH runtime against an isolated DSH_HOME / projects root
+ * (same isolated boot as e2e/core-loop.mjs), creates a real workspace with a
+ * document, opens it, then sweeps the viewport through 1440 / 1024 / 760 /
+ * 390 in light theme and asserts the layout geometry the spec promises:
+ * full-height frame, 44px topbar, paper reaching the viewport bottom,
+ * docked rails matching viewport − topbar, one rendered tabpanel per
+ * tablist, composer anchored to the bottom of its container, a usable
+ * CodeMirror surface, the assistant launcher inside the paper quadrant, and
+ * no horizontal overflow.
+ *
+ * This is the permanent gate for Phase 4; run it on any shell change:
+ *   node e2e/layout-invariants.mjs
+ */
+import { spawn } from 'node:child_process'
+import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
+import { resolve, sep } from 'node:path'
+import { chromium } from 'playwright'
+import { deployProfile } from '../apps/desktop/dist/profile.js'
+import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { S } from './helpers/selectors.mjs'
+
+const root = resolve(import.meta.dirname, '..')
+const devRoot = resolve(root, '.dev')
+const projectsRoot = resolve(devRoot, 'layout-invariants-projects')
+const home = resolve(devRoot, 'layout-invariants-home')
+const output = resolve(root, 'e2e', 'out', 'layout-invariants')
+const targetWorkspace = resolve(projectsRoot, 'layout-inv')
+
+for (const target of [projectsRoot, home, output]) {
+  if (!target.startsWith(`${devRoot}${sep}`) && !target.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) {
+    throw new Error(`unsafe path: ${target}`)
+  }
+}
+
+resolveDshInstallation('0.2.0-rc.2')
+const template = resolve(devRoot, 'desktop-profile-template')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.0-rc.2')
+const cli = resolve(runtime, 'lib', 'bin.js')
+
+const failures = []
+const report = { viewports: [], failures }
+let browser
+let dshChild
+
+function note(label, detail = '') {
+  console.log(`[layout-invariants] ${label}${detail ? ` — ${detail}` : ''}`)
+}
+
+function delay(ms) { return new Promise((r) => setTimeout(r, ms)) }
+
+async function stop(child) {
+  if (!child || child.exitCode !== null) return
+  child.kill('SIGTERM')
+  const exited = await Promise.race([
+    new Promise((r) => child.once('exit', () => r(true))),
+    delay(5_000).then(() => false),
+  ])
+  if (!exited && process.platform === 'win32' && child.pid) {
+    await new Promise((r) => {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      killer.once('error', () => r()); killer.once('exit', () => r())
+    })
+  }
+}
+
+async function exists(target) { return stat(target).then(() => true, () => false) }
+
+async function waitFor(check, label, timeout = 10_000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (await check()) return
+    await delay(120)
+  }
+  throw new Error(`timed out: ${label}`)
+}
+
+async function startDsh(env) {
+  const logs = []
+  const child = spawn(process.execPath, [cli, '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
+    cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+  })
+  const ready = new Promise((res, rej) => {
+    let buffer = ''
+    const inspect = (chunk) => {
+      const text = String(chunk)
+      logs.push(text)
+      void writeFile(output + '/host.log', logs.join('')).catch(() => undefined)
+      buffer += text
+      const m = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer)
+      if (m) res(new URL(m[0]))
+    }
+    child.stdout.on('data', inspect)
+    child.stderr.on('data', inspect)
+    child.once('error', rej)
+    child.once('exit', (code) => rej(new Error(`DSH exited (${code}): ${logs.join('').slice(-4_000)}`)))
+  })
+  const url = await Promise.race([ready, delay(60_000).then(() => { throw new Error(`DSH readiness timeout: ${logs.join('').slice(-4_000)}`) })])
+  return { child, url }
+}
+
+async function dismissNativeOnboarding(page) {
+  const cont = page.getByRole('button', { name: '继续', exact: true })
+  for (let i = 0; i < 6; i += 1) {
+    if (!(await cont.isVisible({ timeout: 800 }).catch(() => false))) break
+    await cont.click(); await page.waitForTimeout(220)
+  }
+  const later = page.getByRole('button', { name: '稍后配置', exact: true })
+  if (await later.isVisible({ timeout: 2_000 }).catch(() => false)) await later.click()
+}
+
+function seedWorkspace() {
+  return Promise.all([
+    mkdir(resolve(targetWorkspace, '正文'), { recursive: true }),
+    writeFile(resolve(targetWorkspace, '正文', '第一章.md'),
+      '# 第一章 青石镇的雨\n\n' + '雨落了一整夜。\n'.repeat(200), 'utf8'),
+    writeFile(resolve(targetWorkspace, '大纲.md'), '# 全书大纲\n\n- 第一章：雨日归家\n', 'utf8'),
+  ])
+}
+
+// ---------------------------------------------------------- geometry probe
+async function measure(page) {
+  return page.evaluate((SEL) => {
+    const rect = (el) => {
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { x: r.x, y: r.y, w: r.width, h: r.height, top: r.top, right: r.right, bottom: r.bottom, left: r.left }
+    }
+    const visible = (r) => Boolean(r && r.w > 0.5 && r.h > 0.5)
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const shell = document.querySelector(SEL.shellLayout)
+    const topbar = document.querySelector(SEL.topbar)
+    const paperCell = document.querySelector('.editor-cell')
+    const dockedSlots = [...document.querySelectorAll(`${SEL.filesPane}, ${SEL.auxPane}`)]
+      .map((el) => ({ testid: el.getAttribute('data-testid'), rect: rect(el) }))
+      .filter((item) => visible(item.rect))
+    const tabRoots = [...document.querySelectorAll(`${SEL.shellFrame} .dsh-tabs, ${SEL.dshDrawer} .dsh-tabs`)]
+      .map((root) => {
+        const rootRect = rect(root)
+        if (!visible(rootRect)) return null
+        const panels = [...root.querySelectorAll('[role="tabpanel"]')]
+          .filter((panel) => panel.closest('.dsh-tabs') === root)
+          .map((panel) => ({
+            state: panel.getAttribute('data-state'),
+            rect: rect(panel),
+            rendered: visible(rect(panel)),
+          }))
+        return { rect: rootRect, panels }
+      })
+      .filter(Boolean)
+    const composerEl = [...document.querySelectorAll(SEL.composer)].find((el) => visible(rect(el)))
+    const composer = composerEl ? {
+      rect: rect(composerEl),
+      container: rect(composerEl.closest('.dsh-aux-rail, .dsh-drawer, .dsh-pane')),
+      thread: rect(composerEl.closest('.chat')?.querySelector('.chat-history')),
+    } : null
+    const cm = rect(document.querySelector('.cm-content'))
+    const launcher = rect(document.querySelector(SEL.launcher))
+    const topbarOverflow = topbar
+      ? [...topbar.querySelectorAll('*')].some((el) => {
+          const r = el.getBoundingClientRect()
+          return r.width > 0 && (r.right > vw + 0.5 || r.left < -0.5)
+        })
+      : false
+    return {
+      vw, vh,
+      shell: rect(shell),
+      topbar: rect(topbar),
+      paper: rect(paperCell),
+      dockedSlots,
+      tabRoots,
+      composer,
+      cm,
+      launcher,
+      topbarOverflow,
+      scrollWidth: document.documentElement.scrollWidth,
+      scrollLeft: document.documentElement.scrollLeft || document.body?.scrollLeft || 0,
+    }
+  }, { shellLayout: S.shellLayout, topbar: S.topbar, filesPane: S.filesPane, auxPane: S.auxPane, shellFrame: '[data-testid="dsh-shell-frame"]', dshDrawer: S.dshDrawer, composer: S.composer, launcher: S.launcher })
+}
+
+function assertProbe(label, m) {
+  const fail = (msg) => failures.push(`${label}: ${msg}`)
+  const approx = (a, b, tol = 1) => Math.abs(a - b) <= tol
+
+  if (!m.shell) return fail('workbench root (.shell.layout-shell) not rendered')
+  if (!approx(m.shell.h, m.vh)) fail(`workbench root height ${m.shell.h.toFixed(1)} != viewport ${m.vh}`)
+  if (!approx(m.shell.top, 0)) fail(`workbench root top ${m.shell.top.toFixed(1)} != 0`)
+  if (!m.topbar) fail('topbar missing')
+  else if (!approx(m.topbar.h, 44)) fail(`topbar height ${m.topbar.h.toFixed(1)} != 44`)
+  if (!m.paper) fail('paper column missing')
+  else if (!approx(m.paper.bottom, m.vh)) fail(`paper bottom ${m.paper.bottom.toFixed(1)} != viewport bottom ${m.vh}`)
+
+  for (const slot of m.dockedSlots) {
+    if (!approx(slot.rect.h, m.vh - 44)) {
+      fail(`docked ${slot.testid} height ${slot.rect.h.toFixed(1)} != viewport-44 ${(m.vh - 44).toFixed(0)}`)
+    }
+    if (!approx(slot.rect.top, 44)) {
+      fail(`docked ${slot.testid} top ${slot.rect.top.toFixed(1)} != 44`)
+    }
+  }
+
+  for (const [index, tabs] of m.tabRoots.entries()) {
+    const rendered = tabs.panels.filter((p) => p.rendered)
+    if (rendered.length !== 1) {
+      fail(`tablist #${index} shows ${rendered.length} tabpanels (${tabs.panels.map((p) => p.state).join(',')}), expected exactly 1`)
+    }
+    for (const panel of tabs.panels) {
+      if (panel.state === 'inactive' && panel.rendered) {
+        fail(`tablist #${index} inactive tabpanel has a rendered box ${panel.rect.w}x${panel.rect.h}`)
+      }
+    }
+  }
+
+  if (m.composer) {
+    if (m.composer.container && Math.abs(m.composer.container.bottom - m.composer.rect.bottom) > 24) {
+      fail(`composer bottom ${m.composer.rect.bottom.toFixed(1)} not within 24px of container bottom ${m.composer.container.bottom.toFixed(1)}`)
+    }
+    if (m.composer.thread && !(m.composer.rect.top > m.composer.thread.top)) {
+      fail(`composer top ${m.composer.rect.top.toFixed(1)} not below thread top ${m.composer.thread.top.toFixed(1)}`)
+    }
+  }
+
+  if (!m.cm || m.cm.h <= 200) fail(`cm-content height ${m.cm ? m.cm.h.toFixed(1) : 'absent'} <= 200`)
+  if (!m.cm || m.cm.w <= 0) fail('cm-content not rendered')
+
+  if (m.launcher && m.paper) {
+    const cx = m.launcher.left + m.launcher.w / 2
+    const cy = m.launcher.top + m.launcher.h / 2
+    const inside = m.launcher.right <= m.paper.right + 1 && m.launcher.bottom <= m.paper.bottom + 1
+      && m.launcher.left >= m.paper.left - 1 && m.launcher.top >= m.paper.top - 1
+    if (!inside) fail(`launcher ${JSON.stringify(m.launcher)} not inside paper column ${JSON.stringify(m.paper)}`)
+    if (!(cx > (m.paper.left + m.paper.right) / 2 && cy > (m.paper.top + m.paper.bottom) / 2)) {
+      fail(`launcher centre (${cx.toFixed(0)},${cy.toFixed(0)}) not in paper bottom-right quadrant`)
+    }
+    if (m.topbar && m.launcher.top < m.topbar.bottom - 0.5) {
+      fail(`launcher top ${m.launcher.top.toFixed(1)} intersects topbar bottom ${m.topbar.bottom.toFixed(1)}`)
+    }
+  }
+
+  if (m.topbarOverflow) fail('topbar element overflows viewport horizontally')
+  if (m.scrollWidth > m.vw + 1) fail(`horizontal page scroll: scrollWidth ${m.scrollWidth} > ${m.vw}`)
+}
+
+// ---------------------------------------------------------------- run
+await rm(projectsRoot, { recursive: true, force: true })
+await rm(home, { recursive: true, force: true })
+await rm(output, { recursive: true, force: true })
+await mkdir(output, { recursive: true })
+await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
+
+const env = {
+  ...process.env,
+  DSH_TELEMETRY_DISABLED: '1',
+  DSH_DESKTOP_NODE_PATH: process.execPath,
+  DSH_DESKTOP_CLI_PATH: cli,
+  DSH_DESKTOP_PROFILE_TEMPLATE: template,
+  DSH_HOME: home,
+  DSH_EDITOR_PROJECTS_ROOT: projectsRoot,
+  DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
+  SSH_CONNECTION: process.env.SSH_CONNECTION || 'dsh-editor-layout-invariants',
+  DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
+}
+delete env.DSH_EDITOR_CUSTOM_API_KEY
+
+const profileRoot = await deployProfile(home, template, resolve(runtime, 'node_modules'))
+const templateComposition = JSON.parse(await readFile(resolve(template, 'composition.json'), 'utf-8'))
+const { configureProfile } = await import('../scripts/desktop-compositions.mjs')
+const { syncPresetDeclarations } = await import('../apps/desktop/dist/preset-config.js')
+await configureProfile(profileRoot, {
+  ...templateComposition,
+  disabledEntries: templateComposition.disabledEntries.filter((id) => id !== 'editor-memory-panel'),
+  enabledEntries: ['editor-memory-panel'],
+})
+await syncPresetDeclarations(home, profileRoot)
+
+const VIEWPORTS = [
+  { width: 1440, height: 900 },
+  { width: 1024, height: 768 },
+  { width: 760, height: 900 },
+  { width: 390, height: 844 },
+]
+
+try {
+  const started = await startDsh(env)
+  dshChild = started.child
+  browser = await chromium.launch({ headless: true })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
+  page.setDefaultTimeout(15_000)
+  page.on('pageerror', (e) => failures.push(`pageerror: ${e.message}`))
+  page.on('console', (m) => { if (m.type() === 'error') failures.push(`console: ${m.text()}`) })
+
+  await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(
+    ({ SHELL }) => document.title === 'DSH Editor' && Boolean(document.querySelector(SHELL)),
+    { SHELL: S.shell }, { timeout: 60_000 },
+  )
+  await dismissNativeOnboarding(page)
+
+  // Create the work through the real dialog, seed a manuscript, reopen it.
+  await page.getByRole('button', { name: '新建', exact: true }).first().click()
+  const newProject = page.getByRole('dialog', { name: '新建作品' })
+  await newProject.waitFor({ state: 'visible' })
+  await newProject.getByLabel('作品名称').fill('layout-inv')
+  await newProject.getByRole('button', { name: '创建', exact: true }).click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+  await waitFor(async () => exists(targetWorkspace), 'workspace directory created')
+  await seedWorkspace()
+
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  await page.locator(S.homeRecent).getByRole('button', { name: /layout-inv/ }).first().click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+
+  // Open 第一章 (expand 正文 if collapsed).
+  const chapter = page.locator('[data-tree-path="正文/第一章.md"]')
+  if (!(await chapter.isVisible().catch(() => false))) {
+    await page.locator('[data-tree-path="正文"]').first().click()
+    await page.waitForTimeout(500)
+  }
+  await chapter.click()
+  await page.locator('.cm-content').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.waitForTimeout(800)
+
+  for (const vp of VIEWPORTS) {
+    await page.setViewportSize(vp)
+    await page.waitForTimeout(900)
+    const label = `${vp.width}x${vp.height}`
+    const m = await measure(page)
+    report.viewports.push({ label, metrics: m })
+    assertProbe(label, m)
+    await page.screenshot({ path: resolve(output, `probe-${vp.width}.png`) })
+    note(label, `shell=${m.shell?.h.toFixed(0)} topbar=${m.topbar?.h.toFixed(0)} paper-bottom=${m.paper?.bottom.toFixed(0)} docked=${m.dockedSlots.length} tabs=${m.tabRoots.length} cm=${m.cm ? m.cm.h.toFixed(0) : '-'} launcher=${m.launcher ? 'yes' : 'no'}`)
+  }
+} catch (error) {
+  failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)
+} finally {
+  await browser?.close().catch(() => undefined)
+  await stop(dshChild)
+}
+
+await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2), 'utf8')
+
+if (failures.length) {
+  console.error(`[layout-invariants] ${failures.length} failure(s):`)
+  for (const failure of failures) console.error(`  - ${failure}`)
+  process.exit(1)
+}
+note(`all invariants hold across ${VIEWPORTS.length} viewports`)
