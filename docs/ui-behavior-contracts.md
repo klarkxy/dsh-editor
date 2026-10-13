@@ -45,10 +45,10 @@
 | C30 | 窄窗让位：窗口放不下时收起辅助栏并记住作者原选择，变宽后恢复；作者在当前档位的显式开合优先，换档后规则重新接手；两条覆盖栏互斥 | `src/client/narrow-layout.ts` | `narrow-layout.spec.ts` | 无 |
 | C31 | `dsh-editor.layout.sidebar-open` / `assistant-open` 只能由作者操作写入；宽度结算与单稿件自动收起不写入；窄窗启动与重载不改写偏好 | `src/client/root.tsx`、`root-layout.ts` | 仅 `.dev/frontend-ux-20261007/rails.mjs`、`narrow-boot.mjs`（仓库外） | 缺少仓库内测试 |
 | C32 | 跨断点后两条栏恢复作者记下的像素宽度；面板刚挂回时 `Layout not found` 不击穿渲染树 | `src/client/root-layout.ts` | `root-layout.spec.ts`、`narrow-layout.spec.ts` | 无 |
-| C33 | 工具入口临时把侧栏加宽到 336px，不写 `sidebar-width`；作者拖动后以新宽度为准 | `src/client/root-layout.ts` | `root-layout.spec.ts` | 无 |
+| C33 | 工具入口临时把承载工具的栏加宽到 336px，不写入宽度偏好；作者拖动后以新宽度为准。第 4 阶段起工具移到辅助栏「工具」页，本条改为作用于辅助栏 | `src/client/root-layout.ts`（第 4 阶段后为 `src/model/workbench-layout.ts`） | `root-layout.spec.ts`（第 4 阶段后为 `workbench-layout.spec.ts`） | 无 |
 | C34 | 单稿件作品自动收起文件栏，直到作者选择；按作品记住 | `src/client/sidebar-chrome.ts` | `sidebar-chrome.spec.ts` | 无 |
 | C35 | 空对话与非空对话的输入框都锚定在底部 | `src/client/chat.tsx` | 无 | 缺少测试 |
-| C36 | 设置窗口在各页保持同一高度 | `src/client/settings.tsx` | 无 | 新设计如保留弹窗形式须补测试 |
+| C36 | （已取消）设置窗口在各页保持同一高度。第 4 阶段起设置改为全页视图，本条随弹窗形态一并取消，见 [Shell 重写规格](redesign/shell-rewrite-spec.md) 第 7 节 | — | — | — |
 
 ## 稿纸与主题
 
