@@ -96,8 +96,6 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
   workbenchNote: string
   expandPath: string
   highlightPath?: string
-  renderSlot?: SettingsRenderSlot
-  seatContext: ShellToolSeatContext
 }) {
   /* Search draft and write lock live in Root so switching narrow/wide sidebars retains them. */
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
@@ -218,7 +216,6 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         activeDirty={props.activeDirty}
         onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
         onReplaced={(paths) => props.onSearchReplaced(props.sessionId, paths)} /></fieldset> : null}
-      <SidebarTools renderSlot={props.renderSlot} seatContext={props.seatContext} />
       {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
         <Callout.Text>
           {props.createNote}

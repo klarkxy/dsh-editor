@@ -20,7 +20,7 @@ function slotLedger(ctx: unknown): Ledger | undefined {
 
 /** Stable selection prevents competing provider editors from rendering together. */
 
-function useSurface(ctx: unknown, key: string) {
+export function useSurface(ctx: unknown, key: string) {
   const slots = slotLedger(ctx)
   const subscribe = useCallback((listener: () => void) => slots?.subscribe(key, listener) ?? (() => {}), [slots, key])
   const snapshot = useCallback(() => slots?.getVersion(key) ?? 0, [slots, key])

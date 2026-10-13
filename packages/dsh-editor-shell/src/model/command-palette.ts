@@ -36,6 +36,7 @@ export type CommandPaletteProps = {
   onNewProject(): void
   onCreateFile?(): void
   onOpenSettings(): void
+  onOpenPlugins?(): void
   onToggleFocus(): void
   onOpenDocument(path: string): void
   onOpenSearch(): void

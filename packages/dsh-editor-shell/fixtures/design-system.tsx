@@ -125,7 +125,7 @@ function Preview() {
           </form>
         </aside>
       </div>
-      <button type="button" className="assistant-launcher" aria-label="Assistant launcher" tabIndex={-1} style={{ pointerEvents: 'none' }} />
+      <Button className="dsh-launcher" aria-label="Assistant launcher" tabIndex={-1} style={{ pointerEvents: 'none' }}>搭档</Button>
     </div>
   </ShellTheme>
 }

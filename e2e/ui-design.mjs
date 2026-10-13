@@ -65,7 +65,7 @@ async function assertRoundShapes(page) {
       if (!el) return { selector, missing: true }
       return { selector, shape: getComputedStyle(el).cornerShape }
     }
-    return ['.activity-dots i', '.assistant-launcher', '.models-credential-dot', '.preset-badge'].map(read)
+    return ['.activity-dots i', '.models-credential-dot', '.preset-badge'].map(read)
   })
   for (const item of shapes) {
     assert.equal(item.missing, undefined, item.selector)

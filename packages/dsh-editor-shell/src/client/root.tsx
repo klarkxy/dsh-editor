@@ -4,7 +4,13 @@ import { RootFileDialogs, RootTreeCreateDialog } from './root-file-dialogs.tsx'
 import { useRootWorkspaces, collectWorkspaceFiles } from './root-workspaces.tsx'
 import { useRootDocuments } from './root-documents.ts'
 import { useRootFileActions } from './root-file-actions.ts'
-import { useRootLayout, SIDEBAR_MIN, SIDEBAR_MAX, ASSISTANT_MIN, ASSISTANT_MAX, PINNED_MIN, PINNED_MAX } from './root-layout.ts'
+import { useWorkbenchLayout } from '../app/shell/use-workbench-layout.ts'
+import { Workbench } from '../app/shell/workbench.tsx'
+import { Topbar } from '../app/shell/topbar.tsx'
+import { AuxRail, ReferencePanel } from '../app/shell/aux-rail.tsx'
+import { useSurface } from './plugin-surfaces.tsx'
+import { Button as DshButton, Notice } from '../ui/index.ts'
+import { ChatIcon } from '../ui/icons.tsx'
 
 import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 import { OfficialSurfaceProvider, OfficialOverlays, type OfficialRootProps } from './official-surfaces.tsx'
@@ -12,8 +18,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope, SessionFace, SessionId } from '../dsh-compat.ts'
 import { normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
-import { exportDirectoryOf, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
-import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
+import { documentDirectory, exportDirectoryOf, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
+import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.tsx'
 import { redesignedStyles } from '../styles.ts'
@@ -22,18 +28,16 @@ import { tokenStyles } from '../design-system/tokens.ts'
 import { collectStyles, defineStyles } from '../design-system/layers.ts'
 import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
-import { DeepSeekWhaleMark, ShellErrorBoundary, useObservable } from './components.tsx'
-import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelSize } from 'react-resizable-panels'
-import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn } from './root-columns.tsx'
-import { panelPixels } from '../model/root-columns.ts'
+import { ShellErrorBoundary, useObservable } from './components.tsx'
+import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, SidebarTools } from './root-columns.tsx'
 import { HomeScreen } from './root-home.tsx'
-import { WorkbenchTopbar } from './root-topbar.tsx'
 import { CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { PluginWorkspace } from './plugins-page.tsx'
 import { SettingsDialog, type SettingsRenderSlot } from './settings.tsx'
 import type { SettingsTab } from '../model/settings.ts'
 import { useTheme } from './theme.tsx'
+import { WindowControls } from './window-controls.tsx'
 import type { HostThemeSync } from '../model/theme.ts'
 
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
@@ -47,7 +51,7 @@ import { Button as ThemesButton, Callout, Flex, IconButton, Text } from '@radix-
 import { windowBridge } from '../model/window-controls.ts'
 import { replaceOutcomeForIdentity, searchIdentity, type ReplaceOutcome, type SearchReplaceReport, type SearchScope } from '../model/search-panel.ts'
 import { PinnedPane } from './pinned-pane.tsx'
-import { canPinPath, validatePinnedPath } from '../pinned-pane-view.ts'
+import { canPinPath, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 import { collectDocuments, ExportPreviewDialog } from './export-dialog.tsx'
 import { downloadExport } from '../model/export-dialog.ts'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
@@ -125,15 +129,28 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     leaveConfirm?.resolve(value)
     setLeaveConfirm(null)
   }
-  const layout = useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision, assistantEnabled, officialPreviewOpen })
-  const {
-    sidebarOpen, setSidebarOpen, sidebarViewWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,
-    assistantOpen, setAssistantOpen, assistantWidth, setAssistantWidth, assistantWidthRef, assistantPanelRef,
-    pinnedPath, setPinnedPath, pinnedWidth, setPinnedWidth, pinnedWidthRef,
-    focusMode, setFocusMode, compactChrome, overlayAssistant, claimSidebar, claimAssistant,
-    yieldSidebarToWidth, yieldAssistantToWidth, noteSidebarChoice, toggleSidebarChrome, toggleAssistantChrome,
-    revealSidebar, sidebarVisible, sidebarInGrid, assistantVisible, assistantInGrid, pinnedVisible,
-  } = layout
+  const workspaceReady = workspaceOpen.kind === 'ready' && Boolean(fileSession)
+  const workbench = useWorkbenchLayout({ ctx, fileSession, workspaceId: openWorkspaceId, workspaceReady })
+  const { layout } = workbench
+  const focusMode = layout.focus
+  const sidebarVisible = workbench.filesVisible
+  const assistantVisible = workbench.auxVisible
+  /* 钉住的文稿路径仍是作者偏好（pinned-width 随旧钉住列一起退役，钉住预览
+     由辅助栏「资料」页签承载，宽度统一走 assistant-width）。 */
+  const [pinnedPath, setPinnedPath] = useState<string | null>(() => storedPinnedPath('dsh-editor.layout.pinned-path'))
+  useEffect(() => {
+    try {
+      if (pinnedPath) globalThis.localStorage?.setItem('dsh-editor.layout.pinned-path', pinnedPath)
+      else globalThis.localStorage?.removeItem('dsh-editor.layout.pinned-path')
+    } catch { /* 视图偏好只尽力保存。 */ }
+  }, [pinnedPath])
+  /* 官方 rightbar/资源预览是系统动作：打开/关闭都不写作者偏好。 */
+  useEffect(() => {
+    if (officialPreviewOpen) workbench.openRightbarPreview()
+    else workbench.closeRightbarPreview()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officialPreviewOpen])
+  const sidebarToolEntries = useSurface(ctx, SIDEBAR_TOOLS_SLOT).entries
   const documents = useRootDocuments({ ctx, fileSession, path, setPath, setWorkbenchNote,
     setTreeRevision, setContentRevision, pinnedPath, openWorkspaceId })
   const {
@@ -152,7 +169,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   } = fileActions
   const workspaceActions = useRootWorkspaces({ ctx, workspaces, selectedWorkspace, currentWorkspace, session, fileSession,
     workspaceOpen, setWorkspaceOpen, setPath, setWorkbenchNote,
-    saveEditorBeforeAction, canLeaveAssistantDraft, setAssistantDraftDirty, setFocusMode })
+    saveEditorBeforeAction, canLeaveAssistantDraft, setAssistantDraftDirty,
+    /* 旧的 setFocusMode(false) 语义＝退出专注；保持 Dispatch 形状以兼容既有调用点。 */
+    setFocusMode: (next: boolean | ((current: boolean) => boolean)) => {
+      const value = typeof next === 'function' ? next(layout.focus) : next
+      if (value) workbench.enterFocus()
+      else workbench.exitFocus()
+    } })
   const {
     homeNote, openingWorkspace, workspaceMenuOpen, setWorkspaceMenuOpen,
     manualWorkspaceMode, newProject, pathFallbackInput, pathFallbackForm,
@@ -207,26 +230,23 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const pinValidatedSession = useRef<string | undefined>()
   const homeCardOpen = useChromeMotion('card', 0)
   const homeCardNew = useChromeMotion('card', 0.05)
-  const workspaceChromeMotion = useChromeMotion('page')
   useEffect(() => { document.title = 'DSH Editor' }, [])
   const officialActionRef = useRef<Record<string, () => void>>({})
   officialActionRef.current = {
-    'toggle-sidebar': toggleSidebarChrome,
+    'toggle-sidebar': () => workbench.setFilesOpen(!workbench.layout.files.open),
     'new-window': () => windowBridge()?.newWindow?.(),
     'palette': () => setPaletteOpen(value => !value),
     'settings': () => { void openSettings() },
-    'toggle-assistant': toggleAssistantChrome,
-    'toggle-focus': () => setFocusMode(value => !value),
+    'toggle-assistant': () => workbench.setAuxOpen(!workbench.layout.aux.open),
+    'toggle-focus': () => workbench.toggleFocus(),
     'focus-assistant': () => {
       if (!assistantEnabled) return
-      setFocusMode(false); claimAssistant(true); setAssistantOpen(true)
-      if (compactChrome) yieldSidebarToWidth()
+      workbench.focusPartner()
       setChatFocusNonce(value => value + 1)
     },
     'search': () => {
       if (workspaceOpen.kind !== 'ready') return
-      setFocusMode(false); noteSidebarChoice(true); claimSidebar(true); setSidebarOpen(true)
-      if (compactChrome) yieldAssistantToWidth()
+      workbench.setFilesOpen(true)
       setSearchOpen(true)
     },
     'toggle-typewriter': () => { void writingScope.set('typewriter', !writing.typewriter) },
@@ -249,24 +269,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       if (event.isComposing || event.keyCode === 229) return
       if (pluginsOpen) return
       if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
-      /* 覆盖层抽屉:Esc 关闭;菜单/下拉打开时让位给它们自己的 Esc 处理。 */
-      if (event.key === 'Escape') {
-        if (!document.querySelector('[role="menu"], [role="listbox"], [data-radix-select-content]')) {
-          if (compactChrome && sidebarOpen && !focusMode) {
-            event.preventDefault()
-            claimSidebar(false)
-            setSidebarOpen(false)
-            return
-          }
-          if (overlayAssistant && assistantOpen && !focusMode && assistantEnabled) {
-            event.preventDefault()
-            claimAssistant(false)
-            setAssistantOpen(false)
-            return
-          }
-        }
-        return
-      }
+      /* 窄屏抽屉由 Radix Drawer(Dialog)处理自己的 Esc 关闭；菜单/下拉打开时
+         也让位给它们自己的 Esc 处理。 */
+      if (event.key === 'Escape') return
       if (event.repeat) return
       const command = matchRegistryShortcut(commands.list(), event)
       if (!command) return
@@ -274,18 +279,18 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       const seat = seatContextRef.current
       if (!seat || command.enabled?.(seat) === false) return
       event.preventDefault()
-      setFocusMode(false)
+      workbench.exitFocus()
       setPaletteOpen(false)
       if (command.when === 'workspace') seat.revealSidebar()
       command.run(seat)
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [pluginsOpen, assistantEnabled, assistantOpen, claimAssistant, claimSidebar, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [pluginsOpen, assistantEnabled, commands, path, session?.sessionId, workbench, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
-    if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
+    if (!chatFocusNonce || !assistantVisible || layout.aux.tab !== 'partner' || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
-  }, [assistantEnabled, assistantOpen, chatFocusNonce, focusMode])
+  }, [assistantEnabled, assistantVisible, chatFocusNonce, focusMode, layout.aux.tab])
   useEffect(() => {
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setTreeExpansionPath('')
@@ -309,11 +314,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision])
   const openSearchPanel = () => {
     if (!fileSession) return
-    if (compactChrome) yieldAssistantToWidth()
-    setFocusMode(false)
-    noteSidebarChoice(true)
-    claimSidebar(true)
-    setSidebarOpen(true)
+    workbench.setFilesOpen(true)
     setSearchOpen(true)
     setPaletteOpen(false)
   }
@@ -354,8 +355,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     else setTreeRevision((value) => value + 1)
   }, [])
   const toggleSeatPin = useCallback((target: string) => {
-    setPinnedPath((current) => current === target ? null : target)
-  }, [])
+    setPinnedPath((current) => {
+      const next = current === target ? null : target
+      if (next) workbench.model.pinReference()
+      return next
+    })
+  }, [workbench.model])
   /* seatContext 固化为真实依赖的 memo：不再每次渲染都换身份，插槽内容只在
      path/dirty/修订等字段变化时重渲染。 */
   const seatContext: ShellToolSeatContext = useMemo(() => ({
@@ -368,7 +373,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     openDocument: openSeatDocument,
     onApplied: refreshAppliedPath,
     note: setWorkbenchNote,
-    revealSidebar,
+    revealSidebar: () => workbench.model.revealTools(),
     refresh: refreshSeat,
     expandTreePath: setTreeExpansionPath,
     highlightTreePath: setHighlightPath,
@@ -380,7 +385,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     Button: HostButton,
     Input: HostInput,
     TextArea: HostTextArea,
-  }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, revealSidebar, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
+  }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, workbench.model, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
   seatContextRef.current = seatContext
   /* 注册表命令执行期经 proxy 读最新 seat；enabled 在投影构建时求值，所以
      依赖 memo 化的 seatContext 身份，不随无关根渲染重建。 */
@@ -410,7 +415,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     () => registryPaletteItems(commands.list(), locale, seatRegistryContext, hasFileSession).map((item) => ({
       ...item,
       run: () => {
-        setFocusMode(false)
+        workbench.exitFocus()
         item.run()
       },
     })),
@@ -500,7 +505,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onOpenWorkspace={() => { if (fileSession) { void openAnotherWorkspace() } else { void startWorkspaceFromPicker() } }}
     onNewProject={() => { void startNewProject() }}
     onOpenSettings={() => openSettings()}
-    onToggleFocus={() => setFocusMode((value) => !value)}
+    onOpenPlugins={openPlugins}
+    onToggleFocus={() => workbench.toggleFocus()}
     onOpenDocument={(target: string) => openDocument(target)}
     onOpenSearch={() => openSearchPanel()}
     registryCommands={registryCommands}
@@ -512,7 +518,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onToggleFocusParagraph={() => { void writingScope.set('focusParagraph', !writing.focusParagraph) }}
     typewriter={writing.typewriter}
     focusParagraph={writing.focusParagraph}
-    onPinCurrent={() => { if (canPinPath(path)) setPinnedPath(path) }}
+    onPinCurrent={() => { if (canPinPath(path)) { setPinnedPath(path); workbench.pinReference() } }}
     canPinCurrent={Boolean(fileSession) && canPinPath(path)}
     onUnpin={() => setPinnedPath(null)}
     pinnedPath={pinnedPath}
@@ -604,25 +610,87 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       onFileMenu={openFileMenu}
       onCreateFile={onTreeCreateFile}
       onCreateFolder={onTreeCreateFolder}
-      onMove={moveTreeEntry}
-      renderSlot={renderSlot}
-      seatContext={seatContext} />
+      onMove={moveTreeEntry} />
+
+  /* 面包屑的「切换章节」列同目录兄弟文档；无打开文档时面包屑隐藏。 */
+  const breadcrumb = path
+    ? {
+        path,
+        siblings: files.filter((candidate) => documentDirectory(candidate) === documentDirectory(path)),
+      }
+    : null
+
+  /* 辅助栏三页签（§2.2）：搭档＝原 Chat 列；资料＝钉住文稿 + 官方 rightbar 槽位
+     + 钉住/预览切换；工具＝SIDEBAR_TOOLS_SLOT 贡献。 */
+  const auxRailNode = <AuxRail
+    tab={layout.aux.tab}
+    onTabChange={workbench.selectAuxTab}
+    hasTools={sidebarToolEntries.length > 0}
+    partner={
+      capabilityState.kind === 'error'
+        ? <Notice
+            tone="danger"
+            title={t('capabilities.loadFailed', { error: capabilityState.message })}
+            action={<DshButton variant="secondary" size="sm" onClick={shellCapabilities.retry}>{t('capabilities.retry')}</DshButton>} />
+        : !capabilityReady
+          ? <Notice tone="info" title={t('capabilities.loading')} />
+          : assistantEnabled && chatSession
+            ? <ChatColumn
+                ctx={ctx}
+                chatSession={chatSession}
+                workspaceId={currentWorkspace?.workspaceId}
+                activePath={path}
+                authorPreferences={authorPreferences}
+                authorMemory={authorMemory}
+                renderSlot={renderSlot}
+                hidden={!assistantVisible || layout.aux.tab !== 'partner'}
+                overlay={false}
+                onConfigure={configureChatModel}
+                onDraftDirtyChange={setAssistantDraftDirty}
+                onWritten={refreshWrittenPath}
+                onApplied={onAppliedChat}
+                onHide={() => workbench.setAuxOpen(false)} />
+            : <Notice tone="info" title={t('aux.partnerDisabled')} />
+    }
+    reference={<ReferencePanel
+      pinnedPath={pinnedPath}
+      previewOpen={officialPreviewOpen}
+      onPreviewOpenChange={(open) => {
+        const layoutService = (ctx as unknown as { layout: { openRightbar(track: boolean, fullscreen: boolean): void; closeRightbar(): void } }).layout
+        if (open) layoutService.openRightbar(false, false)
+        else layoutService.closeRightbar()
+      }}
+      pinned={pinnedPath ? <PinnedPane
+        ctx={ctx}
+        sessionId={fileSession.sessionId}
+        path={pinnedPath}
+        treeRevision={treeRevision}
+        contentRevision={contentRevision}
+        onUnpin={() => setPinnedPath(null)}
+        onOpenDocument={(cardPath: string) => {
+          setTreeExpansionPath(cardPath)
+          openDocument(cardPath)
+        }}
+        onMissing={() => {
+          setWorkbenchNote(t('pin.missing'))
+          setPinnedPath(null)
+        }} /> : null}
+      preview={<div data-dsh-plugin-surface="" className="dsh-aux-rightbar-slot">
+        {renderSlot?.('rightbar', {
+          width: Math.min(680, previewViewport), viewportWidth: previewViewport, canShow: !pluginsOpen,
+        })}
+      </div>} />}
+    tools={<SidebarTools renderSlot={renderSlot} seatContext={seatContext} />} />
 
   return (
     <ShellUiProvider theme={theme}>
         <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
           sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
       <main
-        className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantInGrid ? ' assistant-in-grid' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
+        className={`shell layout-shell${focusMode ? ' focus-mode' : ''}`}
         ref={shellMainRef}
         style={{ minWidth: 0 }}>
-        <WorkbenchTopbar
-          workspaceChromeMotion={workspaceChromeMotion}
-          workspaceMenuOpen={workspaceMenuOpen}
-          onWorkspaceMenuOpenChange={(open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) }}
-          onWorkspaceMenuYield={() => { workspaceMenuYields.current = true }}
-          menuTriggerRef={workspaceMenuTrigger}
-          menuYieldsRef={workspaceMenuYields}
+        <Topbar
           currentWorkspace={currentWorkspace}
           workspaces={workspaces.items}
           openingWorkspace={openingWorkspace}
@@ -633,48 +701,39 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onNewProject={() => void startNewProject()}
           onExportDocuments={() => void exportDocuments()}
           onLeaveHome={() => void leaveToHome()}
-          sidebarOpen={sidebarOpen}
-          compactChrome={compactChrome}
-          focusMode={focusMode}
-          assistantOpen={assistantOpen}
-          onToggleSidebar={toggleSidebarChrome}
-          onToggleFocusMode={() => setFocusMode((value) => !value)}
-          onToggleAssistant={toggleAssistantChrome}
-          extensionsDock={extensionsDock}
-          theme={theme}
-          onThemeChange={setTheme}
+          workspaceMenuOpen={workspaceMenuOpen}
+          onWorkspaceMenuOpenChange={(open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) }}
+          onWorkspaceMenuYield={() => { workspaceMenuYields.current = true }}
+          menuTriggerRef={workspaceMenuTrigger}
+          menuYieldsRef={workspaceMenuYields}
+          breadcrumb={breadcrumb}
+          onOpenDocument={(target: string) => openDocument(target)}
+          filesVisible={sidebarVisible}
+          auxVisible={assistantVisible}
+          focus={focusMode}
+          onToggleFiles={() => workbench.setFilesOpen(!layout.files.open)}
+          onToggleAux={() => workbench.setAuxOpen(!layout.aux.open)}
+          onToggleFocus={() => workbench.toggleFocus()}
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenSettings={openSettings} onOpenPlugins={openPlugins} />
-        <PanelGroup
-          orientation="horizontal"
-          className="shell-panels"
-          style={{ isolation: officialPreviewOpen ? 'isolate' : undefined }}
-          resizeTargetMinimumSize={{ coarse: 28, fine: 12 }}
-          onLayoutChanged={(_layout, meta) => {
-            /* 拖动中途不要 setState：v4 会把变化中的 defaultSize 当成新布局，pointer capture 也会丢。 */
-            if (!meta.isUserInteraction) return
-            setSidebarWidth(sidebarWidthRef.current)
-            if (assistantWidthRef.current > 0) setAssistantWidth(assistantWidthRef.current)
-            setPinnedWidth(pinnedWidthRef.current)
-          }}>
-          {sidebarInGrid ? <>
-            <Panel
-              id="sidebar"
-              panelRef={sidebarPanelRef}
-              className="shell-panel"
-              defaultSize={sidebarViewWidth}
-              minSize={SIDEBAR_MIN}
-              maxSize={SIDEBAR_MAX}
-              groupResizeBehavior="preserve-pixel-size"
-              onResize={(size: PanelSize) => { if (size.inPixels > 0) sidebarWidthRef.current = panelPixels(size) }}>
-              {sidebarColumn}
-            </Panel>
-            <PanelResizeHandle
-              className="panel-resizer left"
-              aria-label={t('workspace.resizeFiles')}
-              title={t('resizer.aria', { label: t('workspace.resizeFiles') })} />
-          </> : null}
-          <Panel id="editor" className="shell-panel editor-cell" minSize={420}>
+          extensionsDock={extensionsDock}
+          windowControls={<WindowControls />}
+          onOpenSettings={() => openSettings()}
+          onOpenPlugins={openPlugins} />
+        <Workbench
+          layout={workbench}
+          files={sidebarColumn}
+          aux={auxRailNode}
+          launcher={!assistantVisible && !focusMode && capabilityReady && assistantEnabled ? <DshButton
+            variant="secondary"
+            className="dsh-launcher"
+            icon={<ChatIcon />}
+            aria-label={t('workspace.openAssistant')}
+            aria-expanded={false}
+            data-testid="dsh-shell-launcher"
+            onClick={() => { workbench.focusPartner(); setChatFocusNonce((value) => value + 1) }}>
+            {t('workspace.assistant')}
+          </DshButton> : null}
+          paper={<>
             <EditorColumn
               ctx={ctx}
               fileSession={fileSession}
@@ -683,7 +742,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               referenceFiles={files}
               referenceRevision={treeRevision}
               onOpenReference={openDocument}
-              onPinReference={setPinnedPath}
+              onPinReference={(target: string | null) => {
+                setPinnedPath(target)
+                /* 钉住＝作者行为：开辅助栏并切到「资料」（§2 切换来源 2）。 */
+                if (target) workbench.pinReference()
+              }}
               onCreate={onEditorCreate}
               onHandle={onEditorHandle}
               contentRevision={contentRevision}
@@ -702,131 +765,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               show={Boolean(fileSession) && !focusMode}
               renderSlot={renderSlot}
               seatContext={seatContext} />
-          </Panel>
-          {pinnedVisible && pinnedPath ? <>
-            <PanelResizeHandle
-              className="panel-resizer right"
-              aria-label={t('pin.resize')}
-              title={t('resizer.aria', { label: t('pin.resize') })} />
-            <Panel
-              id="pinned"
-              className="shell-panel"
-              defaultSize={pinnedWidth}
-              minSize={PINNED_MIN}
-              maxSize={PINNED_MAX}
-              groupResizeBehavior="preserve-pixel-size"
-              onResize={(size: PanelSize) => { if (size.inPixels > 0) pinnedWidthRef.current = panelPixels(size) }}>
-              <PinnedPane
-                ctx={ctx}
-                sessionId={fileSession.sessionId}
-                path={pinnedPath}
-                treeRevision={treeRevision}
-                contentRevision={contentRevision}
-                onUnpin={() => setPinnedPath(null)}
-                onOpenDocument={(cardPath: string) => {
-                  setTreeExpansionPath(cardPath)
-                  openDocument(cardPath)
-                }}
-                onMissing={() => {
-                  setWorkbenchNote(t('pin.missing'))
-                  setPinnedPath(null)
-                }} />
-            </Panel>
-          </> : null}
-          {assistantInGrid ? <PanelResizeHandle
-            className="panel-resizer right"
-            aria-label={t('workspace.resizeAssistant')}
-            title={t('resizer.aria', { label: t('workspace.resizeAssistant') })} /> : null}
-          {assistantEnabled && chatSession ? <Panel
-            id="assistant"
-            className="shell-panel"
-            panelRef={assistantPanelRef}
-            collapsible
-            collapsedSize={0}
-            defaultSize={assistantWidth}
-            minSize={ASSISTANT_MIN}
-            maxSize={ASSISTANT_MAX}
-            groupResizeBehavior="preserve-pixel-size"
-            onResize={(size: PanelSize) => { if (size.inPixels > 0) assistantWidthRef.current = panelPixels(size) }}>
-            <ChatColumn
-              ctx={ctx}
-              chatSession={chatSession}
-              workspaceId={currentWorkspace?.workspaceId}
-              activePath={path}
-              authorPreferences={authorPreferences}
-              authorMemory={authorMemory}
-              renderSlot={renderSlot}
-              hidden={!assistantVisible}
-              overlay={overlayAssistant}
-              onConfigure={configureChatModel}
-              onDraftDirtyChange={setAssistantDraftDirty}
-              onWritten={refreshWrittenPath}
-              onApplied={onAppliedChat}
-              onHide={() => { claimAssistant(false); setAssistantOpen(false) }} />
-          </Panel> : null}
-        </PanelGroup>
-        <aside className="official-resource-panel" hidden={!officialPreviewOpen} aria-label="资料预览">
-          <div data-dsh-plugin-surface="" style={{ height: '100%' }}>{renderSlot?.('rightbar', {
-            width: Math.min(680, previewViewport), viewportWidth: previewViewport, canShow: !pluginsOpen,
-          })}</div>
-        </aside>
-        {assistantEnabled && chatSession && overlayAssistant ? <ThemesButton
-          type="button"
-          variant="ghost"
-          color="gray"
-          className="chat-overlay-dismiss"
-          hidden={!assistantVisible}
-          tabIndex={-1}
-          aria-label={t('workspace.hideAssistant')}
-          onClick={() => { claimAssistant(false); setAssistantOpen(false) }} /> : null}
-        {compactChrome ? <div className="sidebar-overlay" hidden={!sidebarVisible}>
-          {sidebarColumn}
-        </div> : null}
-        {compactChrome ? <ThemesButton
-          type="button"
-          variant="ghost"
-          color="gray"
-          className="side-overlay-dismiss"
-          hidden={!sidebarVisible}
-          tabIndex={-1}
-          aria-label={t('workspace.hideFiles')}
-          onClick={() => { claimSidebar(false); setSidebarOpen(false) }} /> : null}
-        {!assistantVisible && !focusMode && !officialPreviewOpen ? (
-          capabilityState.kind === 'error'
-            ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
-            <Flex direction="column" gap="2">
-              <Callout.Text>
-                {t('capabilities.loadFailed', { error: capabilityState.message })}
-              </Callout.Text>
-              <ThemesButton size="1" variant="solid" type="button" onClick={shellCapabilities.retry}>
-                {t('capabilities.retry')}
-              </ThemesButton>
-            </Flex>
-          </Callout.Root>
-            : !capabilityReady
-              ? <Callout.Root className="assistant-launcher capability-note" role="status">
-            <Flex align="center" gap="2">
-              <ActivityDots />
-              <Callout.Text>
-                {t('capabilities.loading')}
-              </Callout.Text>
-            </Flex>
-          </Callout.Root>
-              : assistantEnabled
-                ? <IconButton
-            className="assistant-launcher"
-            variant="solid"
-            size="3"
-            type="button"
-            aria-label={t('workspace.openAssistant')}
-            aria-expanded={false}
-            onClick={() => { claimAssistant(true); setAssistantOpen(true); if (compactChrome) yieldSidebarToWidth() }}>
-            <span aria-hidden="true">
-              <DeepSeekWhaleMark />
-            </span>
-          </IconButton>
-                : null
-        ) : null}
+        </>}
+        />
         <ConfirmDialog
           open={Boolean(leaveConfirm)}
           id="leave-assistant-draft"

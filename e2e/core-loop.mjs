@@ -21,6 +21,7 @@ import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { S } from './helpers/selectors.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
@@ -248,8 +249,8 @@ try {
   if (!homeThemeOk) {
     failures.push(`home theme should default to light; got theme=${homeState.theme} stored=${homeState.stored}`)
   }
-  // The theme toggle lives on the workbench chrome, not the home chrome — the
-  // home chrome only renders brand-lockup / local-state / native-settings-control.
+  // Theme switching is a command-palette action (Phase 4.1); no chrome — home
+  // or workbench — may host a .theme-toggle button any more.
   if (homeState.themeToggleText) failures.push(`home chrome should not host a theme toggle; got ${homeState.themeToggleText}`)
   if (homeState.editorSection) failures.push('editor section should not be present on home')
   if (homeState.tree) failures.push('tree should not be present on home')
@@ -285,20 +286,17 @@ try {
   await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
   await page.locator(S.treeEmpty).waitFor({ state: 'visible', timeout: 20_000 })
 
-  // Top bar inventory: only the four chrome buttons that survived the refactor.
-  // Use the semantic role="banner" to target the main header uniquely.
-  const chromeHeader = page.locator(S.chrome)
+  // Top bar inventory: the Phase-4.1 workbench topbar hosts the workspace menu,
+  // pane toggles, palette trigger and settings/plugins triggers. Theme switching
+  // moved to the command palette, so the topbar must not contain a theme toggle.
+  const chromeHeader = page.locator(S.topbar)
   await chromeHeader.screenshot({ path: resolve(output, '01-chrome.png') })
-  // The merged workspace menu is a <summary role="button"> with an aria-label.
-  // The theme toggle is matched by its stable .theme-toggle class because the
-  // Chinese glyph in its text content can fall back to a placeholder "?" in
-  // the headless font, which would defeat an accessible-name lookup.
   for (const label of ['作品菜单']) {
     const present = await chromeHeader.getByRole('button', { name: label }).count()
     if (!present) failures.push(`topbar is missing ${label}`)
   }
-  if (!(await chromeHeader.locator(S.themeToggle).count())) {
-    failures.push('topbar is missing theme toggle')
+  if (await chromeHeader.locator(S.themeToggle).count()) {
+    failures.push('topbar still hosts a theme toggle (moved to the command palette)')
   }
   for (const removed of ['作品快照', '导入作品', '导出 Markdown', '导出 TXT', '管理当前作品', '返回作品列表']) {
     if (await page.getByRole('button', { name: removed }).count()) {
@@ -422,9 +420,9 @@ try {
   // Already enabled via configureProfile with enabledEntries before DSH startup.
   // Open via command palette trigger button, then type and select "记忆维护"
 
-  // Close chat sidebar if it's open to ensure command palette can be triggered
+  // Close the aux rail if it's open so the memory command demonstrably opens it.
   if (await page.locator(S.chatRail).isVisible().catch(() => false)) {
-    await page.keyboard.press('Control+Alt+b')
+    await page.keyboard.press('Control+Alt+j')
     await page.locator(S.chatRail).waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
   }
 
@@ -493,14 +491,12 @@ try {
   await memoryCloseButton.click()
   await memoryPanel.waitFor({ state: 'detached', timeout: 3_000 })
 
-  // Theme toggle: light → dark → light. The DOM data-theme and localStorage must
-  // both update and survive a reload.
-  await chromeHeader.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  // Theme switching is a command-palette command (Phase 4.1). light → dark →
+  // light; the DOM data-theme and localStorage must update and survive reload.
+  await toggleTheme(page)
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
   const darkStored = await page.evaluate(() => globalThis.localStorage.getItem('dsh-editor.theme'))
   if (darkStored !== 'dark') failures.push(`localStorage theme did not persist dark; got ${darkStored}`)
-  const darkToggle = await chromeHeader.getByRole('button', { name: /主题（当前深色）/ }).count()
-  if (!darkToggle) failures.push('theme toggle did not re-label itself as 当前深色 after switching to dark')
   await page.waitForFunction(({ SHELL_THEME }) => document.querySelector(SHELL_THEME)?.classList.contains('dark'), DOM)
   await page.waitForTimeout(350)
   await page.screenshot({ path: resolve(output, '06-editor-dark.png') })
@@ -529,7 +525,7 @@ try {
   if (reloadedState.stored !== 'dark') failures.push(`localStorage theme did not survive reload; got ${reloadedState.stored}`)
 
   // Back to light.
-  await chromeHeader.getByRole('button', { name: /主题（当前深色）/ }).click()
+  await toggleTheme(page)
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light')
   await page.waitForFunction(() => globalThis.localStorage.getItem('dsh-editor.theme') === 'light')
 
@@ -537,8 +533,20 @@ try {
   // (DSH 0.2.0 matches platform bindings strictly; web is Ctrl+Alt+L, while
   // bare Ctrl+L is the desktop-only binding).
   const launcher = page.getByRole('button', { name: '打开写作搭档' })
-  if (await launcher.isVisible().catch(() => false)) await launcher.click()
-  await page.locator(S.chatRail).waitFor({ state: 'visible', timeout: 10_000 })
+  if (!(await page.locator(S.chatRail).isVisible().catch(() => false))) {
+    if (await launcher.isVisible().catch(() => false)) {
+      await launcher.click()
+    } else {
+      // Launcher only renders while the aux rail is closed; it lags capability
+      // loading right after a reload, so fall back to the topbar aux toggle.
+      await page.locator(S.auxToggle).click().catch(() => undefined)
+    }
+  }
+  // The chat lives on the aux rail's 搭档 tab — make sure that tab is active.
+  if (!(await page.locator(S.chatRail).isVisible().catch(() => false))) {
+    await page.getByRole('tab', { name: '搭档' }).click().catch(() => undefined)
+  }
+  await page.locator(S.chatRail).waitFor({ state: 'visible', timeout: 15_000 })
   await page.keyboard.press('Control+Alt+l')
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '输入消息')
   const composer = page.getByRole('textbox', { name: '输入消息' })
@@ -551,7 +559,8 @@ try {
   // sidebars (web bindings; DSH 0.2.0 matches platform bindings strictly).
   await composer.fill('不要丢失的草稿')
   await page.keyboard.press('Control+Alt+b')
-  await page.locator(S.sidebar).waitFor({ state: 'detached' })
+  // 4.1: the files pane host is adopted into a hidden park node, not unmounted.
+  await page.locator(S.sidebar).waitFor({ state: 'hidden' })
   await page.keyboard.press('Control+Alt+f')
   await page.locator(S.shellFocus).waitFor({ state: 'visible' })
   await page.screenshot({ path: resolve(output, '07-focus-mode.png') })
@@ -590,6 +599,7 @@ try {
     for (const page of pages) {
       await page.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }).catch(() => undefined)
       await writeFile(resolve(output, 'failure.txt'), await page.locator(S.body).innerText()).catch(() => undefined)
+      await writeFile(resolve(output, 'failure.html'), await page.content()).catch(() => undefined)
     }
   }
   failures.push(error instanceof Error ? error.stack || error.message : String(error))

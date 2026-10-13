@@ -31,6 +31,6 @@ export function Tab(props: { value: string; children?: ReactNode; disabled?: boo
   return <TabsPrimitive.Trigger className="dsh-tabs__tab" value={props.value} disabled={props.disabled}>{props.children}</TabsPrimitive.Trigger>
 }
 
-export function TabPanel(props: { value: string; children?: ReactNode; className?: string }) {
-  return <TabsPrimitive.Content className={cx('dsh-tabs__panel', props.className)} value={props.value}>{props.children}</TabsPrimitive.Content>
+export function TabPanel(props: { value: string; children?: ReactNode; className?: string; forceMount?: true }) {
+  return <TabsPrimitive.Content className={cx('dsh-tabs__panel', props.className)} value={props.value} forceMount={props.forceMount}>{props.children}</TabsPrimitive.Content>
 }

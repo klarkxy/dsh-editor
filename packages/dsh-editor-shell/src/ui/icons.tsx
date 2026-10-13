@@ -103,6 +103,9 @@ export const MicIcon = make(<>
   <path d="M12 17.5V21" />
 </>)
 export const SendIcon = make(<path d="M4.5 12 19 4.5l-3.2 7.5 3.2 7.5L4.5 12zm0 0H15" />)
+export const ChatIcon = make(<>
+  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4V5.5Z" />
+</>)
 export const ImageIcon = make(<>
   <rect x="4" y="5" width="16" height="14" rx="2" />
   <circle cx="9" cy="10" r="1.6" />

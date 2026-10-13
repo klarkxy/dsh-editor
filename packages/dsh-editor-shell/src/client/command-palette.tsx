@@ -297,6 +297,15 @@ export function CommandPalette(props: CommandPaletteProps) {
         icon: <SettingsIcon />,
         run: () => props.onOpenSettings(),
       },
+      {
+        id: 'cmd.plugins',
+        label: t('command.plugins'),
+        hint: t('command.pluginsHint'),
+        keywords: ['plugins', 'extensions', t('plugins.open')],
+        icon: <SettingsIcon />,
+        disabled: !props.onOpenPlugins,
+        run: () => props.onOpenPlugins?.(),
+      },
     ],
   }
 
@@ -438,6 +447,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       <span className="palette-trigger-icon" aria-hidden="true">
         <SearchIcon size={14} />
       </span>
+      <span className="palette-trigger-label">{t('command.trigger')}</span>
       <Kbd className="palette-trigger-kbd">{shortcut || t('command.searchCommands')}</Kbd>
     </Button>
   )

@@ -1,5 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
+import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 import { IconButton } from './icon-button.tsx'
 import { useDshPortalContainer } from './shared.ts'
 import './drawer.styles.ts'
@@ -16,13 +17,36 @@ export function Drawer(props: {
   children?: ReactNode
 }) {
   const container = useDshPortalContainer()
+  const contentRef = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const restoreGen = useRef(0)
+  const captured = takeInvokerOnOpen(props.open, wasOpen)
+  if (captured !== undefined) {
+    returnFocus.current = pickReturnFocus(undefined, captured)
+    restoreGen.current += 1
+  }
   return (
     <DialogPrimitive.Root open={props.open} modal={props.modal} onOpenChange={props.onOpenChange}>
       {(() => {
         const layer = (
           <>
             <DialogPrimitive.Overlay className="dsh-overlay" />
-            <DialogPrimitive.Content className="dsh-drawer" data-side={props.side ?? 'right'}>
+            {/* 焦点落在抽屉根上而不是关闭按钮：IconButton 的 Tooltip 也是
+                DismissableLayer，第一次 Escape 会先被它吃掉。 */}
+            <DialogPrimitive.Content
+              ref={contentRef}
+              className="dsh-drawer"
+              data-side={props.side ?? 'right'}
+              onOpenAutoFocus={(event) => {
+                event.preventDefault()
+                contentRef.current?.focus()
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                scheduleReturnFocus(returnFocus.current, restoreGen)
+              }}
+            >
               <div className="dsh-drawer__header">
                 <DialogPrimitive.Title className="dsh-drawer__title">{props.title}</DialogPrimitive.Title>
                 <DialogPrimitive.Close asChild><IconButton label={props.closeLabel} /></DialogPrimitive.Close>

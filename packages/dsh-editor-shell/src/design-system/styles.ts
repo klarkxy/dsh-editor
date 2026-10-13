@@ -48,7 +48,6 @@ const roundShapes = [
   '.preset-badge', '.cards-badge',
   '.activity-dots i', '.panel-activity-dots i',
   '.activity-shimmer', '.activity-shimmer i',
-  '.assistant-launcher:not(.capability-note)',
   '.history-commit-dot',
   '.image-preview-close',
   '.chat-step-status', '.chat-step-error-dot',
@@ -119,17 +118,16 @@ export const componentStyles = [
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
   r(['.shell'], 'background: var(--dsh-ui-bg); color: var(--dsh-ui-text); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-normal);'),
-  r(['.shell > .chrome'], `height: var(--topbar-h); background: var(--dsh-ui-sidebar); border-bottom: ${hairline}; box-shadow: none;`),
+  /* §1：顶栏 chrome 底、无下分割线；分栏之间由侧栏边线负责。 */
+  r(['.dsh-topbar'], `height: var(--topbar-h); background: var(--dsh-ui-sidebar); box-shadow: none;`),
   r(['.workspace-menu-trigger'], 'border-radius: var(--dsh-ui-radius-md); background: transparent; color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.workspace-menu-trigger:hover'], 'background: var(--dsh-ui-hover);'),
-  r(['.layout-controls'], 'gap: var(--dsh-ui-space-1);'),
-  r(['.layout-controls button'], 'color: var(--dsh-ui-muted);'),
-  r(['.layout-controls button:hover:not(:disabled)'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
-  r(['.layout-controls button[aria-pressed="true"]'], 'background: var(--dsh-ui-sunken); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
-  // Sunken reads as a hole in dark mode; pressed is a neutral on-state, so
-  // dark uses the hover fill under the same inset hairline.
-  `${SCOPE_DARK} .layout-controls button[aria-pressed="true"]${excludePlugin} { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); }`,
-  r(['.topbar-actions'], 'gap: var(--dsh-ui-space-1);'),
+  /* 顶栏开关（IconButton data-variant=ghost）：默认弱字色，按下态用选中填充；
+     暗色下 sunken 读作凹陷，用 hover 填充代替。 */
+  r(['.dsh-topbar .dsh-icon-button'], 'color: var(--dsh-ui-muted);'),
+  r(['.dsh-topbar .dsh-icon-button:hover:not(:disabled)'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  r(['.dsh-topbar .dsh-icon-button[aria-pressed="true"]'], 'background: var(--dsh-ui-sunken); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  `${SCOPE_DARK} .dsh-topbar .dsh-icon-button[aria-pressed="true"]${excludePlugin} { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); }`,
   r(['.shell .window-controls button.window-close:hover'], 'background: var(--dsh-ui-danger); color: #ffffff;'),
 
   // Primitives. Preserve explicit Radix color overrides (red, gray, and the rest).
@@ -320,8 +318,8 @@ export const componentStyles = [
   // Radix default renders them smaller than any other text in the window, and
   // the Kbd inside the topbar trigger is its own element, not the button.
   r(['.palette-kbd', '.palette-trigger-kbd'], 'font-size: var(--dsh-ui-text-xs); background: transparent; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); color: var(--dsh-ui-muted);'),
-  r(['.shell > .chrome .palette-trigger'], 'font-size: var(--dsh-ui-text-xs); background: transparent; color: var(--dsh-ui-muted); box-shadow: none;'),
-  r(['.shell > .chrome .palette-trigger:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  r(['.dsh-topbar .palette-trigger'], 'font-size: var(--dsh-ui-text-xs); background: transparent; color: var(--dsh-ui-muted); box-shadow: none;'),
+  r(['.dsh-topbar .palette-trigger:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
   r(['.history-commit'], 'border-radius: var(--dsh-ui-radius-md);'),
   r(['.history-technical-details'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
   r(['.history-technical-details > summary'], 'cursor: pointer; min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
@@ -346,13 +344,11 @@ export const componentStyles = [
   r(['.activity-dots.is-typing i'], 'animation-name: shell-activity-pulse;'),
   r(['.panel-skeleton i::after'], 'display: none;'),
   r(['.activity-shimmer'], 'height: 2px; background: var(--dsh-ui-line);'),
-  r(['.shell > .assistant-launcher'], 'background: var(--dsh-ui-raised); border: 0; box-shadow: var(--dsh-ui-elevation-panel); animation: none;'),
-  r(['.shell > .assistant-launcher:not(.capability-note):hover'], 'transform: none; background: var(--dsh-ui-hover); box-shadow: var(--dsh-ui-elevation-panel);'),
+  r(['.dsh-launcher'], 'background: var(--dsh-ui-raised); border: 0; box-shadow: var(--dsh-ui-elevation-panel);'),
   r(['.shell ::-webkit-scrollbar'], 'width: 6px; height: 6px;'),
   r(['.shell ::-webkit-scrollbar-thumb'], 'background: var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-full); corner-shape: round;'),
   r(['.shell ::-webkit-scrollbar-thumb:hover'], 'background: var(--dsh-ui-muted);'),
-  r(['.shell .chat.chat-overlay', '.shell > .sidebar-overlay'], 'border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-prominent);'),
-  r(['.shell > .chat-overlay-dismiss', '.shell > .side-overlay-dismiss'], 'background: var(--dsh-ui-scrim); backdrop-filter: none; -webkit-backdrop-filter: none;'),
+
 
   // Superellipse only where the engine supports it. Circles and pills stay round.
   `@supports (corner-shape: superellipse(1.5)) {\n${r([':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))', ':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))::before', ':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))::after'], 'corner-shape: superellipse(1.5);')}${r(roundShapes, 'corner-shape: round;')}}`,
@@ -404,8 +400,7 @@ export const responsiveStyles = `
 `
 
 export const officialResourceStyles = `
-${r(['.official-resource-panel'], `position: absolute; inset: 52px 0 0 auto; width: min(680px, 100%); overflow: hidden; background: var(--dsh-ui-bg); border-left: ${hairline}; box-shadow: none;`)}
-${r(['.official-resource-panel[hidden]'], 'display: none;')}
+${r(['.dsh-aux-rightbar-slot'], 'flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--dsh-ui-bg);')}
 `
 
 export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}`

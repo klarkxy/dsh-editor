@@ -61,9 +61,17 @@ describe('paper pane alignment', () => {
     expect(redesignedStyles).toMatch(/\.home-recent \.workspace-row \.tree-row \{[^}]*text-align: start/)
   })
 
-  it('collapses the assistant panel to zero width when it is not in the grid', () => {
-    expect(redesignedStyles).toContain('.shell:not(.assistant-in-grid) #assistant')
-    expect(redesignedStyles).toMatch(/\.shell:not\(\.assistant-in-grid\) #assistant \{[^}]*flex-basis: 0 !important/)
-    expect(redesignedStyles).toMatch(/\.shell:not\(\.assistant-in-grid\) #assistant \{[^}]*max-width: 0 !important/)
+  it('keeps hidden rails out of the grid via the new shell pane styles', async () => {
+    // Phase 4.1: the workbench drops hidden rails from the PanelGroup entirely
+    // (React conditional), so the old #assistant zero-width !important hacks
+    // are gone; pane surfaces live in the dsh.surfaces layer instead.
+    await import('./app/shell/shell.styles.ts')
+    const { collectStyles } = await import('./design-system/layers.ts')
+    const collected = collectStyles()
+    expect(redesignedStyles).not.toContain('assistant-in-grid')
+    expect(redesignedStyles).not.toContain('#assistant')
+    expect(collected).toContain('.dsh-pane--aux')
+    expect(collected).toContain('.dsh-pane--files')
+    expect(collected).toContain('.dsh-pane > .chat')
   })
 })

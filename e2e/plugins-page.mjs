@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
 import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -246,7 +247,7 @@ try {
     }
     for (const theme of ['light','dark']) {
       if (!await page.locator(S.shellTheme).evaluate((el,theme) => el.classList.contains(theme), theme)) {
-        await page.locator(S.themeToggle).click()
+        await toggleTheme(page)
         await page.waitForFunction(({theme,sel}) => document.querySelector(sel)?.classList.contains(theme), {theme,sel:S.shellTheme})
       }
       await page.waitForTimeout(350)
@@ -272,7 +273,7 @@ try {
     // shortcuts, with the editor focused so the keydown reaches the workspace.
     for (const theme of ['light', 'dark']) {
       if (!await page.locator(S.shellTheme).evaluate((el, value) => el.classList.contains(value), theme)) {
-        await page.locator(S.themeToggle).click()
+        await toggleTheme(page)
         await page.waitForFunction(({value,sel}) => document.querySelector(sel)?.classList.contains(value), {value:theme,sel:S.shellTheme})
       }
       assert.equal(await page.locator(S.sideDocumentTools).count(), 0, theme + ': no sidebar document tool buttons')

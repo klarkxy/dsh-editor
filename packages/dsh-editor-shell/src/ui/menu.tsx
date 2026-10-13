@@ -45,6 +45,7 @@ export function MenuContent(props: {
   sideOffset?: number
   'aria-label'?: string
   className?: string
+  onCloseAutoFocus?(event: Event): void
 }) {
   const container = useDshPortalContainer()
   const content = (
@@ -55,6 +56,7 @@ export function MenuContent(props: {
       sideOffset={props.sideOffset ?? 4}
       collisionPadding={8}
       aria-label={props['aria-label']}
+      onCloseAutoFocus={props.onCloseAutoFocus}
     >
       {props.children}
     </Dropdown.Content>

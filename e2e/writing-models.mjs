@@ -9,6 +9,7 @@ import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { DshSupervisor } from '../apps/desktop/dist/supervisor.js'
 import { PINNED_PNPM_VERSION, resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
 import { nativePluginRpc, openPluginsPage, openPluginManager, closePluginsPage, assertDefaultPluginPage } from './helpers/plugin-page.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -405,7 +406,7 @@ try {
     await installedPage.locator(S.zhihuSettings).waitFor();
     assert.equal(await installedManager.locator(S.pluginConfig).locator(S.zhihuSettings).count(),1);
     await closePluginsPage(page);
-    await page.locator(S.themeToggleVisible).first().click();await page.locator(S.shellThemeDark).waitFor({timeout:10000});
+    await toggleTheme(page);await page.locator(S.shellThemeDark).waitFor({timeout:10000});
     const darkPlugins=await openPlugins();await openPluginManager(darkPlugins);
     await page.setViewportSize({width:760,height:1000});assert.ok(await darkPlugins.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-market-dark-760');await page.setViewportSize({width:1440,height:1000});await closePluginsPage(page);
     const toolCallAt=report.calls.length;

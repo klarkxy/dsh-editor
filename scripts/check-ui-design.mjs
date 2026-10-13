@@ -169,7 +169,6 @@ check('motion, forced-color and circle fallbacks are present', () => {
     '.models-credential-dot', '.preset-badge', '.cards-badge',
     '.activity-dots i', '.panel-activity-dots i',
     '.activity-shimmer:not(:where(', '.activity-shimmer i',
-    '.assistant-launcher:not(.capability-note)',
     '.history-commit-dot', '.image-preview-close',
     '.chat-step-status', '.chat-step-error-dot',
   ]) assert(roundRule.includes(selector), selector)

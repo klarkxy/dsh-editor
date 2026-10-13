@@ -86,7 +86,11 @@ describe('on-demand reference lookup', () => {
     expect(dialog).not.toMatch(/'file\.(write|create)'|'patch\.complete'|'fim\.complete'/)
     expect(dialog).toContain('active = false; controller.abort()')
     expect(root).toContain('onOpenReference={openDocument}')
-    expect(root).toContain('onPinReference={setPinnedPath}')
+    // 4.1: pinning still routes through setPinnedPath, and now also opens the
+    // aux rail on the 资料 tab (shell-rewrite-spec §2 切换来源 2).
+    expect(root).toContain('onPinReference')
+    expect(root).toContain('setPinnedPath(target)')
+    expect(root).toContain('workbench.pinReference()')
     expect(editor).toContain('handleRef.current?.selectParagraph?.(target ?? undefined)')
     expect(editor).toContain('handleRef.current?.isTargetCurrent(target)')
   })

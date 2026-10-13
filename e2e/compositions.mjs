@@ -7,6 +7,7 @@ import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
 import { DESKTOP_PACKAGE_NAMES, desktopComposition, configureProfile } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
@@ -332,12 +333,12 @@ try {
 
  const panelColors=[];
  for(const theme of ['light','dark']){
-   if(theme==='dark')await page.locator(S.chromeThemeToggle).click();
+   if(theme==='dark')await toggleTheme(page);
    await openSettings('通用设置');panelColors.push(await page.locator(S.settingsDialog).evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
    plugins=await openPluginsPage(page);await openWebSearchSettings(plugins);await page.screenshot({path:resolve(output,'web-search-settings-'+theme+'.png')});await closePluginsPage(page);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await page.locator(S.chromeThemeToggle).click();evidence.checks.push('light/dark settings and native web-search configuration');
+ await toggleTheme(page);evidence.checks.push('light/dark settings and native web-search configuration');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator(S.chatRail).waitFor();evidence.checks.push('optional Chat mounts');
  await page.reload();await page.locator(S.shell).waitFor();await dismissNativeOnboarding(page);if(await page.locator(S.proofreadOpen).count()||await page.locator(S.zhihuOpen).count())throw new Error('removed desktop launcher returned after reload');

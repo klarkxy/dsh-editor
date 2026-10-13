@@ -6,6 +6,7 @@ import { mkdir, writeFile, readFile, appendFile, readdir } from 'node:fs/promise
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
 import { nativePluginRpc, openPluginManager, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
+import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -278,15 +279,17 @@ try {
   await page.getByRole('button',{name:'收起右侧边栏',exact:true}).click()
   // Explicit close button follows the native document panel's accessible controls.
   report.panelButtons = await page.locator(S.officialResourcePanelButton).evaluateAll(nodes=>nodes.map(node=>({label:node.getAttribute('aria-label'),title:node.title,text:node.textContent})))
-  await page.locator(S.themeToggle).click()
+  await toggleTheme(page)
   await page.waitForFunction(() => document.body.hasAttribute('data-ds-dark-theme'))
   await page.locator(S.treePath('preview.pdf')).dblclick()
   await waitForPdfPaint(page)
   await page.screenshot({path:resolve(output,'preview-dark.png')})
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(860,720))
   await page.waitForFunction(()=>innerWidth<=860)
+  // 860px: the aux rail re-hosts into the right-side Drawer; the official
+  // panel keeps rendering inside it (its own 收起右侧边栏 button stays).
+  await page.locator(S.dshDrawer).waitFor({timeout:30000})
   await page.getByRole('button',{name:'收起右侧边栏',exact:true}).waitFor()
-  await page.waitForFunction(sel => !document.querySelector(sel), S.shellAssistantOverlay)
   assert(await page.locator(S.officialResourcePanel).evaluate(panel => {const box=panel.getBoundingClientRect(); return panel.contains(document.elementFromPoint(box.right-20,box.top+30))}))
   await page.screenshot({path:resolve(output,'preview-narrow.png')})
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1440,900))
