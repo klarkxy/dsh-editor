@@ -5,7 +5,7 @@ import { defaultCreateDirectory } from '../project-files.ts'
 import { t } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.tsx'
-import { FileContextMenu } from './sidebar.tsx'
+import { FileContextMenu } from '../app/files/file-menu.tsx'
 import { ChapterOpsLayer } from './chapter-ops.tsx'
 import { chapterMenuModel, snapshotFromHandle } from '../model/chapter-ops.ts'
 import type { useRootFileActions } from './root-file-actions.ts'
@@ -28,7 +28,7 @@ export function RootTreeCreateDialog({ actions }: { actions: FileActions }) {
 }
 
 export function RootFileDialogs({ actions, ctx, fileSession, files, editorHandleRef,
-  path, chapterFiles, pinnedPath, setPinnedPath, exportDocuments }: {
+  path, chapterFiles, pinnedPath, setPinnedPath, exportDocuments, openDocument }: {
   actions: FileActions
   ctx: ShellContext
   fileSession: SessionFace
@@ -39,6 +39,7 @@ export function RootFileDialogs({ actions, ctx, fileSession, files, editorHandle
   pinnedPath: string | null
   setPinnedPath: Dispatch<SetStateAction<string | null>>
   exportDocuments(directory?: string): Promise<void>
+  openDocument(path: string): void
 }) {
   const {
     fileMenu, setFileMenu, chapterOps, setChapterOps, clipboard, deleteTarget, renameTarget,
@@ -46,7 +47,7 @@ export function RootFileDialogs({ actions, ctx, fileSession, files, editorHandle
     restoreTreeTriggerIfMenuDismissed, closeFileMenu, beginChapterSplit, beginChapterMerge,
     applyChapterOps, parentOf, openTreeCreate, setClipboardFromMenu, pasteFromMenu, openRenameDialog,
     yieldMenuToDialog, requestDeleteEntry, closeRenameDialog, renameManaged, closeRenameEntryDialog,
-    submitRenameEntry, closeDeleteConfirm, confirmDeleteEntry,
+    submitRenameEntry, closeDeleteConfirm, confirmDeleteEntry, openImagePreview,
   } = actions
   const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, chapterFiles) : null
   return <>
@@ -67,6 +68,8 @@ export function RootFileDialogs({ actions, ctx, fileSession, files, editorHandle
       activePath: path,
     }))}
     onExportDirectory={() => { void exportDocuments(fileMenu.kind === 'directory' ? fileMenu.path : undefined) }}
+    onOpen={() => { openDocument(fileMenu.path); setFileMenu(null) }}
+    onPreview={() => { void openImagePreview(fileMenu.path); setFileMenu(null) }}
     onCopy={() => setClipboardFromMenu('copy', fileMenu.kind, fileMenu.path)}
     onCut={() => setClipboardFromMenu('cut', fileMenu.kind, fileMenu.path)}
     onPaste={() => void pasteFromMenu()}

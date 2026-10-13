@@ -1,8 +1,6 @@
-import { Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Box, Button, Callout, Flex, ScrollArea, Text, TextField } from '@radix-ui/themes'
-import { Select } from './select.tsx'
-import { ActivityDots, isImeEvent } from './ui/index.ts'
-import { m, useChromeMotion } from './ui/motion.ts'
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { ActivityDots, Button, Input, isImeEvent, Notice, Select } from '../ui/index.ts'
+import { m, useChromeMotion } from '../ui/motion.ts'
 import { errorMessage, LatestRequestGate, safeRpcCall, searchSkippedText, type ShellContext } from './shared.ts'
 import {
   planReplace,
@@ -226,93 +224,89 @@ function SearchPanel(props: {
   }
   return (
     <m.section className="search-panel" aria-label={t('search.title')} {...panelMotion}>
-      <Box className="search-panel-body" px="3" pb="2">
-        <Flex direction="column" gap="2">
-          <Flex asChild align="center" gap="2" wrap="wrap">
-            <form
-              role="search"
-              onSubmit={(event: FormEvent) => { event.preventDefault(); void search(query, scope) }}>
-              {props.onQueryChange ? null : <TextField.Root
-                ref={input}
-                size="2"
-                style={{ flex: 1, minWidth: 0 }}
-                value={query}
-                disabled={replaceBusy}
-                maxLength={120}
-                placeholder={t('search.placeholder')}
-                aria-label={t('search.aria')}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
-                onKeyDown={blockImeEnter} />}
-              <Button
-                type="submit"
-                size="2"
-                variant="soft"
-                color="gray"
-                disabled={busy || !query.trim() || props.composing}
-                aria-label={t('search.start')}>
-                {searchBusy ? <ActivityDots /> : t('search.go')}
-              </Button>
-              <Select
-                value={scope}
-                aria-label={t('search.scope')}
-                options={[
-                  { value: 'project', label: t('search.wholeWork') },
-                  { value: 'directory', label: t('search.manuscriptOnly') },
-                ]}
-                disabled={replaceBusy}
-                onChange={(value: string) => { setScope(value === 'directory' ? 'directory' : 'project'); clearResults() }} />
-            </form>
-          </Flex>
-          <Button type="button" size="2" variant="ghost" color="gray" className="search-replace-toggle" aria-expanded={replaceOpen}
+      <div className="search-panel-body">
+        <div className="search-panel-stack">
+          <form
+            className="search-form"
+            role="search"
+            onSubmit={(event: FormEvent) => { event.preventDefault(); void search(query, scope) }}>
+            {props.onQueryChange ? null : <Input
+              ref={input}
+              size="sm"
+              className="search-query-input"
+              value={query}
+              disabled={replaceBusy}
+              maxLength={120}
+              placeholder={t('search.placeholder')}
+              aria-label={t('search.aria')}
+              onChange={(value: string) => setQuery(value)}
+              onKeyDown={blockImeEnter} />}
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
+              disabled={busy || !query.trim() || props.composing}
+              aria-label={t('search.start')}>
+              {searchBusy ? <ActivityDots /> : t('search.go')}
+            </Button>
+            <Select
+              size="sm"
+              value={scope}
+              aria-label={t('search.scope')}
+              options={[
+                { value: 'project', label: t('search.wholeWork') },
+                { value: 'directory', label: t('search.manuscriptOnly') },
+              ]}
+              disabled={replaceBusy}
+              onValueChange={(value: string) => { setScope(value === 'directory' ? 'directory' : 'project'); clearResults() }} />
+          </form>
+          <Button type="button" size="sm" variant="ghost" className="search-replace-toggle" aria-expanded={replaceOpen}
             disabled={replaceBusy}
             onClick={() => { setReplaceOpen((value) => !value); setConfirming(null) }}>
             {replaceOpen ? t('search.hideReplace') : t('search.showReplace')}
           </Button>
-          {replaceOpen ? <Flex asChild align="center" gap="2">
-            <form
-              className="search-replace"
-              onSubmit={(event: FormEvent) => { event.preventDefault(); openReplaceConfirm() }}>
-              <TextField.Root
-                size="2"
-                style={{ flex: 1, minWidth: 0 }}
-                value={replacement}
-                disabled={replaceBusy}
-                placeholder={t('search.replacePlaceholder')}
-                aria-label={t('search.replaceAria')}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => { setReplacement(event.target.value); setConfirming(null) }}
-                onKeyDown={blockImeEnter} />
-              <Button type="submit" size="2" variant="soft" disabled={busy || !replaceEnabled}>
-                {t('search.replaceAll')}
-              </Button>
-            </form>
-          </Flex> : null}
-          {currentConfirmation && replacePlan && replaceSummary ? <Box
+          {replaceOpen ? <form
+            className="search-replace"
+            onSubmit={(event: FormEvent) => { event.preventDefault(); openReplaceConfirm() }}>
+            <Input
+              size="sm"
+              className="search-replace-input"
+              value={replacement}
+              disabled={replaceBusy}
+              placeholder={t('search.replacePlaceholder')}
+              aria-label={t('search.replaceAria')}
+              onChange={(value: string) => { setReplacement(value); setConfirming(null) }}
+              onKeyDown={blockImeEnter} />
+            <Button type="submit" size="sm" variant="secondary" disabled={busy || !replaceEnabled}>
+              {t('search.replaceAll')}
+            </Button>
+          </form> : null}
+          {currentConfirmation && replacePlan && replaceSummary ? <div
             className="search-replace-confirm"
             role="region"
             aria-label={t('search.replaceConfirmTitle')}>
-            <Text as="p" className="search-summary" size="1" color="gray" role="status">
+            <p className="search-summary" role="status">
               {t('search.replaceSummary', { files: replaceSummary.files, count: replaceSummary.occurrences })}
-            </Text>
-            {replaceSummary.skipped ? <Text as="p" size="1" color="gray">
+            </p>
+            {replaceSummary.skipped ? <p className="search-note">
               {t('search.replaceOverlap', { count: replaceSummary.skipped })}
-            </Text> : null}
-            {replaceSummary.staleFiles ? <Text as="p" className="warning" size="1" color="red">
+            </p> : null}
+            {replaceSummary.staleFiles ? <Notice tone="danger" className="search-replace-notice">
               {t('search.replaceStale', { count: replaceSummary.staleFiles })}
-            </Text> : null}
-            {replaceSummary.perFile.length ? <Box asChild>
+            </Notice> : null}
+            {replaceSummary.perFile.length ?
               <ul className="search-results">
                 {replaceSummary.perFile.map((file) => <li key={file.path} className="search-file">
-                  <Text size="1">
+                  <span className="search-note">
                     {t('search.replaceFileHits', { path: file.path, count: file.count })}
-                  </Text>
+                  </span>
                 </li>)}
-              </ul>
-            </Box> : null}
-            <Flex className="search-replace-actions" align="center" gap="2" mt="2">
+              </ul> : null}
+            <div className="search-replace-actions">
               <Button
                 type="button"
-                size="2"
-                variant="solid"
+                size="sm"
+                variant="primary"
                 disabled={busy || !replacePlan.files.length}
                 onClick={() => void runReplace(replacePlan)}>
                 {busy ? <Fragment>
@@ -320,28 +314,28 @@ function SearchPanel(props: {
                   {t('search.replaceConfirm')}
                 </Fragment> : t('search.replaceConfirm')}
               </Button>
-              <Button type="button" size="2" variant="soft" color="gray" disabled={busy} onClick={() => setConfirming(null)}>
+              <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => setConfirming(null)}>
                 {t('common.cancel')}
               </Button>
-            </Flex>
-          </Box> : null}
-          {outcome ? <Box className="search-replace-result" role="status">
-            <Text as="p" size="2">
+            </div>
+          </div> : null}
+          {outcome ? <div className="search-replace-result" role="status">
+            <p className="search-replace-result-text">
               {t('search.replaceResult', { files: outcome.files, count: outcome.occurrences })}
-            </Text>
-            {outcome.stale.length ? <Text as="p" className="warning" size="1" color="red">
+            </p>
+            {outcome.stale.length ? <Notice tone="danger" className="search-replace-notice">
               {t('search.replaceStale', { count: outcome.stale.length })}
-            </Text> : null}
-            {outcome.changed.length ? <Text as="p" className="warning" size="1" color="red">
+            </Notice> : null}
+            {outcome.changed.length ? <Notice tone="danger" className="search-replace-notice">
               {t('search.replaceChanged', { count: outcome.changed.length })}
-            </Text> : null}
-            {outcome.failed.length ? <Text as="p" className="warning" size="1" color="red">
+            </Notice> : null}
+            {outcome.failed.length ? <Notice tone="danger" className="search-replace-notice">
               {t('search.replaceFailed', { count: outcome.failed.length })}
-            </Text> : null}
+            </Notice> : null}
             <Button
               type="button"
-              size="2"
-              variant="soft"
+              size="sm"
+              variant="secondary"
               disabled={busy}
               onClick={() => void search(query, scope, { keepOutcome: true })}>
               {busy ? <Fragment>
@@ -349,56 +343,52 @@ function SearchPanel(props: {
                 {t('search.replaceAgain')}
               </Fragment> : t('search.replaceAgain')}
             </Button>
-          </Box> : null}
-          {acceptedResult ? <Flex className="search-summary" wrap="wrap" gap="2" role="status">
-            <Text size="1" color="gray">
+          </div> : null}
+          {acceptedResult ? <div className="search-summary" role="status">
+            <span>
               {t('search.summary', { hits: acceptedResult.results.length, files: acceptedResult.scannedFiles })}
-            </Text>
-            {acceptedResult.truncated ? <Text size="1" weight="bold">
+            </span>
+            {acceptedResult.truncated ? <strong>
               {t('search.capped')}
-            </Text> : null}
-            {acceptedResult.skipped ? <Text size="1" color="gray">
+            </strong> : null}
+            {acceptedResult.skipped ? <span>
               {searchSkippedText(acceptedResult.skipped)}
-            </Text> : null}
-          </Flex> : null}
-          {props.navigationBlocked && acceptedResult?.results.length ? <Callout.Root className="warning" color="red" size="1" role="alert">
-            <Callout.Text>
-              {t('search.saveBeforeJump')}
-            </Callout.Text>
-          </Callout.Root> : null}
-          {note ? <Text as="p" size="1" color="gray" role={noteAlert ? 'alert' : 'status'}>
+            </span> : null}
+          </div> : null}
+          {props.navigationBlocked && acceptedResult?.results.length ? <Notice tone="danger" className="search-replace-notice">
+            {t('search.saveBeforeJump')}
+          </Notice> : null}
+          {note ? <p className="search-note" role={noteAlert ? 'alert' : 'status'}>
             {note}
-          </Text> : null}
-          {grouped.length ? <ScrollArea type="auto" scrollbars="vertical" className="search-results-scroll">
-            <Box asChild>
-              <ol className="search-results">
-                {grouped.map((group) => <li key={group.path} className="search-file">
-                  <Flex className="search-file-head" justify="between" gap="2">
-                    <Text size="1" color="gray" truncate title={group.path}>
-                      {group.path}
-                    </Text>
-                    <Text size="1" color="gray">
-                      {group.hits.length}
-                    </Text>
-                  </Flex>
-                  <ul>
-                    {group.hits.map((hit, index) => <li key={`${hit.path}:${hit.start}:${index}`}>
-                      <button
-                        type="button"
-                        className="search-hit"
-                        disabled={props.navigationBlocked}
-                        onClick={() => props.onOpen(hit)}>
-                        <span className="search-hit-line">{t('search.hitLineOnly', { line: hit.line })}</span>
-                        <span className="search-hit-excerpt">{hit.excerpt}</span>
-                      </button>
-                    </li>)}
-                  </ul>
-                </li>)}
-              </ol>
-            </Box>
-          </ScrollArea> : null}
-        </Flex>
-      </Box>
+          </p> : null}
+          {grouped.length ? <div className="search-results-scroll">
+            <ol className="search-results">
+              {grouped.map((group) => <li key={group.path} className="search-file">
+                <div className="search-file-head">
+                  <span className="search-file-path" title={group.path}>
+                    {group.path}
+                  </span>
+                  <span className="search-file-count">
+                    {group.hits.length}
+                  </span>
+                </div>
+                <ul>
+                  {group.hits.map((hit, index) => <li key={`${hit.path}:${hit.start}:${index}`}>
+                    <button
+                      type="button"
+                      className="search-hit"
+                      disabled={props.navigationBlocked}
+                      onClick={() => props.onOpen(hit)}>
+                      <span className="search-hit-line">{t('search.hitLineOnly', { line: hit.line })}</span>
+                      <span className="search-hit-excerpt">{hit.excerpt}</span>
+                    </button>
+                  </li>)}
+                </ul>
+              </li>)}
+            </ol>
+          </div> : null}
+        </div>
+      </div>
     </m.section>
   );
 }

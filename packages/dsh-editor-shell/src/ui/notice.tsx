@@ -19,9 +19,11 @@ export function Notice(props: {
   action?: ReactNode
   children?: ReactNode
   className?: string
+  /* 默认 danger/warning → alert、其余 → status；个别沿用旧语义的调用点可覆盖。 */
+  role?: 'alert' | 'status'
 }) {
   const tone = props.tone ?? 'info'
-  const role = tone === 'danger' || tone === 'warning' ? 'alert' : 'status'
+  const role = props.role ?? (tone === 'danger' || tone === 'warning' ? 'alert' : 'status')
   return (
     <div className={cx('dsh-notice', props.className)} data-tone={tone} role={role}>
       <span className="dsh-notice__icon">{ICONS[tone]}</span>

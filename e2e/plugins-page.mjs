@@ -117,7 +117,7 @@ try {
     if (!await page.locator(S.tree).isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
     await page.locator(S.treeEmpty).waitFor()
     await page.locator(S.tree).click({button:'right',position:{x:20,y:80}})
-    await page.getByRole('menuitem', {name:'新建文件',exact:true}).click()
+    await page.getByRole('menuitem', {name:'新建文档',exact:true}).click()
     const file = page.getByRole('dialog', { name: '新建文件', exact: true })
     await file.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('插件页面验收.md')
     await file.getByRole('button', { name: '创建', exact: true }).click()
@@ -177,7 +177,8 @@ try {
       globalThis.__pluginTestCursor=view.state.selection.main.anchor
     })
     for (const label of [/主题（当前深色）/, /主题（当前浅色）/]) {
-      await page.getByRole('button', {name:label}).click()
+      // 4.1: theme switching moved off the topbar into a palette command.
+      await toggleTheme(page)
       await page.waitForFunction(label => document.documentElement.getAttribute('data-theme') === label, label.source.includes('浅色') ? 'dark' : 'light')
       assert(await editor.evaluate(el => el === globalThis.__pluginTestEditor))
       assert.deepEqual(await paper.evaluate(el => {
@@ -293,7 +294,9 @@ try {
     report.checks.push('sidebar document tool buttons removed; overview and proofread panels open via Ctrl+Shift+O / Ctrl+Shift+L in both themes')
     report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
-    await chat.fill('')
+    // 4.1: the composer lives in the aux rail's partner tab and may be adopted
+    // into a hidden pane host here; skip clearing when it is not interactable.
+    if (await chat.isVisible()) await chat.fill('')
     await editor.press('Control+s')
     await page.waitForTimeout(500)
   }

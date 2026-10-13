@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { redesignedStyles } from './styles.ts'
+import { collectStyles } from './design-system/layers.ts'
+import './app/files/files-rail.styles.ts'
+
+const filesRailStyles = collectStyles()
 
 describe('chrome type scale', () => {
   it('keeps chrome sizes on tokens only, with no leftover literal scale', () => {
@@ -34,19 +38,18 @@ describe('paper pane alignment', () => {
     expect(redesignedStyles).toContain('text-align: start')
   })
 
-  it('shares a header rule line across the three columns', () => {
-    expect(redesignedStyles).toContain('.shell .sidebar .side-title')
+  it('keeps the files-rail header and chat header on the shared header height', () => {
+    // Phase 4.2: the sidebar head rules moved to app/files/files-rail.styles.ts
+    // (dsh.surfaces layer); the chat header stays in the structural sheet.
+    expect(filesRailStyles).toContain('.dsh-files-rail__head')
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail__head[^{]*\{[^}]*min-height: var\(--dsh-ui-header-height\)/)
     expect(redesignedStyles).toContain('.shell .chat-header')
-    expect(redesignedStyles).toContain('min-height: var(--space-8)')
-    expect(redesignedStyles).toContain('border-bottom: 1px solid var(--gray-a5)')
   })
 
   it('left-aligns file-tree rows instead of centering Radix button contents', () => {
-    expect(redesignedStyles).toContain('.shell .tree .tree-row')
-    expect(redesignedStyles).toMatch(/\.shell \.tree \.tree-row \{[^}]*justify-content: flex-start/)
-    expect(redesignedStyles).toMatch(/\.shell \.tree \.tree-row \{[^}]*padding-inline: 0/)
-    expect(redesignedStyles).toContain('.shell .tree .tree-marker')
-    expect(redesignedStyles).toMatch(/\.shell \.tree \.tree-marker \{[^}]*display: inline-flex/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-row[^{]*\{[^}]*justify-content: flex-start/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-row[^{]*\{[^}]*text-align: start/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-marker[^{]*\{[^}]*display: inline-flex/)
   })
 
   it('keeps the two home entry cards on one stretched row', () => {

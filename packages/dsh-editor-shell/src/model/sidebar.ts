@@ -1,1 +1,1 @@
-export type FileMenuKind = 'file' | 'directory'
+export type { FileMenuKind } from '../project-files.ts'

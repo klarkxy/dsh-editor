@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { DSW_MAP, DSW_PENDING } from './compat.ts'
 import { DSW_VARS } from './dsw-vars.ts'
 import { designSystemStyles } from './styles.ts'
+import { collectStyles } from './layers.ts'
+import '../app/files/files-rail.styles.ts'
+
+/* Phase 4.2: tree row/name/empty rules moved to app/files/files-rail.styles.ts. */
+const filesRailStyles = collectStyles()
 
 describe('原稿 web design contracts', () => {
   it('checks token parity, contrast, isolation and scope lifecycle', () => {
@@ -18,17 +23,18 @@ describe('原稿 web design contracts', () => {
     if (DSW_PENDING.length) console.log(`DSW pending (unclassified): ${DSW_PENDING.length}\n${DSW_PENDING.join('\n')}`)
   })
   it('keeps one manuscript-tree entry on one line', () => {
-    expect(designSystemStyles).toMatch(/\.shell \.tree \.tree-name[^{]*\{[^}]*white-space: nowrap/)
-    expect(designSystemStyles).toMatch(/\.shell \.tree \.tree-name[^{]*\{[^}]*text-overflow: ellipsis/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-row[^{]*\{[^}]*white-space: nowrap/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-name[^{]*\{[^}]*overflow: hidden/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-name[^{]*\{[^}]*text-overflow: ellipsis/)
     // The two-line clamp stretched the row and broke the tree's rhythm; the full name
     // stays available through the row's title attribute instead.
-    expect(designSystemStyles).not.toMatch(/tree-name[^{]*\{[^}]*-webkit-line-clamp/)
-    expect(designSystemStyles).not.toMatch(/\.shell \.tree \.tree-row[^{]*\{[^}]*align-items: flex-start/)
+    expect(filesRailStyles + designSystemStyles).not.toMatch(/tree-name[^{]*\{[^}]*-webkit-line-clamp/)
+    expect(filesRailStyles).not.toMatch(/\.dsh-files-rail \.tree \.tree-row[^{]*\{[^}]*align-items: flex-start/)
   })
   it('keeps the empty-tree message on the column inset', () => {
     // It rendered with zero inline padding, so the sentence started at the panel edge
     // while the title above it started 12px further in.
-    expect(designSystemStyles).toMatch(/\.shell \.tree \.tree-empty[^{]*\{[^}]*padding-inline: var\(--dsh-ui-space-3\)/)
+    expect(filesRailStyles).toMatch(/\.dsh-files-rail \.tree \.tree-empty[^{]*\{[^}]*padding-inline: var\(--dsh-ui-space-3\)/)
   })
   it('keeps the installed-plugin anchor, its ghost controls and the narrow nav reachable', () => {
     // The install highlight lasts a token-derived beat the client reads back, so

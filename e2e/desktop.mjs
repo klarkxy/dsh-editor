@@ -97,7 +97,8 @@ async function openTreeFile(page, directory, file) {
     await dismissAssistant.waitFor({ state: 'hidden', timeout: 10_000 })
   }
   const folder = page.locator(S.treeRow, { hasText: directory }).first()
-  const fileRow = page.locator(S.treeRow, { hasText: file }).first()
+  // 4.2: display names hide .md/.txt; data-tree-path keeps the full path.
+  const fileRow = page.locator(S.treePath(`${directory}/${file}`)).first()
   await folder.waitFor({ state: 'visible', timeout: 20_000 })
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {

@@ -320,9 +320,10 @@ try {
  await page.locator(S.editorArea).waitFor({state:'visible',timeout:10000});
  await editor.focus();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState,{hasText:'已保存'}).waitFor();
  const savedTxt=await readFile(resolve(targetWorkspace,'资料','笔记.txt'),'utf8');if(!savedTxt.includes('组合普通文本验证。'))throw new Error('plain txt save missing');
- const chapterRow=page.locator(S.treeRowMain).filter({hasText:'001.md'}).first();
+ // 4.2: row text hides the .md extension; data-tree-path keeps the full path.
+ const chapterRow=page.locator(S.treePath('正文/001.md')).first();
  if(!(await chapterRow.count())){const bodyDir=page.locator(S.treeRow).filter({hasText:'正文'}).first();await bodyDir.click();}
- await page.locator(S.treeRowMain).filter({hasText:'001.md'}).first().click();
+ await page.locator(S.treePath('正文/001.md')).first().click();
  await page.locator(S.paperPath,{hasText:'正文/001.md'}).waitFor({timeout:20000});
  const sessionId=calls.map(x=>x.body?.payload?.sessionId).filter(Boolean).at(-1);if(!sessionId)throw new Error('no real session captured');
  const found=await rpc('/manuscript','search.text',{sessionId,query:'组合保存验证'});if(!JSON.stringify(found).includes('组合保存验证'))throw new Error('search did not find saved markdown');

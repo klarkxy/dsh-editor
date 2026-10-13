@@ -48,7 +48,7 @@ let dshChild
 // Selectors passed into page.evaluate/waitForFunction callbacks (S is not
 // visible inside the page context).
 const DOM = {
-  SHELL: S.shell, HOME_STAGE: S.homeStage, TREE: S.tree, SIDEBAR: S.sidebar,
+  SHELL: S.shell, HOME_STAGE: S.homeStage, TREE: S.tree, SIDEBAR: S.filesRail,
   EDITOR_AREA: S.editorArea, PAPER_EDITOR: S.paperEditor, PAPER_GHOST: S.paperGhost,
   PAPER_SAVE: S.paperSaveState, PAPER_WORDS: S.paperWordcount, PAPER_PATH: S.paperPath,
   CHAT: S.chatRail, COMPOSER: S.composerInputInner, THEME: S.themeToggle,
@@ -560,7 +560,7 @@ try {
   await composer.fill('不要丢失的草稿')
   await page.keyboard.press('Control+Alt+b')
   // 4.1: the files pane host is adopted into a hidden park node, not unmounted.
-  await page.locator(S.sidebar).waitFor({ state: 'hidden' })
+  await page.locator(S.filesRail).waitFor({ state: 'hidden' })
   await page.keyboard.press('Control+Alt+f')
   await page.locator(S.shellFocus).waitFor({ state: 'visible' })
   await page.screenshot({ path: resolve(output, '07-focus-mode.png') })
@@ -569,7 +569,7 @@ try {
   // focus mode off and then asking the test to find a hidden sidebar.
   await page.keyboard.press('Control+Alt+b')
   await page.locator(S.shellFocus).waitFor({ state: 'detached' })
-  await page.locator(S.sidebar).waitFor({ state: 'visible' })
+  await page.locator(S.filesRail).waitFor({ state: 'visible' })
   if (await composer.inputValue() !== '不要丢失的草稿') failures.push('composer draft lost across focus toggle')
   await composer.fill('')
 

@@ -15,6 +15,7 @@ export type MenuItemProps = {
   tone?: 'default' | 'danger'
   disabled?: boolean
   checked?: boolean
+  title?: string
   onSelect?(): void
   children?: ReactNode
 }
@@ -70,6 +71,7 @@ export function MenuItem(props: MenuItemProps) {
       className="dsh-menu__item"
       data-tone={props.tone === 'danger' ? 'danger' : undefined}
       disabled={props.disabled}
+      title={props.title}
       onSelect={props.onSelect}
     >
       {itemMarkup(props)}
@@ -131,6 +133,7 @@ export function ContextMenuItem(props: MenuItemProps) {
       className="dsh-menu__item"
       data-tone={props.tone === 'danger' ? 'danger' : undefined}
       disabled={props.disabled}
+      title={props.title}
       onSelect={props.onSelect}
     >
       {itemMarkup(props)}

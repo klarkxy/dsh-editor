@@ -8,13 +8,15 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
-import { Button, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
-import { isManuscriptChapterPath } from '../project-files.ts'
-import { canPinPath } from '../pinned-pane-view.ts'
+import {
+  displayTreeFileName,
+  fileIconKind,
+  isPreviewableResourcePath,
+  type FileMenuKind,
+} from '../../project-files.ts'
 import {
   canMoveTreeEntry,
   errorMessage,
-  isImagePath,
   safeRpcCall,
   treeDropDirectory,
   treeMoveTargetDir,
@@ -22,13 +24,19 @@ import {
   treeRevealDirectories,
   type ShellContext,
   type TreeEntry,
-} from './shared.ts'
-import { visibleManuscriptEntries } from './sidebar-chrome.ts'
-import { t } from '../i18n/index.ts'
-import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from './icons.tsx'
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/index.ts'
-
-import type { FileMenuKind } from '../model/sidebar.ts'
+} from '../../client/shared.ts'
+import { visibleManuscriptEntries } from '../../client/sidebar-chrome.ts'
+import { t } from '../../i18n/index.ts'
+import { Notice } from '../../ui/index.ts'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FileIcon,
+  FileTextIcon,
+  FolderIcon,
+  ImageIcon,
+  PlusIcon,
+} from '../../ui/icons.tsx'
 
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
 
@@ -70,6 +78,15 @@ function treeSkeleton(): ReactNode {
   );
 }
 
+function TreeFileIcon(props: { path: string }) {
+  switch (fileIconKind(props.path)) {
+    case 'image': return <ImageIcon size="sm" />
+    case 'pdf':
+    case 'office': return <FileTextIcon size="sm" />
+    default: return <FileIcon size="sm" />
+  }
+}
+
 
 const TREE_DRAG_TYPE = 'application/x-dsh-tree'
 
@@ -89,15 +106,13 @@ function parseTreeDrag(raw: string | undefined): TreeDragEntry | null {
 }
 
 type RowProps = {
-  ctx: ShellContext
-  sessionId: string
   path: string
   level: number
   loaded: Record<string, TreeEntry[]>
   active: string
-  revision: number
   openPaths: Set<string>
   highlightPath?: string
+  menuTargetPath?: string
   tabbablePath: string
   onRowFocus(path: string): void
   onOpen(path: string): void
@@ -116,7 +131,7 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, highlightPath, tabbablePath, onRowFocus, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory, dropHover, onTreeDragStart, onTreeDragOver, onTreeDrop, onTreeDragEnd } = props
+  const { path, level, loaded, active, openPaths, highlightPath, menuTargetPath, tabbablePath, onRowFocus, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory, dropHover, onTreeDragStart, onTreeDragOver, onTreeDrop, onTreeDragEnd } = props
   /* loaded 在写入时已按 visibleTreeEntries 排序并过滤,这里直接渲染。 */
   const visible = loaded[path] ?? []
   return (
@@ -127,19 +142,13 @@ function TreeRows(props: RowProps): ReactNode {
           const isOpen = openPaths.has(child)
           return (
             <div key={child} className="tree-directory-wrap">
-              <Flex
+              <div
                 className="tree-directory-row"
-                align="center"
-                gap="1"
-                width="100%"
-                minWidth="0"
-                pr="2"
-                style={{ paddingLeft: treeRowPadding(level) }}>
-                <Button
+                style={{ paddingLeft: treeRowPadding(level) }}
+                data-menu-target={menuTargetPath === child ? 'true' : undefined}>
+                <button
                   className="tree-row"
                   type="button"
-                  variant="ghost"
-                  color="gray"
                   role="treeitem"
                   aria-level={level + 1}
                   tabIndex={child === tabbablePath ? 0 : -1}
@@ -165,38 +174,32 @@ function TreeRows(props: RowProps): ReactNode {
                     onFileMenu('directory', child, treeMenuPosition(event.currentTarget), event.currentTarget)
                   }}>
                   <span className="tree-marker" aria-hidden="true">
-                    {isOpen ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                    {isOpen ? <ChevronDownIcon size="sm" /> : <ChevronRightIcon size="sm" />}
                   </span>
-                  <FolderIcon size={14} />
-                  <Text as="span" size="2" className="tree-name" title={item.name}>
+                  <span className="tree-icon" aria-hidden="true"><FolderIcon size="sm" /></span>
+                  <span className="tree-name" title={item.name}>
                     {item.name}
-                  </Text>
-                </Button>
-                <Flex className="tree-row-actions" align="center" gap="1" flexShrink="0">
-                  <IconButton
+                  </span>
+                </button>
+                <span className="tree-row-actions">
+                  <button
                     className="tree-directory-add"
                     type="button"
-                    size="1"
-                    variant="ghost"
-                    color="gray"
                     title={t('sidebar.newFileIn', { name: item.name })}
                     aria-label={t('sidebar.newFileIn', { name: item.name })}
                     onClick={() => onCreateFile(child)}>
-                    <PlusIcon size={12} />
-                  </IconButton>
-                  <IconButton
+                    <PlusIcon size="sm" />
+                  </button>
+                  <button
                     className="tree-directory-add"
                     type="button"
-                    size="1"
-                    variant="ghost"
-                    color="gray"
                     title={t('sidebar.newFolderIn', { name: item.name })}
                     aria-label={t('sidebar.newFolderIn', { name: item.name })}
                     onClick={() => onCreateFolder(child)}>
-                    <FolderIcon size={12} />
-                  </IconButton>
-                </Flex>
-              </Flex>
+                    <FolderIcon size="sm" />
+                  </button>
+                </span>
+              </div>
               {isOpen ? <div role="group" className="tree-children">
                 <TreeRows {...props} path={child} level={level + 1} />
               </div> : null}
@@ -205,21 +208,20 @@ function TreeRows(props: RowProps): ReactNode {
         }
         return (
           <div key={child} className="tree-file-row" style={{ paddingLeft: treeRowPadding(level) }}>
-            <Button
+            <button
               className="tree-row tree-main"
               type="button"
-              variant="ghost"
-              color="gray"
               role="treeitem"
               aria-level={level + 1}
               tabIndex={child === tabbablePath ? 0 : -1}
               data-tree-path={child}
               aria-current={active === child || highlightPath === child ? 'page' : undefined}
+              data-menu-target={menuTargetPath === child ? 'true' : undefined}
               data-tree-depth={level}
               draggable={true}
               data-drop={dropHover === child ? 'true' : undefined}
               onFocus={() => onRowFocus(child)}
-              onClick={() => ((isImagePath(child) || /\.(?:pdf|docx?|pptx?|xlsx?|csv|tsv)$/i.test(child)) ? onPreviewImage(child) : onOpen(child))}
+              onClick={() => (isPreviewableResourcePath(child) ? onPreviewImage(child) : onOpen(child))}
               onDragStart={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDragStart({ kind: 'file', path: child }, event)}
               onDragOver={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDragOver(treeDropDirectory('file', child), child, event)}
               onDrop={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDrop(treeDropDirectory('file', child), event)}
@@ -234,11 +236,11 @@ function TreeRows(props: RowProps): ReactNode {
                 onFileMenu('file', child, treeMenuPosition(event.currentTarget), event.currentTarget)
               }}>
               <span className="tree-marker" aria-hidden="true" />
-              <FileIcon size={14} />
-              <Text as="span" size="2" className="tree-name" title={item.name}>
-                {item.name}
-              </Text>
-            </Button>
+              <span className="tree-icon" aria-hidden="true"><TreeFileIcon path={child} /></span>
+              <span className="tree-name" title={item.name}>
+                {displayTreeFileName(item.name)}
+              </span>
+            </button>
           </div>
         );
       })}
@@ -253,6 +255,8 @@ export function Tree(props: {
   expandPath: string
   revision: number
   highlightPath?: string
+  /* 右键菜单打开期间，目标行加 line-strong 内描边，与当前文档区分（spec §3）。 */
+  menuTargetPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
@@ -260,7 +264,7 @@ export function Tree(props: {
   onCreateFolder(directory: string): void
   onMove(source: TreeDragEntry, targetDir: string): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, onMove } = props
+  const { ctx, sessionId, active, expandPath, revision, highlightPath, menuTargetPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, onMove } = props
   const [dragSource, setDragSource] = useState<TreeDragEntry | null>(null)
   const [dropHover, setDropHover] = useState<string | null>(null)
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
@@ -421,194 +425,63 @@ export function Tree(props: {
   const tabbablePath = rowPaths.includes(focusedPath) ? focusedPath : fallbackTabbablePath
 
   return (
-    <Flex
-      asChild
-      direction="column"
-      flexGrow="1"
-      minHeight="72px"
-      overflow="auto"
-      px="0"
-      pb="4">
-      <nav
-        className="tree"
-        role="tree"
-        aria-label={t('sidebar.manuscriptTree')}
-        ref={treeNavRef}
-        data-drop={dropHover === '' ? 'true' : undefined}
-        onKeyDown={onTreeKeyDown}
-        onDragOver={(event: ReactDragEvent<HTMLElement>) => {
-          if (event.target !== event.currentTarget) return
-          onTreeDragOver('', '', event)
-        }}
-        onDrop={(event: ReactDragEvent<HTMLElement>) => {
-          if (event.target !== event.currentTarget) return
-          onTreeDrop('', event)
-        }}
-        onDragLeave={(event: ReactDragEvent<HTMLElement>) => {
-          const next = event.relatedTarget
-          if (next instanceof Node && event.currentTarget.contains(next)) return
-          setDropHover(null)
-        }}
-        onContextMenu={(event: ReactMouseEvent<HTMLElement>) => {
-          // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
-          if (event.target === event.currentTarget) {
-            event.preventDefault()
-            onFileMenu('directory', '', { x: event.clientX, y: event.clientY }, event.currentTarget)
-          }
-        }}>
-        {rootEntries === undefined
-          ? (note ? null : treeSkeleton())
-          : rootEntries.length === 0
-            ? <Text as="p" className="tree-empty" size="2" color="gray">
-          {t('sidebar.treeEmpty')}
-        </Text>
-            : <TreeRows
-          ctx={ctx}
-          sessionId={sessionId}
-          path=""
-          level={0}
-          loaded={loaded}
-          active={active}
-          revision={revision}
-          openPaths={openPaths}
-          highlightPath={highlightPath}
-          tabbablePath={tabbablePath}
-          onRowFocus={setFocusedPath}
-          onOpen={onOpen}
-          onPreviewImage={onPreviewImage}
-          onFileMenu={onFileMenu}
-          onCreateFile={onCreateFile}
-          onCreateFolder={onCreateFolder}
-          onMove={onMove}
-          loadSubtree={loadSubtree}
-          toggleDirectory={toggleDirectory}
-          dropHover={dropHover}
-          onTreeDragStart={onTreeDragStart}
-          onTreeDragOver={onTreeDragOver}
-          onTreeDrop={onTreeDrop}
-          onTreeDragEnd={onTreeDragEnd} />}
-        <div hidden={!note} className="warning">
-          <Callout.Root color="red" size="1" role="alert">
-            <Callout.Text>
-              {note}
-            </Callout.Text>
-          </Callout.Root>
-        </div>
-      </nav>
-    </Flex>
-  );
-}
-
-export function FileContextMenu(props: {
-  kind: FileMenuKind
-  path: string
-  x: number
-  y: number
-  canPaste: boolean
-  onCreateFile(): void
-  onCreateFolder(): void
-  onExportDirectory(): void
-  onCopy(): void
-  onCut(): void
-  onPaste(): void
-  onRename(): void
-  onDelete(): void
-  onClose(): void
-  onSplit(): void
-  onMergePrevious(): void
-  onMergeNext(): void
-  canSplit: boolean
-  canMergePrevious: boolean
-  canMergeNext: boolean
-  splitDisabledTitle: string
-  mergePreviousDisabledTitle: string
-  mergeNextDisabledTitle: string
-  onPin(): void
-  onUnpin(): void
-  isPinned: boolean
-  onDismissFocus?(): void
-}) {
-  const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 220))
-  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 400))
-  return (
-    <div
-      style={{ position: 'fixed', left, top, width: 0, height: 0 }}
-      onContextMenu={(event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault()}>
-      <Menu
-        open={true}
-        onOpenChange={(open: boolean) => { if (!open) { props.onClose(); props.onDismissFocus?.() } }}>
-        <MenuTrigger className="sr-only" tabIndex={-1}>
-          {t('sidebar.fileActions')}
-        </MenuTrigger>
-        <MenuContent
-          className="file-context-menu"
-          align="start"
-          side="bottom"
-          sideOffset={0}
-          aria-label={t('sidebar.fileActions')}
-          onCloseAutoFocus={(event: Event) => {
-            event.preventDefault()
-            props.onDismissFocus?.()
-          }}>
-          <MenuItem role="menuitem" onSelect={() => props.onCreateFile()}>
-            {t('sidebar.newFile')}
-          </MenuItem>
-          <MenuItem role="menuitem" onSelect={() => props.onCreateFolder()}>
-            {t('sidebar.newFolder')}
-          </MenuItem>
-          {props.kind === 'directory' ? <MenuItem role="menuitem" onSelect={() => props.onExportDirectory()}>
-            {t('sidebar.exportDirectory')}
-          </MenuItem> : null}
-          <MenuSeparator className="file-context-menu-separator" aria-hidden="true" />
-          <MenuItem role="menuitem" onSelect={() => props.onCopy()}>
-            {t('common.copy')}
-          </MenuItem>
-          <MenuItem role="menuitem" onSelect={() => props.onCut()}>
-            {t('common.cut')}
-          </MenuItem>
-          <MenuItem
-            role="menuitem"
-            disabled={!props.canPaste}
-            onSelect={() => props.onPaste()}>
-            {t('common.paste')}
-          </MenuItem>
-          <MenuSeparator className="file-context-menu-separator" aria-hidden="true" />
-          <MenuItem role="menuitem" onSelect={() => props.onRename()}>
-            {t('common.rename')}
-          </MenuItem>
-          {props.kind === 'file' && isManuscriptChapterPath(props.path) ? <MenuSeparator className="file-context-menu-separator" aria-hidden="true" /> : null}
-          {props.kind === 'file' && isManuscriptChapterPath(props.path) ? <MenuItem
-            role="menuitem"
-            disabled={!props.canSplit}
-            title={props.canSplit ? undefined : props.splitDisabledTitle}
-            onSelect={() => props.onSplit()}>
-            {t('chapterOps.split')}
-          </MenuItem> : null}
-          {props.kind === 'file' && isManuscriptChapterPath(props.path) ? <MenuItem
-            role="menuitem"
-            disabled={!props.canMergePrevious}
-            title={props.canMergePrevious ? undefined : props.mergePreviousDisabledTitle}
-            onSelect={() => props.onMergePrevious()}>
-            {t('chapterOps.mergePrevious')}
-          </MenuItem> : null}
-          {props.kind === 'file' && isManuscriptChapterPath(props.path) ? <MenuItem
-            role="menuitem"
-            disabled={!props.canMergeNext}
-            title={props.canMergeNext ? undefined : props.mergeNextDisabledTitle}
-            onSelect={() => props.onMergeNext()}>
-            {t('chapterOps.mergeNext')}
-          </MenuItem> : null}
-          {props.kind === 'file' && canPinPath(props.path) && !props.isPinned ? <MenuItem role="menuitem" onSelect={() => props.onPin()}>
-            {t('pin.beside')}
-          </MenuItem> : null}
-          {props.kind === 'file' && props.isPinned ? <MenuItem role="menuitem" onSelect={() => props.onUnpin()}>
-            {t('pin.unpin')}
-          </MenuItem> : null}
-          <MenuItem role="menuitem" data-danger="true" onSelect={() => props.onDelete()}>
-            {t('common.delete')}
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    </div>
+    <nav
+      className="tree"
+      role="tree"
+      aria-label={t('sidebar.manuscriptTree')}
+      ref={treeNavRef}
+      data-drop={dropHover === '' ? 'true' : undefined}
+      onKeyDown={onTreeKeyDown}
+      onDragOver={(event: ReactDragEvent<HTMLElement>) => {
+        if (event.target !== event.currentTarget) return
+        onTreeDragOver('', '', event)
+      }}
+      onDrop={(event: ReactDragEvent<HTMLElement>) => {
+        if (event.target !== event.currentTarget) return
+        onTreeDrop('', event)
+      }}
+      onDragLeave={(event: ReactDragEvent<HTMLElement>) => {
+        const next = event.relatedTarget
+        if (next instanceof Node && event.currentTarget.contains(next)) return
+        setDropHover(null)
+      }}
+      onContextMenu={(event: ReactMouseEvent<HTMLElement>) => {
+        // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
+        if (event.target === event.currentTarget) {
+          event.preventDefault()
+          onFileMenu('directory', '', { x: event.clientX, y: event.clientY }, event.currentTarget)
+        }
+      }}>
+      {rootEntries === undefined
+        ? (note ? null : treeSkeleton())
+        : rootEntries.length === 0
+          ? <p className="tree-empty">
+              {t('sidebar.treeEmpty')}
+            </p>
+          : <TreeRows
+              path=""
+              level={0}
+              loaded={loaded}
+              active={active}
+              openPaths={openPaths}
+              highlightPath={highlightPath}
+              menuTargetPath={menuTargetPath}
+              tabbablePath={tabbablePath}
+              onRowFocus={setFocusedPath}
+              onOpen={onOpen}
+              onPreviewImage={onPreviewImage}
+              onFileMenu={onFileMenu}
+              onCreateFile={onCreateFile}
+              onCreateFolder={onCreateFolder}
+              onMove={onMove}
+              loadSubtree={loadSubtree}
+              toggleDirectory={toggleDirectory}
+              dropHover={dropHover}
+              onTreeDragStart={onTreeDragStart}
+              onTreeDragOver={onTreeDragOver}
+              onTreeDrop={onTreeDrop}
+              onTreeDragEnd={onTreeDragEnd} />}
+      {note ? <Notice tone="danger" className="tree-notice">{note}</Notice> : null}
+    </nav>
   );
 }

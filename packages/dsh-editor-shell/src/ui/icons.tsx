@@ -63,6 +63,11 @@ export const FileIcon = make(<>
   <path d="M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
   <path d="M13.5 3.5v4h4" />
 </>)
+export const FileTextIcon = make(<>
+  <path d="M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
+  <path d="M13.5 3.5v4h4" />
+  <path d="M9 12h6M9 15.5h6" />
+</>)
 export const PlusIcon = make(<path d="M12 5v14M5 12h14" />)
 export const SearchIcon = make(<>
   <circle cx="11" cy="11" r="6.5" />

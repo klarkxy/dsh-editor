@@ -18,8 +18,9 @@ import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextRe
 import type { WritingSettingsSlots } from '../writing-settings.tsx'
 import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
-import { intlLocale, t } from '../i18n/index.ts'
+import { t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'
+import { compareDocumentPaths } from '../model/natural-order.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
 
@@ -112,13 +113,13 @@ export type RevealRequest = {
   nonce: number
 }
 
-/** 普通目录树排序：每一层都是文件夹在前，各自按文件名排序（中文环境、数字感知）。 */
+/** 普通目录树排序：每一层都是文件夹在前，各自按文件名自然排序（spec §3）。 */
 export function orderTreeEntries<T extends { name: string; type: 'file' | 'directory' | 'other' }>(entries: readonly T[]): T[] {
   return [...entries].sort((left, right) => {
     const leftDirectory = left.type === 'directory' ? 0 : 1
     const rightDirectory = right.type === 'directory' ? 0 : 1
     if (leftDirectory !== rightDirectory) return leftDirectory - rightDirectory
-    return left.name.localeCompare(right.name, intlLocale(), { numeric: true, sensitivity: 'base' })
+    return compareDocumentPaths(left.name, right.name)
   })
 }
 
@@ -384,12 +385,8 @@ export function supportedWorkspaceTextPaths(files: readonly string[]): string[] 
   return files.filter((path) => /\.(?:md|txt)$/i.test(path) && !path.split('/').some((part) => part.startsWith('.')))
 }
 
-const IMAGE_PATH_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)$/i
-
-/** Tree rows with an image extension open the lightbox preview instead of the text editor. */
-export function isImagePath(path: string): boolean {
-  return IMAGE_PATH_PATTERN.test(path)
-}
+/* isImagePath 已上移到 project-files.ts（与文件类型分类同源）。 */
+export { isImagePath } from '../project-files.ts'
 
 export function relocationFailureMessage(cleanupFailed: boolean): string {
   return cleanupFailed ? t('error.relocationCleanupFailed') : t('error.relocationKept')

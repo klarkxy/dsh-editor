@@ -162,44 +162,16 @@ export const componentStyles = [
   r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
   r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
-  // Neutral navigation: location is not a primary action.
-  r(['.shell .sidebar'], `background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
-  r(['.shell .sidebar .side-title'], 'min-height: var(--dsh-ui-header-height); border-bottom: 0;'),
-  r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text);'),
+  // Neutral navigation: location is not a primary action. File rail styles
+  // (sidebar head, tree rows, search panel) live in app/files/files-rail.styles.ts.
   // Home recent-work rows stack a title, a path and a timestamp, so they keep the
   // wrapping block. File-tree rows do not: one entry is one line, and the full name
   // stays reachable through the row's title attribute.
   r(['.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal;'),
-  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-control-xs); padding: 0 var(--dsh-ui-space-2); gap: var(--dsh-ui-space-2); border-radius: var(--dsh-ui-radius-xs); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
-  // Row icons are siblings of the name inside the row button; the hover actions
-  // sit in `.tree-row-actions` next to the row, not inside it.
-  r(['.shell .tree .tree-row svg'], 'color: var(--dsh-ui-muted); flex-shrink: 0;'),
-  r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
-  // The empty-tree message carried no inset of its own and sat flush against the panel
-  // edge, under the search field that keeps the same content inset as the title.
-  r(['.shell .tree .tree-empty'], 'padding-inline: var(--dsh-ui-space-3);'),
-  r(['.shell .tree .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: none;'),
   r(['.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
-  // The current file keeps the accent-tinted selected fill; the medium weight is
-  // the non-colour cue now that the 3px accent bar is gone.
-  r(['.shell .tree .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); font-weight: var(--dsh-ui-weight-medium); box-shadow: none;'),
   r(['.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: inset 3px 0 0 var(--dsh-ui-accent);'),
-  r(['.shell .tree .tree-row::before'], 'display: none;'),
-  r(['.shell .tree .tree-row[data-drop="true"]'], 'background: var(--dsh-ui-accent-soft); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-accent);'),
-  r(['.shell .tree-row-actions'], 'opacity: 1;'),
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
-  r(['.search-panel', '.side-search'], 'background: transparent; color: var(--dsh-ui-text);'),
-  r(['.search-panel'], 'border-bottom: 0.5px solid var(--dsh-ui-line);'),
-  r(['.search-replace-toggle'], 'align-self: flex-start; padding-inline: 0; color: var(--dsh-ui-muted);'),
-  r(['.search-file-head'], 'min-width: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-2) 0;'),
-  r(['.search-hit'], 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: var(--dsh-ui-control-sm); padding: var(--dsh-ui-space-1) var(--dsh-ui-space-2); border: 0; border-radius: var(--dsh-ui-radius-sm); background: transparent; color: var(--dsh-ui-text); text-align: start; font: inherit; font-size: var(--dsh-ui-text-sm); line-height: var(--dsh-ui-leading-normal); cursor: pointer; overflow-wrap: anywhere;'),
-  r(['.search-hit:hover'], 'background: var(--dsh-ui-hover);'),
-  r(['.search-hit:disabled'], 'color: var(--dsh-ui-muted); cursor: not-allowed;'),
-  r(['.search-hit-line'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-variant-numeric: tabular-nums;'),
-  r(['.side-search .rt-TextFieldInput', '.side-search input'], 'min-height: var(--dsh-ui-control-sm);'),
-  r(['.search-results'], 'padding-inline: var(--dsh-ui-space-1);'),
-  r(['.search-results-scroll'], 'max-height: min(50dvh, 24rem);'),
   r(['.project-directory'], 'overflow-wrap: anywhere;'),
   r(['.settings-nav-section'], 'display: flex; flex-direction: column; width: 100%; gap: var(--dsh-ui-space-1);'),
   r(['.settings-nav-section + .settings-nav-section'], 'margin-top: var(--dsh-ui-space-6); padding-top: var(--dsh-ui-space-6); border-top: 0.5px solid var(--dsh-ui-line);'),
@@ -207,9 +179,6 @@ export const componentStyles = [
   // distinction is carried by size and colour instead of weight alone.
   r(['.settings-nav-group'], 'padding: var(--dsh-ui-space-3) var(--dsh-ui-space-3) var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-strong); letter-spacing: 0; margin-bottom: var(--dsh-ui-space-1);'),
   r(['.sidebar-tools'], 'gap: var(--dsh-ui-space-2);'),
-  // The sidebar title gives up width first: the create action and the overflow
-  // menu are controls, and the label is the one thing that can truncate.
-  r(['.side-new-document'], 'flex-shrink: 0; white-space: nowrap;'),
 
   // Writing stays in the existing CodeMirror instance. Do not override the
   // author's font, size, line-height, line width or typography preferences.

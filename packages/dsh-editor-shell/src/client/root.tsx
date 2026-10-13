@@ -8,6 +8,7 @@ import { useWorkbenchLayout } from '../app/shell/use-workbench-layout.ts'
 import { Workbench } from '../app/shell/workbench.tsx'
 import { Topbar } from '../app/shell/topbar.tsx'
 import { AuxRail, ReferencePanel } from '../app/shell/aux-rail.tsx'
+import { FilesRail } from '../app/files/files-rail.tsx'
 import { useSurface } from './plugin-surfaces.tsx'
 import { Button as DshButton, Notice } from '../ui/index.ts'
 import { ChatIcon } from '../ui/icons.tsx'
@@ -29,7 +30,7 @@ import { collectStyles, defineStyles } from '../design-system/layers.ts'
 import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { ShellErrorBoundary, useObservable } from './components.tsx'
-import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, SidebarTools } from './root-columns.tsx'
+import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarTools } from './root-columns.tsx'
 import { HomeScreen } from './root-home.tsx'
 import { CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
@@ -164,7 +165,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     chapterFiles, openDocument, setWorkbenchNote, setTreeRevision, setContentRevision,
     setTreeExpansionPath, saveEditorBeforeAction, openWorkspaceId })
   const {
-    createNote, openImagePreview, openFileMenu, beginChapterSplit,
+    createNote, fileMenu, openImagePreview, openFileMenu, beginChapterSplit,
     moveTreeEntry, onTreeCreateFile, onTreeCreateFolder, onEditorCreate,
   } = fileActions
   const workspaceActions = useRootWorkspaces({ ctx, workspaces, selectedWorkspace, currentWorkspace, session, fileSession,
@@ -577,7 +578,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     );
   }
 
-  const sidebarColumn = <SidebarColumn
+  const sidebarColumn = <FilesRail
       ctx={ctx}
       sessionId={fileSession.sessionId}
       searchOpen={searchOpen}
@@ -605,6 +606,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       workbenchNote={workbenchNote}
       expandPath={treeExpansionPath}
       highlightPath={highlightPath ?? undefined}
+      menuTargetPath={fileMenu?.path}
       onOpen={openDocument}
       onPreviewImage={openImagePreview}
       onFileMenu={openFileMenu}
@@ -788,7 +790,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         <RootFileDialogs
           actions={fileActions} ctx={ctx} fileSession={fileSession} files={files}
           editorHandleRef={editorHandleRef} path={path} chapterFiles={chapterFiles}
-          pinnedPath={pinnedPath} setPinnedPath={setPinnedPath} exportDocuments={exportDocuments} />
+          pinnedPath={pinnedPath} setPinnedPath={setPinnedPath} exportDocuments={exportDocuments}
+          openDocument={openDocument} />
         {renderCommandPalette()}
         {renderImportDialog()}
         <ExportPreviewDialog

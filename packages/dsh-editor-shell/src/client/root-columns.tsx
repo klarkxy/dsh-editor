@@ -1,23 +1,16 @@
-import { memo, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Box, Button, Callout, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
-import type { PanelSize } from 'react-resizable-panels'
+import { memo } from 'react'
+import { Box } from '@radix-ui/themes'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
-import { t, useLocale } from '../i18n/index.ts'
-import { isSuccessWorkbenchNote, type RevealRequest, type ShellContext } from './shared.ts'
+import { useLocale } from '../i18n/index.ts'
+import { type RevealRequest, type ShellContext } from './shared.ts'
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
 import { Editor } from './editor.tsx'
-import { CrossIcon, DotsIcon, PlusIcon, SearchIcon } from './icons.tsx'
-import { Tree } from './sidebar.tsx'
-import { SearchPanel } from './search-panel.tsx'
-import type { ReplaceOutcome, SearchHit, SearchScope } from '../model/search-panel.ts'
+import type { SearchHit } from '../model/search-panel.ts'
 import type { SettingsRenderSlot } from './settings.tsx'
-import { isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
-
-import { panelPixels, type FileMenuKind, type SidebarFileMenuProps } from '../model/root-columns.ts'
 
 /* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
    高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
@@ -35,31 +28,6 @@ export function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellCo
   );
 }
 
-export const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps & {
-  ctx: ShellContext
-  sessionId: string
-  active: string
-  expandPath: string
-  highlightPath?: string
-  revision: number
-}) {
-  return (
-    <Tree
-      ctx={props.ctx}
-      sessionId={props.sessionId}
-      active={props.active}
-      expandPath={props.expandPath}
-      highlightPath={props.highlightPath}
-      onOpen={props.onOpen}
-      onPreviewImage={props.onPreviewImage}
-      onFileMenu={props.onFileMenu}
-      onCreateFile={props.onCreateFile}
-      onCreateFolder={props.onCreateFolder}
-      onMove={props.onMove}
-      revision={props.revision} />
-  );
-})
-
 export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatContext: ShellToolSeatContext }) {
   return <div className="sidebar-tools">
     <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
@@ -67,194 +35,6 @@ export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatConte
     </div>
   </div>
 }
-
-export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
-  ctx: ShellContext
-  sessionId: string
-  searchOpen: boolean
-  searchQuery: string
-  onSearchQueryChange(value: string): void
-  searchScope: SearchScope
-  onSearchScopeChange(value: SearchScope): void
-  replaceOutcome: ReplaceOutcome | null
-  onReplaceOutcomeChange(identity: string, outcome: ReplaceOutcome | null): void
-  replaceBusy: boolean
-  onReplaceBusyChange(busy: boolean): void
-  onSearchRequestOpen(): void
-  onSearchRequestClose(): void
-  onOpenDocument(path: string, hit?: SearchHit): void
-  onSearchReplaced(sessionId: string, paths: string[]): void
-  activePath: string
-  activeDirty: boolean
-  fileRevision: number
-  historyOpen: boolean
-  snapshotBusy: boolean
-  onCommitSnapshot(): void
-  onOpenHistory(): void
-  createNote: string
-  workspaceWarning: string | undefined
-  workbenchNote: string
-  expandPath: string
-  highlightPath?: string
-}) {
-  /* Search draft and write lock live in Root so switching narrow/wide sidebars retains them. */
-  const [searchSubmitTick, setSearchSubmitTick] = useState(0)
-  const [composing, setComposing] = useState(false)
-  const searchInput = useRef<HTMLInputElement | null>(null)
-  const mountedDuringReplace = useRef(props.replaceBusy).current
-  useEffect(() => { if (props.searchOpen) searchInput.current?.focus() }, [props.searchOpen])
-  const closeSearch = () => { if (props.replaceBusy) return; props.onSearchQueryChange(''); props.onSearchRequestClose() }
-  const panelMotion = useChromeMotion('panel', 0, 'left')
-  useLocale()
-  return (
-    <m.aside
-      className="sidebar"
-      aria-label={t('workspace.filesAndNotes')}
-      {...panelMotion}>
-      <Flex className="side-title" align="center" justify="between" px="3">
-        <Text size="2" weight="medium" className="side-title-label" truncate>
-          {t('sidebar.manuscriptTree')}
-        </Text>
-        <Flex align="center" gap="1" flexShrink="0">
-        <Button variant="ghost" color="gray" size="1" className="side-new-document" onClick={() => props.onCreateFile('')}>
-          <PlusIcon size={14} />{t('sidebar.newDocument')}
-        </Button>
-        <Menu>
-          <DropdownMenu.Trigger>
-            <IconButton
-              className="side-version-trigger"
-              variant="ghost"
-              color="gray"
-              size="2"
-              title={t('sidebar.actions')}
-              aria-label={t('sidebar.actions')}>
-              <DotsIcon size={14} />
-            </IconButton>
-          </DropdownMenu.Trigger>
-          <MenuContent
-            className="file-context-menu"
-            align="end"
-            side="bottom"
-            aria-label={t('sidebar.actions')}>
-            <MenuItem onSelect={() => props.onCreateFolder('')}>
-              {t('sidebar.newFolder')}
-            </MenuItem>
-            <MenuItem
-              disabled={props.snapshotBusy}
-              title={t('workspace.commitTitle')}
-              onSelect={() => { props.onCommitSnapshot() }}>
-              {t('workspace.commit')}
-            </MenuItem>
-            <MenuItem
-              aria-current={props.historyOpen ? 'true' : undefined}
-              title={t('workspace.commitHistory')}
-              onSelect={() => props.onOpenHistory()}>
-              {t('common.history')}
-            </MenuItem>
-          </MenuContent>
-        </Menu>
-        </Flex>
-      </Flex>
-      <TextField.Root
-        ref={searchInput}
-        data-workspace-search=""
-        className="side-search"
-        type="search"
-        size="2"
-        mx="3"
-        mb="2"
-        value={props.searchQuery}
-        disabled={props.replaceBusy}
-        maxLength={120}
-        placeholder={t('search.placeholder')}
-        aria-label={t('search.aria')}
-        title={t('workspace.searchTitle')}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          if (props.replaceBusy) return
-          props.onSearchQueryChange(event.target.value)
-          if (event.target.value.trim()) props.onSearchRequestOpen()
-          else props.onSearchRequestClose()
-        }}
-        onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={() => setComposing(false)}
-        onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-          if (props.replaceBusy) return
-          if (event.key === 'Escape') { closeSearch(); return }
-          if (event.key !== 'Enter') return
-          if (isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
-            event.preventDefault()
-            return
-          }
-          props.onSearchRequestOpen()
-          setSearchSubmitTick((tick) => tick + 1)
-        }}>
-        <TextField.Slot>
-          <SearchIcon size={14} />
-        </TextField.Slot>
-        {props.searchOpen || props.searchQuery ? <TextField.Slot side="right">
-          <IconButton variant="ghost" color="gray" size="1" aria-label={t('search.close')} disabled={props.replaceBusy} onClick={closeSearch}>
-            <CrossIcon size={14} />
-          </IconButton>
-        </TextField.Slot> : null}
-      </TextField.Root>
-      {props.searchOpen && !(mountedDuringReplace && props.replaceBusy) ? <fieldset disabled={props.replaceBusy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}><SearchPanel
-        ctx={props.ctx}
-        sessionId={props.sessionId}
-        revision={props.fileRevision}
-        query={props.searchQuery}
-        onQueryChange={props.onSearchQueryChange}
-        scope={props.searchScope}
-        onScopeChange={props.onSearchScopeChange}
-        outcome={props.replaceOutcome}
-        onOutcomeChange={props.onReplaceOutcomeChange}
-        submitTick={searchSubmitTick}
-        composing={composing}
-        onReplaceBusyChange={props.onReplaceBusyChange}
-        /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
-        navigationBlocked={false}
-        activePath={props.activePath}
-        activeDirty={props.activeDirty}
-        onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
-        onReplaced={(paths) => props.onSearchReplaced(props.sessionId, paths)} /></fieldset> : null}
-      {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
-        <Callout.Text>
-          {props.createNote}
-        </Callout.Text>
-      </Callout.Root> : null}
-      {props.workspaceWarning ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="status">
-        <Callout.Text>
-          {props.workspaceWarning}
-        </Callout.Text>
-      </Callout.Root> : null}
-      {props.workbenchNote ? (
-        isSuccessWorkbenchNote(props.workbenchNote)
-          ? <Callout.Root className="side-status" size="1" mx="3" mb="2" role="status">
-            <Callout.Text>
-              {props.workbenchNote}
-            </Callout.Text>
-          </Callout.Root>
-          : <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
-            <Callout.Text>
-              {props.workbenchNote}
-            </Callout.Text>
-          </Callout.Root>
-      ) : null}
-      <TreeColumn
-        ctx={props.ctx}
-        sessionId={props.sessionId}
-        active={props.activePath}
-        expandPath={props.expandPath}
-        highlightPath={props.highlightPath}
-        onOpen={props.onOpen}
-        onPreviewImage={props.onPreviewImage}
-        onFileMenu={props.onFileMenu}
-        onCreateFile={props.onCreateFile}
-        onCreateFolder={props.onCreateFolder}
-        onMove={props.onMove}
-        revision={props.fileRevision} />
-    </m.aside>
-  );
-})
 
 export const EditorColumn = memo(function EditorColumn(props: {
   ctx: ShellContext

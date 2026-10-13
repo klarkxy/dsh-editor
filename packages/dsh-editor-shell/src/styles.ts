@@ -165,80 +165,8 @@ export const componentStyles = `
 .radix-themes .icon-button:hover { background: var(--gray-a3); color: var(--gray-12); }
 .radix-themes .icon-button:active { transform: scale(.9); }
 
-/* ── Sidebar / tree ─────────────────────────────────────── */
-.shell .sidebar {
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  border-right: 1px solid var(--gray-a5);
-  background: var(--gray-2);
-}
-.shell .sidebar .side-title {
-  min-height: var(--space-8);
-  border-bottom: 1px solid var(--gray-a5);
-  flex-shrink: 0;
-}
-.shell .sidebar .side-title-label { min-width: 0; }
-.shell .sidebar .side-search {
-  min-width: 0;
-}
-.shell .tree .tree-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-1);
-  width: auto;
-  min-width: 0;
-  min-height: var(--space-6);
-  text-align: left;
-  padding-inline: 0;
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--radius-2);
-  background: transparent;
-  color: var(--gray-11);
-}
-.shell .tree .tree-directory-row .tree-row { flex: 1 1 auto; }
-.shell .tree .tree-file-row .tree-row { width: 100%; }
-.shell .tree .tree-row::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 7px;
-  bottom: 7px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent-9);
-  opacity: 0;
-}
-.shell .tree .tree-row:hover { background: var(--gray-a3); }
-.shell .tree .tree-row[aria-current="page"] { background: var(--accent-a3); color: var(--accent-11); }
-.shell .tree .tree-row[aria-current="page"]::before { opacity: 1; }
-.shell .tree .tree-row[data-drop="true"] { background: var(--accent-a4); }
-.shell .tree[data-drop="true"] { box-shadow: inset 0 0 0 1px var(--accent-a8); }
-.shell .tree .tree-children { animation: shell-panel-enter 160ms ${EASE}; }
-.shell .tree .tree-marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  color: var(--gray-10);
-}
-.shell .tree .tree-row svg { flex: none; }
-.shell .tree-row-actions { flex: none; visibility: hidden; }
-.shell .tree-directory-row:hover .tree-row-actions,
-.shell .tree-directory-row:focus-within .tree-row-actions { visibility: visible; }
+/* Sidebar/tree/search rules moved to src/app/files/files-rail.styles.ts (§3). */
 ${historyStyles}
-.shell .search-results,
-.shell .search-results ul { margin: 0; padding: 0; list-style: none; }
-.shell .search-file { display: grid; gap: var(--space-1); }
 .shell .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; }
 .shell .pinned-header { border-bottom: 1px solid var(--gray-a5); }
 .shell .pinned-body { min-height: 0; flex: 1 1 auto; }
