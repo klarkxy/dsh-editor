@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planReplace } from '../search-replace.ts'
-import { acceptSearchResults, canReplaceAll, executeReplacePlan, groupSearchHits, paperRevealRange, replaceBlockedByDirty, replaceOutcomeForIdentity, scopeSearchResults, searchIdentity, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.ts'
+import { acceptSearchResults, canReplaceAll, executeReplacePlan, groupSearchHits, highlightExcerpt, mergeSearchLineHits, paperRevealRange, replaceBlockedByDirty, replaceOutcomeForIdentity, scopeSearchResults, searchIdentity, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.ts'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }
@@ -34,6 +34,41 @@ describe('search result grouping', () => {
     const range = paperRevealRange('正文/002.md', text, { start: text.indexOf('港口规则'), end: text.indexOf('港口规则') + 4 })
     expect(range.from).toBe(0)
     expect(range.to).toBe(4)
+  })
+})
+
+describe('line hit merging', () => {
+  it('merges hits on the same line of one file into a single counted row', () => {
+    const sameLine = { ...hit('正文/002.md', 10, '港口到港口'), line: 3 }
+    const later = { ...hit('正文/002.md', 16, '港口到港口'), line: 3 }
+    const otherLine = { ...hit('正文/002.md', 40, '码头'), line: 5 }
+    const otherFile = { ...hit('世界书/港口.md', 0, '港口'), line: 3 }
+    const merged = mergeSearchLineHits([sameLine, later, otherLine, otherFile])
+    expect(merged).toHaveLength(3)
+    expect(merged[0]!.hit.start).toBe(10)
+    expect(merged[0]!.count).toBe(2)
+    expect(merged[1]!.count).toBe(1)
+    expect(merged[2]!.hit.path).toBe('世界书/港口.md')
+  })
+
+  it('keeps one row when a line has a single hit', () => {
+    const merged = mergeSearchLineHits([{ ...hit('a.md', 0, 'x'), line: 7 }])
+    expect(merged).toEqual([{ hit: { ...hit('a.md', 0, 'x'), line: 7 }, count: 1 }])
+  })
+})
+
+describe('excerpt highlighting', () => {
+  it('marks every occurrence of the query, case-insensitively', () => {
+    expect(highlightExcerpt('Port 港 PORT', 'port')).toEqual([
+      { text: 'Port', match: true },
+      { text: ' 港 ', match: false },
+      { text: 'PORT', match: true },
+    ])
+  })
+
+  it('returns the excerpt plain when the query is absent or blank', () => {
+    expect(highlightExcerpt('港口', '码头')).toEqual([{ text: '港口', match: false }])
+    expect(highlightExcerpt('港口', '  ')).toEqual([{ text: '港口', match: false }])
   })
 })
 

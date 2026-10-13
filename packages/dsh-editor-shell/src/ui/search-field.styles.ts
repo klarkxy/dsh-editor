@@ -7,4 +7,5 @@ defineStyles('dsh.components', 'dsh-search-field', `
   background: transparent; color: var(--dsh-ui-muted); cursor: pointer; padding: 0;
 }
 .dsh-search-field__clear:hover { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); }
+.dsh-search-field .dsh-input__control::-webkit-search-cancel-button { display: none; }
 `)

@@ -219,6 +219,7 @@ ${historyStyles}
 .shell .panel-resizer {
   position: relative;
   z-index: 20;
+  flex: 0 0 12px;
   /* The grab strip is a control with an accessible name, so the hit area is
      sized like one even though the drawn rule stays hairline-thin. */
   width: 12px;
@@ -231,12 +232,12 @@ ${historyStyles}
   inset: 0 auto 0 50%;
   width: 1px;
   transform: translateX(-50%);
-  background: var(--gray-6);
+  background: var(--dsh-ui-line);
   pointer-events: none;
 }
 .shell .panel-resizer:hover::before,
 .shell .panel-resizer:focus-visible::before,
-.shell .panel-resizer[data-separator="active"]::before { background: var(--accent-9); }
+.shell .panel-resizer[data-separator="active"]::before { background: var(--dsh-ui-line-strong); }
 
 /* ── Editor / paper ─────────────────────────────────────── */
 .radix-themes .editor { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--paper-fill); position: relative; z-index: 1; --paper-pad-inline: 64px; --paper-pad-block: 36px; }

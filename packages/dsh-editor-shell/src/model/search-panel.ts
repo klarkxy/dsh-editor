@@ -98,6 +98,45 @@ export function groupSearchHits(hits: readonly SearchHit[]): GroupedSearchHits {
   return [...groups.entries()].map(([path, groupHits]) => ({ path, hits: groupHits }))
 }
 
+export type SearchLineHit = { hit: SearchHit; count: number }
+
+/** One result row per line: several matches on the same line share one excerpt. */
+export function mergeSearchLineHits(hits: readonly SearchHit[]): SearchLineHit[] {
+  const seen = new Map<string, SearchLineHit>()
+  const order: SearchLineHit[] = []
+  for (const hit of hits) {
+    const key = `${hit.path}${hit.line}`
+    const existing = seen.get(key)
+    if (existing) existing.count += 1
+    else {
+      const merged = { hit, count: 1 }
+      seen.set(key, merged)
+      order.push(merged)
+    }
+  }
+  return order
+}
+
+export type ExcerptSegment = { text: string; match: boolean }
+
+/** Splits an excerpt into highlighted and plain segments (case-insensitive). */
+export function highlightExcerpt(excerpt: string, query: string): ExcerptSegment[] {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return [{ text: excerpt, match: false }]
+  const haystack = excerpt.toLowerCase()
+  const segments: ExcerptSegment[] = []
+  let cursor = 0
+  for (;;) {
+    const at = haystack.indexOf(needle, cursor)
+    if (at < 0) break
+    if (at > cursor) segments.push({ text: excerpt.slice(cursor, at), match: false })
+    segments.push({ text: excerpt.slice(at, at + needle.length), match: true })
+    cursor = at + needle.length
+  }
+  if (cursor < excerpt.length) segments.push({ text: excerpt.slice(cursor), match: false })
+  return segments
+}
+
 export function paperRevealRange(path: string, text: string, hit: Pick<SearchHit, 'start' | 'end'>): { from: number; to: number } {
   const offset = worldbookPaperProjection(path, text).offset
   const from = Math.max(0, hit.start - offset)

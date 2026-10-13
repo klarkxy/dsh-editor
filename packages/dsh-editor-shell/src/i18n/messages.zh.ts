@@ -618,6 +618,7 @@ export const zh = {
   'search.capped': '结果较多，仅列出前一部分',
   'search.saveBeforeJump': '请先保存当前文档，再跳转搜索结果。',
   'search.hitLineOnly': '第 {line} 行',
+  'search.hitLineCount': '第 {line} 行 · {count} 处',
   'search.replacePlaceholder': '替换为',
   'search.replaceAria': '替换为',
   'search.replaceAll': '全部替换…',

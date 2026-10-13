@@ -620,6 +620,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'search.capped': 'Many results — only the first part is listed',
   'search.saveBeforeJump': 'Save the current document before jumping to a search hit.',
   'search.hitLineOnly': 'Line {line}',
+  'search.hitLineCount': 'Line {line} · {count} hits',
   'search.replacePlaceholder': 'Replace with',
   'search.replaceAria': 'Replacement text',
   'search.replaceAll': 'Replace all…',

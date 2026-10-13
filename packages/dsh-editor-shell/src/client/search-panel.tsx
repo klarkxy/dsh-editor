@@ -13,6 +13,8 @@ import {
   canReplaceAll,
   executeReplacePlan,
   groupSearchHits,
+  highlightExcerpt,
+  mergeSearchLineHits,
   replaceBlockedByDirty,
   scopeSearchResults,
   searchIdentity,
@@ -23,6 +25,7 @@ import {
   type SearchResponse,
   type SearchScope,
 } from '../model/search-panel.ts'
+import { displayTreeFileName } from '../project-files.ts'
 
 function SearchPanel(props: {
   ctx: ShellContext
@@ -366,21 +369,29 @@ function SearchPanel(props: {
               {grouped.map((group) => <li key={group.path} className="search-file">
                 <div className="search-file-head">
                   <span className="search-file-path" title={group.path}>
-                    {group.path}
+                    {displayTreeFileName(group.path)}
                   </span>
                   <span className="search-file-count">
                     {group.hits.length}
                   </span>
                 </div>
                 <ul>
-                  {group.hits.map((hit, index) => <li key={`${hit.path}:${hit.start}:${index}`}>
+                  {mergeSearchLineHits(group.hits).map(({ hit, count }) => <li key={`${hit.path}:${hit.line}:${hit.start}`}>
                     <button
                       type="button"
                       className="search-hit"
                       disabled={props.navigationBlocked}
                       onClick={() => props.onOpen(hit)}>
-                      <span className="search-hit-line">{t('search.hitLineOnly', { line: hit.line })}</span>
-                      <span className="search-hit-excerpt">{hit.excerpt}</span>
+                      <span className="search-hit-line">
+                        {count > 1
+                          ? t('search.hitLineCount', { line: hit.line, count })
+                          : t('search.hitLineOnly', { line: hit.line })}
+                      </span>
+                      <span className="search-hit-excerpt">
+                        {highlightExcerpt(hit.excerpt, query).map((segment, index) => segment.match
+                          ? <mark key={index}>{segment.text}</mark>
+                          : <Fragment key={index}>{segment.text}</Fragment>)}
+                      </span>
                     </button>
                   </li>)}
                 </ul>
