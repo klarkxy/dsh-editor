@@ -132,9 +132,10 @@ type WorkbenchLayout = {
   - 版心两侧各有一条 1px 的 `margin-rule` 竖线，用伪元素画，位置跟随版心宽度（`paperWidth` 为 narrow、medium、wide），不能遮挡选区和光标。
   - 标题下方有一条 `line` 天头线。
 - **页眉**（在稿纸内）：
-  - 文档标题居中，`font-display`，24px。标题取自现有的标题来源。
-  - 右侧是「⋯」稿纸菜单，即原标题栏菜单。
+  - 页眉不显示标题文字，只在右侧放「⋯」稿纸菜单，即原标题栏菜单。2026-10-13 复核时修订：正文自己的一级标题已经是章节名，页眉再显示标题会重复。
+  - live preview 中，一级标题（`#`）就是章节标题：`font-display` 26px，常规字重，居中，下方是天头细线。光标所在行仍然显示原文 `#`。二到四级标题保持无衬线、600 字重。
   - 页眉跟随稿纸滚动，不吸顶。
+- **段间空行**：live preview 中，夹在两个非空行之间的空行，高度收为 `paragraphSpacing`（em）；光标落在空行上时恢复正常行高。审计第 4 条的段距失控主要来自这些空行。文本本身不改。
 - **页脚**（在稿纸内）：
   - 吸附在可视区底部，居中，12px，`muted`。
   - 内容为「N 字」和保存状态（已保存、保存中、未保存、冲突），两段用间距分开，不用中点连接。
@@ -155,7 +156,7 @@ type WorkbenchLayout = {
   - 两个新偏好的 schema 与 `paragraphSpacing` 写法一致，都标 `.volatile()`，并在 `writingTypography` 中透传。
 - **分节符**：`centerSectionMarks` 开启时，live preview 把单独成段、且只含中文数字或「*」「＊」「※」「◇」的段落显示为居中的 `font-display` 18px，上下各留 1.5em。只改装饰，不改文本；光标进入该行时显示原文，与现在标题的 live preview 规则一致。实现在 `dsh-manuscript` 的 live preview 装饰里，需补 spec。
 - **`dsh-manuscript` 的外观**：`editor-chrome.tsx`、`client/index.tsx`、`selection-diff.tsx` 不能依赖 shell 私有组件。按钮改用 seats 的 `SeatButton`，颜色只用 `--s-*` 或 `--dsh-ui-*`。`themes.tsx` 中独立 Web 模式的 Radix `Theme` 暂时保留（第 6 阶段处理），只把颜色降级值改为来自 seats 的降级 token。
-- **`CENTER_OVERLAYS_SLOT`**：按 seats 合同，仍放在稿纸单元格里，覆盖稿纸。外框改为新组件，顶部加一条标题栏，内含插件提供的标题和一个关闭按钮。这次外框不改变插件内容。
+- **`CENTER_OVERLAYS_SLOT`**：按 seats 合同，仍放在稿纸单元格里，覆盖稿纸。外框只提供底色和边距，不加标题栏。插件自带标题和关闭按钮，宿主再加一条会重复。外框不改变插件内容。
 - **钉住对照**（`PinnedPane`）：移到辅助栏「资料」页。资料页顶部是一个 `SegmentedControl`，选项为「钉住」和「预览」，只在两者同时存在时显示。
 
 ## 5. 搭档栏（4.4，`app/assistant/`）
