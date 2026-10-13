@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Box } from '@radix-ui/themes'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
-import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
+import type { CompletionPreference, EditorCoreHandle, EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
 import { useLocale } from '../i18n/index.ts'
@@ -47,6 +47,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
   onPinReference?(path: string): void
   onCreate(): void
   onHandle(handle: EditorCoreHandle | null): void
+  onStatusChange?(status: EditorCoreStatus): void
   contentRevision: number
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
@@ -84,6 +85,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
         onPinReference={props.onPinReference}
         create={props.onCreate}
         onHandle={props.onHandle}
+        onStatusChange={props.onStatusChange}
         externalRevision={props.contentRevision}
         onDirtyChange={props.onDirtyChange}
         reveal={props.reveal}
@@ -106,6 +108,7 @@ export const ChatColumn = memo(function ChatColumn(props: {
   chatSession: SessionFace
   workspaceId?: WorkspaceId
   activePath?: string
+  getActiveDocTitle?(): string | undefined
   authorPreferences: string
   authorMemory: string
   renderSlot?: SettingsRenderSlot
@@ -125,6 +128,7 @@ export const ChatColumn = memo(function ChatColumn(props: {
         session={chatSession}
         workspaceId={props.workspaceId}
         activePath={props.activePath}
+        getActiveDocTitle={props.getActiveDocTitle}
         authorPreferences={props.authorPreferences}
         authorMemory={props.authorMemory}
         renderSlot={props.renderSlot}

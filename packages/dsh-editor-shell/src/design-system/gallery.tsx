@@ -150,6 +150,13 @@ export function GallerySectionButtons() {
           onClick={() => {}}
           items={[{ label: '续写', shortcut: 'Ctrl+J' }, { label: '头脑风暴' }]}
         />
+        <SplitButton
+          variant="secondary"
+          label="新对话"
+          menuLabel="对话模式"
+          onClick={() => {}}
+          items={[{ label: '续写' }, { label: '头脑风暴' }]}
+        />
       </GalleryRow>
       <GalleryRow>
         <IconButton label="新建章节"><PlusIcon /></IconButton>

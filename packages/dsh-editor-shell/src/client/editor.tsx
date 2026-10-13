@@ -98,6 +98,7 @@ export function Editor(props: {
   onSaved(): void
   reveal: RevealRequest | null
   onHandle?(handle: EditorCoreHandle | null): void
+  onStatusChange?(status: EditorCoreStatus): void
 }) {
   const {
     ctx,
@@ -116,6 +117,7 @@ export function Editor(props: {
     typography,
     reveal,
     onHandle: onHandleOut,
+    onStatusChange: onStatusChangeOut,
   } = props
 
   const [note, setNote] = useState('')
@@ -339,7 +341,8 @@ export function Editor(props: {
 
   const onStatusChange = useCallback((next: EditorCoreStatus) => {
     setStatus(next)
-  }, [])
+    onStatusChangeOut?.(next)
+  }, [onStatusChangeOut])
 
   const reloadDisk = useCallback(async () => {
     setReloadConfirm(false)
@@ -415,6 +418,7 @@ export function Editor(props: {
     const host = editorStackRef.current
     const paper = host?.querySelector<HTMLElement>('.paper-input')
     if (!host || !paper) return
+    const shellRoot = host.closest<HTMLElement>('.shell')
     let content: HTMLElement | null = null
     let raf = 0
     const measure = () => {
@@ -426,9 +430,15 @@ export function Editor(props: {
       const left = contentRect.left + (Number.parseFloat(styles.paddingLeft) || 0) - inputRect.left
       const right = contentRect.right - (Number.parseFloat(styles.paddingRight) || 0) - inputRect.left
       if (right <= left) return
+      /* 窄窗下文字几乎贴到稿纸边缘时，两根线看起来像边框缺陷：内容盒到
+         稿纸边缘的实测间隙不足 32px 就整对隐藏。 */
+      paper.toggleAttribute('data-rules-hidden', left < 32 || inputRect.width - right < 32)
       /* 1px 线内缘距内容盒 24px。 */
       paper.style.setProperty('--paper-rule-left', `${Math.round(left - 25)}px`)
       paper.style.setProperty('--paper-rule-right', `${Math.round(right + 24)}px`)
+      /* 「搭档」 launcher 等浮层要停在页脚上方：把页脚高度抬到 .shell 上。 */
+      const footer = host.querySelector<HTMLElement>('.editor-tools')
+      shellRoot?.style.setProperty('--paper-footer-h', `${Math.round(footer?.getBoundingClientRect().height ?? 0)}px`)
     }
     const schedule = () => { if (!raf) raf = globalThis.requestAnimationFrame(measure) }
     const observer = new ResizeObserver(schedule)
@@ -450,6 +460,7 @@ export function Editor(props: {
       mutations.disconnect()
       observer.disconnect()
       globalThis.removeEventListener('resize', schedule)
+      shellRoot?.style.removeProperty('--paper-footer-h')
       if (raf) globalThis.cancelAnimationFrame(raf)
     }
   }, [path, session.sessionId])

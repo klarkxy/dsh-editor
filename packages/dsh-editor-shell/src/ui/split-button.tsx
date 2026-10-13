@@ -12,10 +12,11 @@ export function SplitButton(props: {
   menuLabel: string
   items: SplitButtonItem[]
   disabled?: boolean
+  variant?: 'primary' | 'secondary'
   className?: string
 }) {
   return (
-    <span className={cx('dsh-split', props.className)}>
+    <span className={cx('dsh-split', props.className)} data-variant={props.variant ?? 'primary'}>
       <button type="button" className="dsh-split__main" onClick={props.onClick} disabled={props.disabled}>
         {props.label}
       </button>

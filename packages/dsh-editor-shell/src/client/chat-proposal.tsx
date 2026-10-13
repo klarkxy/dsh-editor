@@ -272,19 +272,16 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           <Text size="1" color="gray">
             {t('chat.proposalTarget')}
           </Text>
-          <Box asChild mt="1">
-            <ul>
-              {items.map((item) => <li
-                key={`${item.path}|${item.version}`}
-                aria-label={t('chat.proposalTargetPath', { path: item.path })}>
-                <Text size="1" color="gray">
-                  <code className="proposal-path">
-                    {item.path}
-                  </code>
-                </Text>
-              </li>)}
-            </ul>
-          </Box>
+          {items.map((item) => <Text
+            key={`${item.path}|${item.version}`}
+            as="p"
+            size="1"
+            color="gray"
+            className="proposal-path-line"
+            title={item.path}
+            aria-label={t('chat.proposalTargetPath', { path: item.path })}>
+            {item.path}
+          </Text>)}
         </section>
       </Box>
     );
@@ -298,30 +295,22 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           <Text size="1" color="gray">
             {t('chat.proposalBasis')}
           </Text>
-          <Box asChild mt="1">
-            <ul>
-              {items.map((item) => {
-                const label = item.label?.trim()
-                return (
-                  <li
-                    key={`${item.path}|${item.version}|${label ?? ''}`}
-                    aria-label={proposalBasisLine(item)}>
-                    <Text size="1" color="gray">
-                      {label ? <Fragment>
-                        <span>
-                          {label}
-                        </span>
-                        {' · '}
-                      </Fragment> : null}
-                      <code className="proposal-path">
-                        {item.path}
-                      </code>
-                    </Text>
-                  </li>
-                );
-              })}
-            </ul>
-          </Box>
+          {items.map((item) => {
+            const label = item.label?.trim()
+            return (
+              <Text
+                key={`${item.path}|${item.version}|${label ?? ''}`}
+                as="p"
+                size="1"
+                color="gray"
+                className="proposal-path-line"
+                title={item.path}
+                aria-label={proposalBasisLine(item)}>
+                {label ? `${label} · ` : null}
+                {item.path}
+              </Text>
+            );
+          })}
         </section>
       </Box>
     );
@@ -532,6 +521,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           className="proposal-dismiss"
           onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
           {t('chat.discardProposal')}
+        </Button> : null}
+        {state === 'ready' ? <Button
+          type="button"
+          variant="ghost"
+          color="gray"
+          className="proposal-defer"
+          onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
+          {t('chat.defer')}
         </Button> : null}
         {canRecheckNow ? <Button type="button" variant="solid" onClick={() => void check()}>
           {t('chat.recheck')}

@@ -91,6 +91,14 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   for (const theme of ['light', 'dark']) {
     await page.goto(`${origin}/?theme=${theme}`)
+    // §5 稍后处理：ready → deferred 卡仍带「重新核对」，点回 ready。
+    await page.getByRole('button', { name: '应用修改', exact: true }).waitFor()
+    await page.getByRole('button', { name: '稍后处理', exact: true }).click()
+    await page.locator('.proposal-card.deferred').waitFor()
+    assert.match(await page.locator('.proposal-card.deferred ' + S.proposalStatus).first().innerText(), /已留到稍后处理/)
+    await page.locator(S.proposalCardSummary).click()
+    await page.getByRole('button', { name: '重新核对', exact: true }).click()
+    await page.getByRole('button', { name: '应用修改', exact: true }).waitFor()
     await page.getByRole('button', { name: '应用修改', exact: true }).click()
     await page.locator(S.proposalCardApplied).waitFor()
     await page.locator(S.proposalCardSummary).click()

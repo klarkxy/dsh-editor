@@ -283,6 +283,8 @@ ${historyStyles}
 }
 .radix-themes .paper-input::before { left: var(--paper-rule-left, max(0px, calc(50% - var(--paper-measure, 100%) / 2))); }
 .radix-themes .paper-input::after { right: max(0px, calc(50% - var(--paper-measure, 100%) / 2)); left: var(--paper-rule-right, auto); }
+.radix-themes .paper-input[data-rules-hidden]::before,
+.radix-themes .paper-input[data-rules-hidden]::after { content: none; }
 .radix-themes .paper-input .cm-editor { width: 100%; height: 100%; background: transparent; }
 .radix-themes .paper-input .cm-scroller {
   align-items: flex-start !important;

@@ -12,4 +12,13 @@ defineStyles('dsh.components', 'dsh-split', `
 .dsh-split__trigger { width: var(--dsh-ui-control-sm); border-radius: 0 var(--dsh-ui-radius-md) var(--dsh-ui-radius-md) 0; border-left: 0.5px solid var(--dsh-ui-accent-border); }
 .dsh-split__main:hover:not(:disabled), .dsh-split__trigger:hover:not(:disabled) { background: var(--dsh-ui-brand-hover); }
 .dsh-split__main:disabled, .dsh-split__trigger:disabled { background: var(--dsh-ui-hover); color: var(--dsh-ui-muted); cursor: default; }
+.dsh-split[data-variant='secondary'] .dsh-split__main,
+.dsh-split[data-variant='secondary'] .dsh-split__trigger {
+  background: var(--dsh-ui-raised); color: var(--dsh-ui-text);
+  border-top: 0.5px solid var(--dsh-ui-line-strong); border-bottom: 0.5px solid var(--dsh-ui-line-strong);
+}
+.dsh-split[data-variant='secondary'] .dsh-split__main { border-left: 0.5px solid var(--dsh-ui-line-strong); }
+.dsh-split[data-variant='secondary'] .dsh-split__trigger { border-right: 0.5px solid var(--dsh-ui-line-strong); }
+.dsh-split[data-variant='secondary'] .dsh-split__main:hover:not(:disabled),
+.dsh-split[data-variant='secondary'] .dsh-split__trigger:hover:not(:disabled) { background: var(--dsh-ui-hover); }
 `)

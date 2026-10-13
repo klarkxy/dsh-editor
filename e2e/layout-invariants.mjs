@@ -167,6 +167,8 @@ async function measure(page) {
     } : null
     const cm = rect(document.querySelector('.cm-content'))
     const launcher = rect(document.querySelector(SEL.launcher))
+    const paperInput = document.querySelector('.paper-input')
+    const footer = rect(document.querySelector('.editor-tools'))
     const topbarOverflow = topbar
       ? [...topbar.querySelectorAll('*')].some((el) => {
           const r = el.getBoundingClientRect()
@@ -183,6 +185,8 @@ async function measure(page) {
       composer,
       cm,
       launcher,
+      footer,
+      rulesHidden: paperInput ? paperInput.hasAttribute('data-rules-hidden') : null,
       topbarOverflow,
       scrollWidth: document.documentElement.scrollWidth,
       scrollLeft: document.documentElement.scrollLeft || document.body?.scrollLeft || 0,
@@ -247,6 +251,17 @@ function assertProbe(label, m) {
     if (m.topbar && m.launcher.top < m.topbar.bottom - 0.5) {
       fail(`launcher top ${m.launcher.top.toFixed(1)} intersects topbar bottom ${m.topbar.bottom.toFixed(1)}`)
     }
+    if (m.footer
+      && m.launcher.left < m.footer.right - 0.5 && m.launcher.right > m.footer.left + 0.5
+      && m.launcher.top < m.footer.bottom - 0.5 && m.launcher.bottom > m.footer.top + 0.5) {
+      fail(`launcher ${JSON.stringify(m.launcher)} intersects paper footer ${JSON.stringify(m.footer)}`)
+    }
+  }
+
+  // §4 版心线:有页边距的宽度画出两根线;390 贴边时两根都隐藏。
+  if (m.rulesHidden !== null) {
+    if (m.vw >= 760 && m.rulesHidden) fail(`margin rules hidden at ${m.vw}px (gap should be >= 32px)`)
+    if (m.vw < 760 && !m.rulesHidden) fail(`margin rules drawn at ${m.vw}px but content gap is < 32px`)
   }
 
   if (m.topbarOverflow) fail('topbar element overflows viewport horizontally')
@@ -528,6 +543,24 @@ try {
     if (userRows !== 0) failures.push('partner-empty: suggestion click produced a user row (sent)')
   }
 
+  // §5 send affordance: filled draft → enabled filled-accent button.
+  const sendState = await page.evaluate(() => {
+    const btn = document.querySelector('aside.chat .composer-actions .send')
+    if (!btn) return null
+    const probe = document.createElement('div')
+    probe.style.backgroundColor = 'var(--dsh-ui-brand)'
+    probe.style.display = 'none'
+    document.body.appendChild(probe)
+    const accent = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return { disabled: btn.disabled, bg: getComputedStyle(btn).backgroundColor, accent }
+  })
+  if (!sendState) failures.push('partner-send: .send button missing')
+  else {
+    if (sendState.disabled) failures.push('partner-send: disabled while a filled draft is submittable')
+    if (sendState.bg !== sendState.accent) failures.push(`partner-send: bg ${sendState.bg} != accent ${sendState.accent}`)
+  }
+
   // C17: with a draft, 新对话 must prompt; cancel keeps place and draft.
   const newChat = page.locator(`${S.chatRail} button.dsh-split__main`)
   await newChat.click()
@@ -542,6 +575,9 @@ try {
     note('partner', `C17 cancel keeps draft (${keptDraft.length} chars) on '${titleAfter}'`)
     // Clear the draft again for downstream steps.
     await page.locator(S.composerInputInner).first().fill('').catch(() => undefined)
+    await page.waitForTimeout(300)
+    const sendAfterClear = await page.evaluate(() => document.querySelector('aside.chat .composer-actions .send')?.disabled)
+    if (sendAfterClear !== true) failures.push('partner-send: should be disabled once the composer is empty')
   } else {
     failures.push('C17: leaving with a draft did not show the discard-draft confirm')
   }

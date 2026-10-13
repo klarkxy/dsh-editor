@@ -137,6 +137,7 @@ export function PartnerHeader(props: {
       <span className="dsh-partner__actions">
         <SplitButton
           className="dsh-partner__new"
+          variant="secondary"
           label={t('chat.newConversation')}
           menuLabel={t('chat.newConversationMode')}
           items={items}

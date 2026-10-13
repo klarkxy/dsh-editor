@@ -236,7 +236,7 @@ export const componentStyles = [
   r(['button.rt-BaseButton.send:hover:not(:disabled):not([disabled])', '.composer-actions .send:hover:not(:disabled):not([disabled])'], 'background: var(--dsh-ui-brand-hover); transform: scale(1.05);'),
   // Disabled send overrides with transparent
   r(['button.rt-BaseButton.send:disabled', 'button.rt-BaseButton.send[disabled]', '.composer-actions .send:disabled', '.composer-actions .send[disabled]'], 'background: transparent; color: var(--dsh-ui-muted); opacity: 1; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); transform: none; cursor: not-allowed;'),
-  r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); box-shadow: none; transition: none;'),
+  r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-raised); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); transition: none;'),
 
   // Review and approvals remain visually distinct from routine tool logs.
   /* §5：提案/回执/冲突/过期卡统一为扁平 raised + line-strong，无侧边色条。 */
@@ -244,6 +244,7 @@ export const componentStyles = [
   r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-md); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text); display: block; margin-bottom: var(--dsh-ui-space-3);'),
   r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-4); margin-top: var(--dsh-ui-space-4); border-top: 0.5px solid var(--dsh-ui-line);'),
   r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
+  r(['.proposal-path-line'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted); margin: var(--dsh-ui-space-1) 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'),
   r(['.proposal-conflict'], 'background: var(--dsh-ui-raised); color: var(--dsh-ui-text); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
 

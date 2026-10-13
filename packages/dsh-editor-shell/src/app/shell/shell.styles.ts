@@ -108,8 +108,9 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 }
 
 /* 启动按钮：稿纸右下角。 */
-.dsh-launcher { position: absolute; right: var(--dsh-ui-space-4); bottom: var(--dsh-ui-space-4); z-index: var(--dsh-ui-z-sticky); }
-.dsh-launcher-note { position: absolute; right: var(--dsh-ui-space-4); bottom: var(--dsh-ui-space-4); z-index: var(--dsh-ui-z-sticky); max-width: 22rem; }
+/* bottom 让开稿纸页脚：--paper-footer-h 由 editor.tsx 量出（无文档时为 0）。 */
+.dsh-launcher { position: absolute; right: var(--dsh-ui-space-4); bottom: calc(var(--paper-footer-h, 0px) + var(--dsh-ui-space-3)); z-index: var(--dsh-ui-z-sticky); }
+.dsh-launcher-note { position: absolute; right: var(--dsh-ui-space-4); bottom: calc(var(--paper-footer-h, 0px) + var(--dsh-ui-space-3)); z-index: var(--dsh-ui-z-sticky); max-width: 22rem; }
 
 /* 窄窗抽屉里的栏内容铺满。 */
 .dsh-drawer__body .dsh-pane { height: 100%; }

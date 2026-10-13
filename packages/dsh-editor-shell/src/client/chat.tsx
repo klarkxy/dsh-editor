@@ -115,7 +115,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, authorPreferences, authorMemory, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -520,7 +520,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
         outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}
         empty={showEmptyHistory ? <PartnerEmptyState
-          title={partnerSuggestionTitle(activePath, workspace?.title)}
+          title={partnerSuggestionTitle(activePath, workspace?.title, getActiveDocTitle?.())}
           onPick={fillComposerDraft} /> : null}
         initGuide={showInitGuide ? <InitGuideCard
           state={initState as 'explore' | 'interview'} busy={initBusy}

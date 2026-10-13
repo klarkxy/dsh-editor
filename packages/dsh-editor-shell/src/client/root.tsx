@@ -41,8 +41,10 @@ import type { SettingsTab } from '../model/settings.ts'
 import { useTheme } from './theme.tsx'
 import { WindowControls } from './window-controls.tsx'
 import type { HostThemeSync } from '../model/theme.ts'
+import type { EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
+import { readableDocumentTitle } from '../wrap-up-view.ts'
 
 import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
@@ -162,6 +164,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     rollbackTarget, setRollbackTarget, commitSnapshot, requestRollback, confirmRollback,
   } = documents
   const chapterFiles = useMemo(() => sortChapterPaths(files), [files])
+  /* 建议里《X》的显示标题与概览一致（首个标题，退回文件名）；
+     惰性取：文档文本异步进编辑器；状态变化时重渲染重新解析。 */
+  const [, setDocStatus] = useState<EditorCoreStatus>('empty')
+  const getActiveDocTitle = useCallback(() => {
+    if (!path) return undefined
+    const handle = editorHandleRef.current
+    const text = handle?.getText() || handle?.getDocument()?.text || ''
+    return readableDocumentTitle(path, text)
+  }, [path, editorHandleRef])
   const fileActions = useRootFileActions({ ctx, fileSession, workspaceOpen, path, setPath, editorDirty, editorDirtyRef,
     chapterFiles, openDocument, setWorkbenchNote, setTreeRevision, setContentRevision,
     setTreeExpansionPath, saveEditorBeforeAction, openWorkspaceId })
@@ -643,6 +654,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 chatSession={chatSession}
                 workspaceId={currentWorkspace?.workspaceId}
                 activePath={path}
+                getActiveDocTitle={getActiveDocTitle}
                 authorPreferences={authorPreferences}
                 authorMemory={authorMemory}
                 renderSlot={renderSlot}
@@ -748,6 +760,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               }}
               onCreate={onEditorCreate}
               onHandle={onEditorHandle}
+              /* 文档异步载入完成后让壳重渲染一次，空态建议才能拿到显示标题。 */
+              onStatusChange={setDocStatus}
               contentRevision={contentRevision}
               onDirtyChange={setEditorDirty}
               reveal={reveal}

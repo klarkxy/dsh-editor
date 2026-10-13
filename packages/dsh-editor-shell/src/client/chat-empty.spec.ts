@@ -30,8 +30,10 @@ describe('empty conversation prompt', () => {
 })
 
 describe('partner empty-state suggestions', () => {
-  it('uses the document title without its extension', () => {
+  it('prefers the display title, then file name, then work name', () => {
+    expect(partnerSuggestionTitle('大纲.md', '未名作品', '全书大纲')).toBe('全书大纲')
     expect(partnerSuggestionTitle('正文/第一章.md', '未名作品')).toBe('第一章')
+    expect(partnerSuggestionTitle('大纲.md', '未名作品', '  ')).toBe('大纲')
     expect(partnerSuggestionTitle(undefined, '未名作品')).toBe('未名作品')
     expect(partnerSuggestionTitle(undefined, undefined)).toBe('稿件')
   })
