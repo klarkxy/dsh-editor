@@ -106,6 +106,7 @@
 - 迁移期间，旧的 Radix Themes CSS、`src/styles.ts`、`design-system/styles.ts` 等旧样式整体包进 `@layer legacy { … }`，新组件的层因此稳定优先。
   - 注意：层内的 `!important` 会反过来压过后面层的普通声明。迁移某个界面时，必须删掉影响该界面的旧 `!important` 规则。
 - 插件样式（各插件的 `injectStyles`）不进任何层。未分层样式优先于所有层，所以插件在自己的作用域内天然优先，`[data-dsh-plugin-surface]` 边界的测试保留。
+- 唯一的例外是宿主在插件边界上的命中恢复：官方 rightbar 面板根是 `pointer-events:none` 的未分层 normal 声明，分层规则永远压不过它。`app/shell/shell.styles.ts` 导出的 `pluginBoundaryStyles` 是宿主唯一允许未分层的规则表，追加在 `collectStyles()` 结果之后注入；它用类+属性选择器（0,2,0）压过插件的单类选择器（0,1,0），不使用 `!important`。新增同类规则必须写进同一份导出并说明压过哪条插件声明。
 - 包进 `legacy` 层后，要截图对比旧界面，确认除了配色之外没有变化。官方插件页、插件面板也要截图对比，确认可读、没有破版。
 
 ## 5. 组件库（`packages/dsh-editor-shell/src/ui/`）

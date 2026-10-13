@@ -100,10 +100,6 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
   position: relative; overflow: hidden;
   flex: 1 1 auto; min-height: 0; background: var(--dsh-ui-bg);
 }
-/* 面板根是 pointer-events:none 的命中穿透层；官方框架用 overlayLayer
-   给子树恢复命中，这里等价恢复 —— 折叠时子树 visibility:hidden，
-   不会拦截点击。!important 用来压过插件的未分层 normal 声明。 */
-.dsh-aux-rightbar-slot [data-sidebar-right-panel] { pointer-events: auto !important; }
 /* 作者在面板里请求全屏（fullscreen 模式）时，槽位提升为固定覆盖层，
    盖住顶栏以下整个工作台；退出全屏/收起控件是插件自己的。
    面板 width:100vw 锚定槽位右缘，正好铺满覆盖层。 */
@@ -134,3 +130,16 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
   .dsh-topbar { border-bottom: 1px solid CanvasText; }
 }
 `)
+
+/*
+ * 插件边界例外（design-system-spec §4）：宿主唯一允许不进层的规则。
+ * 官方 rightbar 面板根是 pointer-events:none 的命中穿透层；官方框架
+ * 靠 .overlayLayer>* 恢复子树命中，这里等价恢复。插件 CSS 是未分层
+ * normal 声明，分层规则永远压不过它，所以这条规则必须同样未分层、
+ * 且用 (0,2,0) 的类+属性选择器压过插件的 (0,1,0) 类选择器，不用
+ * !important。折叠时插件自己把子树 visibility:hidden，不拦截点击。
+ * 注入时追加在 collectStyles() 结果之后（root.tsx injectShellStyles）。
+ */
+export const pluginBoundaryStyles = `
+.dsh-aux-rightbar-slot [data-sidebar-right-panel] { pointer-events: auto; }
+`

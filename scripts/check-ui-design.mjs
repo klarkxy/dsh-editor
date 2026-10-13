@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { findings } from './check-ui-drift.mjs'
 import * as tokenModule from '../packages/dsh-editor-shell/src/design-system/tokens.ts'
 import {
   LIGHT_TOKENS, DARK_TOKENS, DESIGN_SOURCE, DESIGN_SYSTEM_ID,
@@ -193,6 +196,40 @@ check('accent location selection and unchanged editor typography contract', () =
   assert(componentStyles.includes(implicit + '[data-disabled]'))
   assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not([data-accent-color])'))
   assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not(.send)'))
+})
+check('no !important in product style sources beyond the listed exceptions', () => {
+  /* !important 的绝对禁令（design-system-spec §5）：组件层不允许出现；增量
+     drift 扫描只管改动文件，这里做全量兜底。下面列出的既有出现是唯一例外，
+     只允许减少，不允许新增 —— 新增文件或新增条目都会失败。
+     注释里的 !important 不计算（与 drift 扫描同一套注释剔除逻辑）。 */
+  const exceptions = new Map([
+    ['packages/dsh-editor-shell/src/styles.ts', { max: 12, reason: 'legacy 层旧样式表的既有声明，随界面迁移逐条删除' }],
+    ['packages/dsh-manuscript/src/client/editor-core/styles.ts', { max: 24, reason: '未分层插件样式表，压过 editor-core 挂件的内联默认样式（ghost 提示、提案、冲突条、页脚内边距）' }],
+    ['packages/dsh-manuscript/src/client/overlay-styles.ts', { max: 3, reason: '未分层插件样式表，prefers-reduced-motion 覆盖 portal 出去的抽屉' }],
+  ])
+  const root = fileURLToPath(new URL('..', import.meta.url))
+  const sources = []
+  const walk = dir => {
+    for (const entry of readdirSync(dir)) {
+      const absolute = join(dir, entry)
+      if (statSync(absolute).isDirectory()) {
+        if (!/^(node_modules|__tests__|fixtures)$/.test(entry)) walk(absolute)
+        continue
+      }
+      if (!/\.(ts|tsx|css)$/.test(entry)) continue
+      if (/\.(spec|test)\.[^.]+$|\.d\.ts$/.test(entry)) continue
+      sources.push(absolute)
+    }
+  }
+  for (const dir of ['packages/dsh-editor-shell/src', 'packages/dsh-manuscript/src']) walk(join(root, dir))
+  for (const absolute of sources) {
+    const relative = absolute.slice(root.length).split(sep).join('/')
+    const found = findings(readFileSync(absolute, 'utf8')).filter(f => f.rule === 'cascade-override').length
+    if (!found) continue
+    const allowed = exceptions.get(relative)
+    assert(allowed, `${relative}: !important ×${found} is not on the exception list`)
+    assert(found <= allowed.max, `${relative}: !important grew to ${found} (allowed ${allowed.max}: ${allowed.reason})`)
+  }
 })
 check('upstream notice is shipped with the shell resources', () => {
   const previous = readFileSync(new URL('../packages/dsh-editor-shell/resources/third-party/kimi-web-MIT.txt', import.meta.url), 'utf8')

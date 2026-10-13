@@ -8,6 +8,7 @@ import { useWorkbenchLayout } from '../app/shell/use-workbench-layout.ts'
 import { Workbench } from '../app/shell/workbench.tsx'
 import { Topbar } from '../app/shell/topbar.tsx'
 import { AuxRail, ReferencePanel, RightbarSlotSurface } from '../app/shell/aux-rail.tsx'
+import { pluginBoundaryStyles } from '../app/shell/shell.styles.ts'
 import { FilesRail } from '../app/files/files-rail.tsx'
 import { useSurface } from './plugin-surfaces.tsx'
 import { Button as DshButton, Notice } from '../ui/index.ts'
@@ -902,7 +903,9 @@ function injectShellStyles(): () => void {
   defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
   defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
   defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
-  const css = collectStyles()
+  /* 插件样式不进层，永远压过分层规则；宿主需要压过插件 normal 声明的
+     唯一例外放在 collectStyles() 之后、不进任何层（design-system-spec §4）。 */
+  const css = collectStyles() + pluginBoundaryStyles
   const existing = document.head.querySelector('style[data-dsh-editor-shell-styles]')
   if (existing) {
     existing.setAttribute('data-plugin', 'dsh-editor-shell')
