@@ -1,24 +1,9 @@
 /** Structural styles composed in the shell stylesheet; visual overrides remain in the design adapter. */
 export const chatMessageStyles = `
-/* DSH TurnProcessNodeView + DisclosureRow: compact settled toggle, 24px process rows. */
+/* DSH TurnProcessNodeView + DisclosureRow: settled blocks collapse through
+   dsh-disclosure; these rules keep the row metrics the Disclosure wraps. */
 .radix-themes .chat-process,
 .radix-themes .chat-process-stack { min-width: 0; max-width: 100%; overflow-x: hidden; }
-.radix-themes .chat-process-toggle {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  height: 33px;
-  padding: 0 0 var(--space-2);
-  border: 0;
-  border-bottom: 1px solid var(--gray-a5);
-  background: none;
-  color: var(--gray-11);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
 .radix-themes .chat-process-label {
   min-width: 0;
   overflow: hidden;
@@ -26,15 +11,6 @@ export const chatMessageStyles = `
   white-space: nowrap;
   line-height: normal;
 }
-.radix-themes .chat-process-chevron {
-  display: inline-flex;
-  color: var(--gray-9);
-  flex: none;
-  margin-left: 6px;
-  transition: transform 0.1s;
-  transform: rotate(-90deg);
-}
-.radix-themes .chat-process-toggle[data-open] .chat-process-chevron { transform: rotate(0deg); }
 .radix-themes .chat-process-body,
 .radix-themes .chat-process-stack {
   display: flex;
@@ -44,21 +20,7 @@ export const chatMessageStyles = `
   max-width: 100%;
 }
 .radix-themes .chat-process-body { padding-top: var(--space-1); }
-.radix-themes .chat-process-body[hidden] { display: none; }
 .radix-themes .chat-step { min-width: 0; max-width: 100%; overflow-x: hidden; }
-.radix-themes .chat-step:not([open]) { height: var(--space-6); overflow: hidden; }
-.radix-themes .chat-step-summary {
-  cursor: pointer;
-  list-style: none;
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-}
-.radix-themes .chat-step-summary::-webkit-details-marker,
-.radix-themes .chat-step-summary::marker {
-  display: none;
-  content: none;
-}
 .radix-themes .chat-step-head {
   min-width: 0;
   max-width: 100%;
@@ -100,14 +62,6 @@ export const chatMessageStyles = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.radix-themes .chat-step-chevron {
-  display: inline-flex;
-  color: var(--gray-9);
-  flex: none;
-  margin-left: auto;
-  transition: transform 0.1s;
-}
-.radix-themes .chat-step[open] > summary .chat-step-chevron { transform: rotate(90deg); }
 .radix-themes .chat-step-body {
   min-width: 0;
   max-width: 100%;

@@ -7,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -41,25 +40,18 @@ import {
 } from '../init-guide.ts'
 import { conversationPresetLabel, sessionAgentPreset, shouldRunLegacyNovelPipeline } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import type { ConversationFilter } from '../native-conversation-state.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { useObservable } from './components.tsx'
 import { isObservableSource } from '../model/components.ts'
-import { ConfirmDialog, ConversationPresetPicker, TextPromptDialog } from './dialogs.tsx'
-import { Select } from './select.tsx'
+import { ConfirmDialog, TextPromptDialog } from './dialogs.tsx'
 import {
-  Badge,
   Box,
-  Button,
-  Callout,
-  DropdownMenu,
   Flex,
-  IconButton,
   Text,
-  TextArea,
 } from '@radix-ui/themes'
 import { ActivityDots } from './ui/index.ts'
+import { Button as UiButton, IconButton as UiIconButton, Notice, TextArea } from '../ui/index.ts'
 import { takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import {
@@ -68,7 +60,7 @@ import {
   shouldSubmitComposer,
   type ShellContext,
 } from './shared.ts'
-import { ChevronRightIcon, CrossIcon, DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
+import { CrossIcon, SendIcon, StopIcon } from '../ui/icons.tsx'
 import {
   bindOfficialConversation,
   conversationChatSource,
@@ -80,7 +72,9 @@ import {
   EMPTY_TRANSCRIPT,
   type ChatLifecycle,
 } from './chat-conversation.ts'
-import { chatEmptyPrompt } from './chat-empty.ts'
+import { chatEmptyPrompt, partnerSuggestionTitle } from './chat-empty.ts'
+import { ConversationListView, PartnerHeader, type PartnerConversationRow } from '../app/assistant/partner-header.tsx'
+import { PartnerEmptyState } from '../app/assistant/partner-empty.tsx'
 import { useChatConversationControls } from './chat-conversation-controls.ts'
 import { ChatHistory } from './chat-history.tsx'
 import type { ChatOutgoing } from '../model/chat-history.ts'
@@ -194,12 +188,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const historyRef = useRef<HTMLDivElement | null>(null)
   const bottomPinnedRef = useRef(true)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
-  const growComposer = (el: HTMLTextAreaElement | null) => {
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 132)}px`
-  }
-  useLayoutEffect(() => { growComposer(composerRef.current) }, [draft])
   useEffect(() => {
     const error = takeCreatedChatModelError(session.sessionId)
     if (error) setNote(error)
@@ -386,17 +374,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setModelRevision((value) => value + 1)
   }
   const {
-    renamingConversation, setRenamingConversation, conversationMenuOpen, setConversationMenuOpen,
-    conversationMenuTrigger, conversationMenuYields, conversationBusy, conversationFilter, setConversationFilter,
-    archiveStopConfirm, setArchiveStopConfirm, titleOverrides, draftConfirm, presetPicker, setPresetPicker,
-    newConversationButton, conversations, archivedConversations, hostPinnedIds, archivedIds,
-    filteredConversations, currentIsArchived, currentIsPinned, canMutateConversation,
+    renameTarget, setRenameTarget, conversationListOpen, setConversationListOpen,
+    conversationListTrigger, conversationBusy, conversationFilter, setConversationFilter,
+    archiveStopConfirm, setArchiveStopConfirm, titleOverrides, draftConfirm,
+    presetChoices, conversations, archivedConversations, hostPinnedIds, archivedIds,
+    filteredConversations, canMutateConversation,
     queueConversationRename, resolveDraftConfirm, switchConversation, renameConversation,
-    createConversation, retryPresetList, confirmPresetPicker, cancelPresetPicker,
-    archiveConversation, restoreConversation, toggleConversationPin, currentConversationTitle, renameInitialValue
+    newConversation,
+    archiveConversation, restoreConversation, toggleConversationPinFor, currentConversationTitle, renameInitialValue
   } = useChatConversationControls({
     ctx, session, workspaceId, workspace, sessionList, workspaceList, developerMode,
-    rows, draft, setNote, openConversation,
+    presetRoster, locale, rows, draft, setNote, openConversation,
   })
   useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
@@ -463,6 +451,19 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       }
     })
   }
+  /* §5 空状态建议：点击只填入草稿并聚焦输入框，绝不发送。 */
+  const fillComposerDraft = (text: string) => {
+    if (nativeInput.current) nativeInput.current.setDraft(text)
+    else projectNativeDraft(text)
+    composerRef.current?.focus()
+  }
+  const conversationListRows: PartnerConversationRow[] = filteredConversations.map((item) => ({
+    id: item.id,
+    title: item.title,
+    pinned: hostPinnedIds.includes(item.id),
+    archived: archivedIds.includes(item.id),
+    current: item.id === session.sessionId,
+  }))
   return (
     <aside
       className={overlay ? 'chat chat-overlay' : 'chat'}
@@ -471,160 +472,44 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       {...(hidden ? { inert: '' } : {})}
       data-chat-face={conversationFace(ctx) ? 'official' : 'missing'}
       data-chat-nodes={String(transcript.nodes.length)}>
-      {titleOverrides[session.sessionId]?.status === 'failed' ? <Callout.Root color="red" role="alert">
-        <Callout.Text>{t('chat.renameFailed')}</Callout.Text>
-        <Button onClick={() => queueConversationRename(titleOverrides[session.sessionId]!.title, t('chat.renameFailed'))}>{t('common.retry')}</Button>
-      </Callout.Root> : null}
-      <Flex asChild align="center" gap="2" px="3" py="2" justify="between" width="100%" minWidth="0">
-        <header className="chat-header">
-          <Box className="conversation-select" flexGrow="1" minWidth="0">
-            {showEmptyHistory && conversations.length <= 1 && archivedConversations.length === 0 ? <Text
-              as="p"
-              size="2"
-              weight="medium"
-              truncate
-              className="chat-quiet-title"
-              title={currentConversationTitle}>
-              {currentConversationTitle}
-            </Text> : <Select
-              value={session.sessionId}
-              aria-label={t('chat.switchConversation')}
-              title={currentConversationTitle}
-              selectedLabel={currentConversationTitle}
-              options={filteredConversations.map((item) => ({
-                value: item.id,
-                label: `${hostPinnedIds.includes(item.id) ? `${t('chat.pinnedConversation')} · ` : ''}${item.title}${archivedIds.includes(item.id) ? ` · ${t('chat.archivedConversations')}` : ''}`,
-              }))}
-              onChange={(next) => void switchConversation(next)} />}
-          </Box>
-          {!showEmptyHistory && currentMode ? <Badge
-            className="composer-mode"
-            variant="soft"
-            color="gray"
-            size="1"
-            data-chat-mode={currentMode.id}
-            title={currentMode.description}
-            aria-label={`${t('chat.currentMode')}：${currentMode.name}`}>
-            {currentMode.name}
-          </Badge> : null}
-          <Flex className="chat-header-actions" align="center" gap="1" flexShrink="0">
-            {connected ? null : <Text size="1" color="gray" className="chat-status" role="status">
-              <ActivityDots />
-              {t('chat.reconnecting')}
-            </Text>}
-            <IconButton
-              ref={newConversationButton}
-              variant="ghost"
-              color="gray"
-              size="2"
-              type="button"
-              title={t('chat.newConversation')}
-              aria-label={t('chat.newConversation')}
-              disabled={conversationBusy || !workspaceId || presetPicker.kind !== 'closed'}
-              onClick={() => { void createConversation() }}>
-              <PlusIcon size={14} />
-            </IconButton>
-            {showEmptyHistory && conversations.length <= 1 && archivedConversations.length === 0 ? null : <Box className="conversation-menu">
-              <DropdownMenu.Root
-                open={conversationMenuOpen}
-                onOpenChange={(open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) }}>
-                <DropdownMenu.Trigger>
-                  <IconButton
-                    ref={conversationMenuTrigger}
-                    variant="ghost"
-                    color="gray"
-                    size="2"
-                    title={t('chat.conversationActions')}
-                    aria-label={t('chat.conversationActions')}
-                    disabled={conversationBusy}>
-                    <DotsIcon size={14} />
-                  </IconButton>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content
-                  className="conversation-menu-pop"
-                  align="end"
-                  aria-label={t('chat.conversationActions')}
-                  onCloseAutoFocus={(event: Event) => {
-                    if (conversationMenuYields.current) event.preventDefault()
-                  }}>
-                  <DropdownMenu.Item
-                    disabled={conversationBusy}
-                    onSelect={() => { conversationMenuYields.current = true; setRenamingConversation(true) }}>
-                    {t('chat.renameConversation')}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    disabled={conversationBusy || currentIsArchived}
-                    onSelect={() => { void toggleConversationPin() }}>
-                    {t(currentIsPinned ? 'chat.unpinConversation' : 'chat.pinConversation')}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator />
-                  <DropdownMenu.RadioGroup value={conversationFilter} onValueChange={(value: string) => setConversationFilter(value as ConversationFilter)}>
-                    <DropdownMenu.RadioItem value="active">{t('chat.showActiveConversations')}</DropdownMenu.RadioItem>
-                    <DropdownMenu.RadioItem value="all">{t('chat.showAllConversations')}</DropdownMenu.RadioItem>
-                    <DropdownMenu.RadioItem value="archived">{t('chat.showArchivedConversations')}</DropdownMenu.RadioItem>
-                  </DropdownMenu.RadioGroup>
-                  <DropdownMenu.Separator />
-                  <DropdownMenu.Item
-                    disabled={conversationBusy || currentIsArchived || !canMutateConversation}
-                    title={!canMutateConversation ? t('chat.archiveNeedAnother') : undefined}
-                    onSelect={() => { void archiveConversation(session.sessionId) }}>
-                    {t('common.archive')}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    disabled={conversationBusy || !currentIsArchived}
-                    onSelect={() => { void restoreConversation(session.sessionId) }}>
-                    {t('common.restore')}
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </Box>}
-            {/* Overlay drawers cover the dismiss scrim, so the header carries
-                an explicit close control (Escape and the topbar toggle still work). */}
-            {overlay && onHide ? <IconButton
-              variant="ghost"
-              color="gray"
-              size="2"
-              type="button"
-              title={t('chat.closeAssistant')}
-              aria-label={t('chat.closeAssistant')}
-              onClick={onHide}>
-              <CrossIcon size={14} />
-            </IconButton> : null}
-          </Flex>
-        </header>
-      </Flex>
-      {archivedConversations.length ? <Box asChild px="3" py="2">
-        <details className="archived-conversations">
-          <summary className="archived-conversations-summary">
-            <ChevronRightIcon size={14} />
-            <Text size="1" color="gray">
-              {t('chat.archivedConversations')}
-            </Text>
-          </summary>
-          <Box asChild mt="2">
-            <ul className="archived-conversations-list">
-              {archivedConversations.map((item) => <li key={item.id}>
-                <Flex className="archived-conversation-row" align="center" justify="between" gap="2">
-                  <Text size="2" truncate title={item.title}>
-                    {item.title}
-                  </Text>
-                  <Button
-                    type="button"
-                    size="1"
-                    variant="soft"
-                    color="gray"
-                    disabled={conversationBusy}
-                    onClick={() => void restoreConversation(item.id)}>
-                    {t('common.restore')}
-                  </Button>
-                </Flex>
-              </li>)}
-            </ul>
-          </Box>
-        </details>
-      </Box> : null}
+      {titleOverrides[session.sessionId]?.status === 'failed' ? <Notice
+        tone="danger"
+        title={t('chat.renameFailed')}
+        action={<UiButton variant="secondary" size="sm" onClick={() => queueConversationRename(titleOverrides[session.sessionId]!.title, t('chat.renameFailed'))}>{t('common.retry')}</UiButton>} /> : null}
+      <PartnerHeader
+        title={currentConversationTitle}
+        titleRef={(node) => { conversationListTrigger.current = node }}
+        busy={conversationBusy}
+        listOpen={conversationListOpen}
+        onListOpenChange={setConversationListOpen}
+        list={<ConversationListView
+          filter={conversationFilter}
+          onFilterChange={setConversationFilter}
+          rows={conversationListRows}
+          busy={conversationBusy}
+          canArchiveCurrent={canMutateConversation}
+          onSelect={(id) => { setConversationListOpen(false); if (id !== session.sessionId) void switchConversation(id) }}
+          onRename={(id) => { setConversationListOpen(false); setRenameTarget(id as SessionId) }}
+          onTogglePin={(id) => { void toggleConversationPinFor(id) }}
+          onArchive={(id) => { void archiveConversation(id) }}
+          onRestore={(id) => { void restoreConversation(id) }} />}
+        presets={presetChoices ?? []}
+        presetsLoading={presetChoices === undefined}
+        newDisabled={!workspaceId}
+        onNew={(presetId) => void newConversation(presetId)}
+        status={connected ? null : <Text size="1" color="gray" className="chat-status" role="status">
+          <ActivityDots />
+          {t('chat.reconnecting')}
+        </Text>}
+        /* Overlay drawers cover the dismiss scrim, so the header carries
+           an explicit close control (Escape and the topbar toggle still work). */
+        trailing={overlay && onHide ? <UiIconButton
+          label={t('chat.closeAssistant')}
+          onClick={onHide}>
+          <CrossIcon size="sm" />
+        </UiIconButton> : null} />
       {showMigrationBanner ? <LegacyMigrationBanner
-        onMigrate={() => { void createConversation() }}
+        onMigrate={() => { void newConversation() }}
         onDismiss={() => setDismissedMigrations((current) => new Set(current).add(session.sessionId))} /> : null}
       <ChatHistory
         ctx={ctx} session={session} locale={locale} hidden={hidden} renderSlot={renderSlot}
@@ -634,105 +519,78 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         partial={partial} hasPartial={Boolean(chatLegacy.partial)} visibleCalls={visibleCalls}
         queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
         outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}
+        empty={showEmptyHistory ? <PartnerEmptyState
+          title={partnerSuggestionTitle(activePath, workspace?.title)}
+          onPick={fillComposerDraft} /> : null}
         initGuide={showInitGuide ? <InitGuideCard
           state={initState as 'explore' | 'interview'} busy={initBusy}
           running={initState === 'explore' ? internalIndexActive : snapshot.running}
           done={initCompleted} note={initNote} onStart={startInitGuide} onDismiss={dismissInitGuide} /> : null} />
-      <Box asChild px="3" py="2">
-        <form className="composer" onSubmit={submit}>
-          <Flex direction="column" gap="2">
-            <TextArea
-              ref={composerRef}
-              rows={1}
-              resize="none"
-              size="2"
-              style={{ width: '100%' }}
-              value={draft}
-              disabled={!nativeInputReady || voiceActive}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
-                setDraft(event.target.value)
-                growComposer(event.currentTarget)
-              }}
-              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) return
-                event.preventDefault()
-                event.currentTarget.form?.requestSubmit()
-              }}
-              placeholder={composerPlaceholder}
-              aria-label={t('chat.inputLabel')} />
-            {note ? <Flex direction="column" align="start" gap="2" role="alert">
-              <Text size="2" className="warning" color="red">{note}</Text>
-              {note === t('chat.defaultModelFailed') ? <Button type="button" size="2" variant="soft" onClick={onConfigure}>
-                {t('chat.fixDefaultModel')}
-              </Button> : null}
-            </Flex> : null}
-            <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
-              <Box className="composer-model" flexGrow="1" minWidth="0">
-                <ModelPicker
-                  key={`${session.sessionId}:${modelRevision}`}
-                  ctx={ctx}
-                  session={session}
-                  onConfigure={onConfigure} />
-              </Box>
-              <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
-                expanded={voiceActive}
-                getSelection={() => ({ start: composerRef.current?.selectionStart ?? draftRef.current.length, end: composerRef.current?.selectionEnd ?? draftRef.current.length, length: draftRef.current.length })}
-                onActiveChange={setVoiceActive} onDraft={readNativeDraft} onBind={bindNativeInput} />
-              <Flex className="composer-actions" align="center" gap="2" flexShrink="0">
-                {snapshot.running ? <IconButton
-                  type="button"
-                  variant="soft"
-                  color="red"
-                  size="2"
-                  className="chat-stop"
-                  title={t('chat.stop')}
-                  aria-label={t('chat.stop')}
-                  onClick={() => {
-                    void settleConversationStop({
-                      cancel: () => stop(session),
-                      releaseOutgoing: () => setOutgoing(null),
-                    })
-                  }}>
-                  <StopIcon size={14} />
-                </IconButton> : null}
-                <IconButton
-                  className="send"
-                  type="submit"
-                  variant="ghost"
-                  color="gray"
-                  size="2"
-                  disabled={!composerCanSubmit || voiceActive || !nativeInputReady}
-                  title={t('chat.send')}
-                  aria-label={t('chat.send')}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    width={16}
-                    height={16}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    focusable="false">
-                    <path d="m22 2-7 20-4-9-9-4Z" />
-                    <path d="M22 2 11 13" />
-                  </svg>
-                </IconButton>
-              </Flex>
-            </Flex>
+      <form className="composer" onSubmit={submit}>
+        <TextArea
+          ref={composerRef}
+          minRows={1}
+          maxRows={8}
+          value={draft}
+          disabled={!nativeInputReady || voiceActive}
+          onChange={setDraft}
+          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+            if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) return
+            event.preventDefault()
+            event.currentTarget.form?.requestSubmit()
+          }}
+          placeholder={composerPlaceholder}
+          aria-label={t('chat.inputLabel')} />
+        {note ? <Notice
+          tone="danger"
+          className="composer-note"
+          title={note}
+          action={note === t('chat.defaultModelFailed') ? <UiButton variant="secondary" size="sm" type="button" onClick={onConfigure}>
+            {t('chat.fixDefaultModel')}
+          </UiButton> : undefined} /> : null}
+        <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
+          <Box className="composer-model" flexGrow="1" minWidth="0">
+            <ModelPicker
+              key={`${session.sessionId}:${modelRevision}`}
+              ctx={ctx}
+              session={session}
+              onConfigure={onConfigure} />
+          </Box>
+          <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
+            expanded={voiceActive}
+            getSelection={() => ({ start: composerRef.current?.selectionStart ?? draftRef.current.length, end: composerRef.current?.selectionEnd ?? draftRef.current.length, length: draftRef.current.length })}
+            onActiveChange={setVoiceActive} onDraft={readNativeDraft} onBind={bindNativeInput} />
+          <Flex className="composer-actions" align="center" gap="2" flexShrink="0">
+            {snapshot.running ? <UiIconButton
+              className="chat-stop"
+              label={t('chat.stop')}
+              onClick={() => {
+                void settleConversationStop({
+                  cancel: () => stop(session),
+                  releaseOutgoing: () => setOutgoing(null),
+                })
+              }}>
+              <StopIcon size="sm" />
+            </UiIconButton> : null}
+            <UiIconButton
+              className="send"
+              type="submit"
+              label={t('chat.send')}
+              disabled={!composerCanSubmit || voiceActive || !nativeInputReady}>
+              <SendIcon size="sm" />
+            </UiIconButton>
           </Flex>
-        </form>
-      </Box>
+        </Flex>
+      </form>
       <TextPromptDialog
-        open={Boolean(renamingConversation)}
+        open={renameTarget !== null}
         id="rename-conversation"
         title={t('chat.renameConversation')}
         label={t('chat.conversationName')}
         initialValue={renameInitialValue}
         confirmLabel={t('chat.saveName')}
-        returnFocusRef={conversationMenuTrigger}
-        onCancel={() => setRenamingConversation(false)}
+        returnFocusRef={conversationListTrigger}
+        onCancel={() => setRenameTarget(null)}
         onConfirm={renameConversation} />
       <ConfirmDialog
         open={Boolean(archiveStopConfirm)}
@@ -741,7 +599,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         message={t('chat.archiveRunningBody')}
         confirmLabel={t('chat.archiveAndStop')}
         busy={conversationBusy}
-        returnFocusRef={conversationMenuTrigger}
+        returnFocusRef={conversationListTrigger}
         onCancel={() => setArchiveStopConfirm(null)}
         onConfirm={() => {
           if (archiveStopConfirm) void archiveConversation(archiveStopConfirm.id, true, archiveStopConfirm.nextId)
@@ -754,18 +612,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         confirmLabel={t('chat.discardAndContinue')}
         onCancel={() => resolveDraftConfirm(false)}
         onConfirm={() => resolveDraftConfirm(true)} />
-      <ConversationPresetPicker
-        open={presetPicker.kind !== 'closed'}
-        phase={presetPicker.kind === 'closed' ? 'ready' : presetPicker.kind}
-        presets={presetPicker.presets}
-        selectedId={presetPicker.selectedId}
-        error={presetPicker.error}
-        busy={presetPicker.busy}
-        returnFocusRef={newConversationButton}
-        onSelect={(id: string) => setPresetPicker((current) => ({ ...current, selectedId: id }))}
-        onRetry={() => { void retryPresetList() }}
-        onCancel={cancelPresetPicker}
-        onConfirm={() => { void confirmPresetPicker() }} />
     </aside>
   );
 }

@@ -26,3 +26,18 @@ export function chatPromptVoice(presetId: string | null | undefined): ChatPrompt
 export function chatEmptyPrompt(presetId: string | null | undefined): string {
   return t(PLACEHOLDER_KEYS[chatPromptVoice(presetId)])
 }
+
+/* 空状态起步建议（shell-rewrite-spec §5）：《X》取当前文档标题，
+   没有当前文档用作品名，再退到笼统的「稿件」。 */
+export function partnerSuggestionTitle(activePath: string | undefined, workTitle: string | undefined): string {
+  const leaf = activePath?.split(/[\\/]/).pop()?.replace(/\.(md|txt)$/i, '').trim()
+  return leaf || workTitle?.trim() || t('chat.suggestFallback')
+}
+
+export function partnerSuggestions(title: string): string[] {
+  return [
+    t('chat.suggestPace', { title }),
+    t('chat.suggestNames', { title }),
+    t('chat.suggestOutline', { title }),
+  ]
+}

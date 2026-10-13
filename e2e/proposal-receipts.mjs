@@ -91,7 +91,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   for (const theme of ['light', 'dark']) {
     await page.goto(`${origin}/?theme=${theme}`)
-    await page.getByRole('button', { name: '应用', exact: true }).click()
+    await page.getByRole('button', { name: '应用修改', exact: true }).click()
     await page.locator(S.proposalCardApplied).waitFor()
     await page.locator(S.proposalCardSummary).click()
     await page.getByRole('button', { name: '撤销此次修改', exact: true }).click()
@@ -100,19 +100,19 @@ try {
     assert.match(await page.locator(S.proposalStatus).innerText(), /正文\/001.md/)
     assert.doesNotMatch(await page.locator(S.proposalStatus).innerText(), /未写入任何内容/)
     assert.deepEqual(await page.evaluate(() => window.probe.refreshedPaths), ['正文/001.md', '正文/001.md'])
-    assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
+    assert.equal(await page.getByRole('button', { name: '应用修改', exact: true }).count(), 0)
     await page.screenshot({ path: resolve(output, `partial-undo-${theme}.png`) })
     await page.goto(`${origin}/?mode=mismatch&theme=${theme}`)
     await page.locator(S.proposalCardExpired).waitFor()
     assert.match(await page.locator(S.proposalStatus).innerText(), /审批回执不一致/)
-    assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
+    assert.equal(await page.getByRole('button', { name: '应用修改', exact: true }).count(), 0)
     assert.equal(await page.getByRole('button', { name: '撤销此次修改', exact: true }).count(), 0)
     assert.deepEqual(await page.evaluate(() => window.probe.requests), ['proposal.receipt', 'file.read'])
     await page.screenshot({ path: resolve(output, `mismatched-receipt-${theme}.png`) })
     for (const mode of ['applied', 'undone']) {
       await page.goto(`${origin}/?mode=${mode}&theme=${theme}`)
       await page.locator(S.proposalCardSettled(mode)).waitFor()
-      assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
+      assert.equal(await page.getByRole('button', { name: '应用修改', exact: true }).count(), 0)
     }
   }
   assert.deepEqual(errors, [])

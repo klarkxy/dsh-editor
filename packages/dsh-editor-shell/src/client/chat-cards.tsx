@@ -28,8 +28,9 @@ import {
 import type { ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext, ShellMessageCardRegistry } from '../seats.ts'
 import { Markdown } from './markdown.tsx'
-import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
+import { CrossIcon } from './icons.tsx'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
+import { Disclosure } from '../ui/disclosure.tsx'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
 import type { ShellContext } from './shared.ts'
@@ -44,18 +45,16 @@ import {
 } from '../model/chat-cards.ts'
 
 
-/** DSH DisclosureRow：14px 标记 + 标题 + · + 摘要，展开箭头在右侧。 */
+/** DSH DisclosureRow：14px 标记 + 标题 + · + 摘要；作为 Disclosure summary 的行内容，箭头由 Disclosure 提供（样式里移到行尾）。 */
 export function ChatStepHead(props: {
   label: ReactNode
   preview?: string
   tone?: 'muted' | 'ok' | 'error' | 'recovered'
-  expandable?: boolean
   busy?: boolean
-  live?: boolean
 }) {
   const color = props.tone === 'error' ? 'red' : 'gray'
   const status = props.tone === 'error' ? 'error' : props.tone === 'ok' || props.tone === 'recovered' ? 'ok' : 'muted'
-  const head = (
+  return (
     <Flex align="center" gap="2" className="chat-step-head" minWidth="0" width="100%">
       <span className="chat-step-mark" aria-hidden="true">
         {props.busy
@@ -71,16 +70,7 @@ export function ChatStepHead(props: {
           {props.preview}
         </Text>
       </Fragment> : null}
-      {props.expandable ? <span className="chat-step-chevron" aria-hidden="true">
-        <ChevronRightIcon size={12} />
-      </span> : null}
     </Flex>
-  )
-  if (!props.expandable) return head
-  return (
-    <summary className="chat-step-summary" aria-live={props.live ? 'polite' : undefined}>
-      {head}
-    </summary>
   )
 }
 
@@ -118,7 +108,8 @@ export function ChatStepItem(props: {
   expandable?: boolean
   busy?: boolean
   live?: boolean
-  open?: boolean
+  /** §5：失败的执行记录默认展开。 */
+  defaultOpen?: boolean
   role?: string
   children?: ReactNode
 }) {
@@ -131,10 +122,14 @@ export function ChatStepItem(props: {
     )
   }
   return (
-    <details className={className} open={props.open} role={props.role}>
-      <ChatStepHead expandable live={props.live} tone={props.tone} label={props.label} preview={props.preview} />
-      {props.children ? <Box className="chat-step-body">{props.children}</Box> : null}
-    </details>
+    <div className={className} role={props.role} aria-live={props.live ? 'polite' : undefined}>
+      <Disclosure
+        className="chat-step-disclosure"
+        defaultOpen={props.defaultOpen}
+        summary={<ChatStepHead busy={props.busy} tone={props.tone} label={props.label} preview={props.preview} />}>
+        {props.children ? <div className="chat-step-body">{props.children}</div> : null}
+      </Disclosure>
+    </div>
   )
 }
 
@@ -157,6 +152,7 @@ export function ChatStepFromRow({ row }: { row: ChatRow; running?: boolean }) {
     <ChatStepItem
       className={row.error ? (row.recovered ? 'tool recovered' : 'tool error') : 'tool'}
       expandable={body}
+      defaultOpen={failed}
       tone={failed ? 'error' : 'ok'}
       role={failed ? 'status' : undefined}
       label={toolStepTitle(row)}>
@@ -170,41 +166,44 @@ export function ChatStepFromRow({ row }: { row: ChatRow; running?: boolean }) {
   )
 }
 
-/** Live turn: DSH keeps process rows visible until the turn closes. */
+/** Live turn: 单行 Disclosure 标着「运行中」，步骤保持展开直到回合结束。 */
 export function ChatProcessStack(props: { children?: ReactNode; enter?: boolean }) {
   return (
     <ChatEntry className="chat-row chat-process-stack" enter={props.enter}>
-      {props.children}
+      <Disclosure
+        defaultOpen
+        summary={<span className="chat-process-label">
+          {t('chat.stepRunning')}
+        </span>}>
+        {props.children}
+      </Disclosure>
     </ChatEntry>
   )
 }
 
-/** Settled DSH compact turn-process: one 33px row, expand to see thinking and tools. */
+/** Settled DSH compact turn-process：单行 Disclosure，显示真实完成/失败状态，失败默认展开（§5）。 */
 export function ChatProcessBlock(props: {
   rows: ChatRow[]
   enter?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const failed = props.rows.some((row) => row.error && !row.recovered)
   const tools = props.rows.filter((row) => row.role === 'tool').length
   const label = turnProcessLabel({ tools })
   return (
     <ChatEntry className="chat-row chat-process" enter={props.enter}>
-      <button
-        type="button"
-        className="chat-process-toggle"
-        data-open={open || undefined}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}>
-        <Text size="2" color="gray" className="chat-process-label">
+      <Disclosure
+        defaultOpen={failed}
+        summary={<span className="chat-process-label">
           {label}
-        </Text>
-        <span className="chat-process-chevron" aria-hidden="true">
-          <ChevronDownIcon size={14} />
-        </span>
-      </button>
-      <Box className="chat-process-body" minWidth="0" hidden={!open}>
-        {processDetailRows(props.rows).map((row) => <ChatStepFromRow key={row.id} row={row} />)}
-      </Box>
+          <span className={`chat-process-state${failed ? ' is-error' : ''}`}>
+            {' · '}
+            {failed ? t('chat.stepFailed') : t('chat.stepDone')}
+          </span>
+        </span>}>
+        <div className="chat-process-body">
+          {processDetailRows(props.rows).map((row) => <ChatStepFromRow key={row.id} row={row} />)}
+        </div>
+      </Disclosure>
     </ChatEntry>
   )
 }
@@ -510,7 +509,7 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
   return (
     <ChatEntry className={`chat-row ${row.role}`} enter={props.enter}>
       {row.role === 'user'
-        ? <Card size="2">
+        ? <div className="dsh-partner__bubble">
           <Text size="2" as="p">
             {row.text || t('chat.noText')}
           </Text>
@@ -518,7 +517,7 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
             {row.detail}
           </Text> : null}
           {row.projectContextReceipt ? <ProjectContextReceiptView receipt={row.projectContextReceipt} /> : null}
-        </Card>
+        </div>
         : row.role === 'assistant' && row.text
           ? <Box>
             <Text size="2" as="div">

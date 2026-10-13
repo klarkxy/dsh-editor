@@ -13,7 +13,6 @@ import {
   projectNewConversationPresets,
   sessionAgentPreset,
   shouldRunLegacyNovelPipeline,
-  startNewConversationPresetFlow,
 } from './conversation-presets.ts'
 
 const listed = [
@@ -214,20 +213,7 @@ describe('developer mode preset projection', () => {
   })
 })
 
-describe('new conversation preset picker flow', () => {
-  it('cancels before confirm with zero create', async () => {
-    const list = vi.fn(async () => ({ ok: true as const, value: listed }))
-    const create = vi.fn()
-    const started = await startNewConversationPresetFlow({
-      canDiscardDraft: async () => true,
-      list,
-    })
-    expect(started).toMatchObject({ kind: 'listed' })
-    expect(list).toHaveBeenCalledTimes(1)
-    await cancelNewConversationPresetPicker({})
-    expect(create).not.toHaveBeenCalled()
-  })
-
+describe('new conversation preset selection', () => {
   it('loads choices from RpcResult<AgentPresetRoster> without treating authorable as a row', async () => {
     const loaded = await loadNewConversationPresets(async () => ({ ok: true, value: realRoster }))
     expect(loaded.ok).toBe(true)
@@ -250,16 +236,6 @@ describe('new conversation preset picker flow', () => {
     expect(second.ok).toBe(true)
     if (second.ok) expect(second.presets).toHaveLength(4)
     expect(list).toHaveBeenCalledTimes(2)
-  })
-
-  it('blocks the picker when the draft guard refuses, and never lists or creates', async () => {
-    const list = vi.fn()
-    const started = await startNewConversationPresetFlow({
-      canDiscardDraft: async () => false,
-      list,
-    })
-    expect(started).toEqual({ kind: 'blocked' })
-    expect(list).not.toHaveBeenCalled()
   })
 
   it('creates, selects, applies the model, then opens — in that order', async () => {

@@ -81,7 +81,7 @@ export type {
 export { THEME_STORAGE_KEY, THEME_VALUES } from './model/theme.ts'
 export { ThemeToggle, useTheme } from './client/theme.tsx'
 export type { HostThemeSync, ThemeValue } from './model/theme.ts'
-export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.tsx'
+export { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.tsx'
 export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.tsx'
 export { Editor } from './client/editor.tsx'
 export { FileContextMenu } from './app/files/file-menu.tsx'

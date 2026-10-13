@@ -4,7 +4,7 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from './menu.tsx'
 import { cx } from './shared.ts'
 import './split-button.styles.ts'
 
-export type SplitButtonItem = { label: string; onSelect?(): void; shortcut?: string }
+export type SplitButtonItem = { label: string; onSelect?(): void; shortcut?: string; disabled?: boolean; title?: string }
 
 export function SplitButton(props: {
   label: ReactNode
@@ -27,7 +27,7 @@ export function SplitButton(props: {
         </MenuTrigger>
         <MenuContent aria-label={props.menuLabel}>
           {props.items.map((item) => (
-            <MenuItem key={item.label} shortcut={item.shortcut} onSelect={item.onSelect}>{item.label}</MenuItem>
+            <MenuItem key={item.label} shortcut={item.shortcut} disabled={item.disabled} title={item.title} onSelect={item.onSelect}>{item.label}</MenuItem>
           ))}
         </MenuContent>
       </Menu>

@@ -1,5 +1,6 @@
 import { Fragment, type MutableRefObject, type ReactNode, type RefObject } from 'react'
-import { Box, Button, Callout, Card, Flex, ScrollArea, Text } from '@radix-ui/themes'
+import { Box, Button, Flex, ScrollArea, Text } from '@radix-ui/themes'
+import { Notice } from '../ui/index.ts'
 import { loadOlder, WRITING_PROPOSE_TOOL_NAME, type PendingInteraction, type partialView } from '../adapter.ts'
 import type { ChatTranscript, SessionFace, SessionLifecycle } from '../dsh-compat.ts'
 import type { ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
@@ -43,6 +44,8 @@ type ChatHistoryProps = {
   outgoingIsCanonical: boolean
   hasTurnError: boolean
   initGuide: ReactNode
+  /** §5 空状态（三条起步建议），由 Chat 在确认为空时传入。 */
+  empty?: ReactNode
 }
 
 /** Render the transcript without owning its subscription or scroll-follow lifetime. */
@@ -50,7 +53,7 @@ export function ChatHistory({
   ctx, session, locale, hidden, renderSlot, snapshot, historyRef, bottomPinnedRef, historyBlocks,
   messageCards, messageCardTick, messageCardContext, handleApplied, isNewMessage, partial,
   hasPartial, visibleCalls, queuedSubmissions, pendingItems, outgoing, outgoingIsCanonical,
-  hasTurnError, initGuide,
+  hasTurnError, initGuide, empty,
 }: ChatHistoryProps) {
   const liveOpen = snapshot.running
   const liveSteps = <Fragment>
@@ -81,8 +84,9 @@ export function ChatHistory({
           const el = event.currentTarget
           bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
         }}>
-        <Flex direction="column" gap="3" p="3" minWidth="0" width="100%">
+        <Flex direction="column" gap="3" p="3" minWidth="0" width="100%" flexGrow="1">
           {initGuide}
+          {empty}
           {snapshot.hasMore ? <Button
             type="button"
             variant="soft"
@@ -133,7 +137,7 @@ export function ChatHistory({
             className="chat-row user"
             key="local-outgoing"
             enter={isNewMessage('local-outgoing')}>
-            <Card size="2">
+            <div className="dsh-partner__bubble">
               <Text size="2" as="p">
                 {outgoing.text}
               </Text>
@@ -152,7 +156,7 @@ export function ChatHistory({
                 </Fragment>
                     : t('chat.sendFailed')}
               </Text>
-            </Card>
+            </div>
           </ChatEntry> : null}
           {outgoing?.state === 'accepted' && !outgoingIsCanonical
             ? <ChatEntry
@@ -196,16 +200,8 @@ export function ChatHistory({
           </ChatEntry> : null}
           {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
           <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} onApplied={handleApplied} />
-          {snapshot.openState === 'error' ? <Callout.Root color="red" className="warning">
-            <Callout.Text>
-              {t('chat.connectionInterrupted')}
-            </Callout.Text>
-          </Callout.Root> : null}
-          {snapshot.promptError && !hasTurnError ? <Callout.Root color="red" className="warning">
-            <Callout.Text>
-              {t('chat.requestFailed')}
-            </Callout.Text>
-          </Callout.Root> : null}
+          {snapshot.openState === 'error' ? <Notice tone="danger" title={t('chat.connectionInterrupted')} /> : null}
+          {snapshot.promptError && !hasTurnError ? <Notice tone="danger" title={t('chat.requestFailed')} /> : null}
         </Flex>
       </ScrollArea>
     </Box>

@@ -502,6 +502,50 @@ try {
   }
   note('rightbar', `map.png preview mounted in 资料 tab, no alerts, contained=${JSON.stringify(contain.panel)}`)
 
+  // ---- §5 partner rail: suggestion fill/focus/no-send + C17 draft guard ----
+  // The aux rail is open on 资料 after the preview probe; switch to 搭档.
+  await page.getByRole('tab', { name: '搭档', exact: true }).click()
+  await page.locator(S.chatRail).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
+  await page.waitForTimeout(600)
+
+  const suggest = page.locator(`${S.chatRail} .dsh-partner__suggest`)
+  const suggestCount = await suggest.count()
+  if (suggestCount !== 3) failures.push(`partner-empty: expected 3 suggestions, found ${suggestCount}`)
+  const nodesBefore = await page.locator(S.chatRail).getAttribute('data-chat-nodes')
+  const titleBefore = await page.locator(`${S.chatRail} .dsh-partner__title-text`).innerText().catch(() => '')
+  if (suggestCount > 0) {
+    const wanted = (await suggest.first().innerText()).trim()
+    await suggest.first().click()
+    await page.waitForTimeout(400)
+    const composerEl = page.locator(S.composerInputInner).first()
+    const filled = await composerEl.inputValue().catch(() => '')
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))
+    if (filled !== wanted) failures.push(`partner-empty: suggestion click filled '${filled}' != '${wanted}'`)
+    if (focused !== '输入消息') failures.push(`partner-empty: suggestion click did not focus composer (active=${focused})`)
+    const nodesAfter = await page.locator(S.chatRail).getAttribute('data-chat-nodes')
+    if (nodesAfter !== nodesBefore) failures.push('partner-empty: suggestion click sent a message (transcript changed)')
+    const userRows = await page.locator(`${S.chatRail} .chat-row.user`).count()
+    if (userRows !== 0) failures.push('partner-empty: suggestion click produced a user row (sent)')
+  }
+
+  // C17: with a draft, 新对话 must prompt; cancel keeps place and draft.
+  const newChat = page.locator(`${S.chatRail} button.dsh-split__main`)
+  await newChat.click()
+  const draftDialog = page.locator('#discard-message-draft, [role="alertdialog"]:has-text("放弃")')
+  if (await draftDialog.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await page.getByRole('button', { name: '取消', exact: true }).click()
+    await page.waitForTimeout(400)
+    const keptDraft = await page.locator(S.composerInputInner).first().inputValue().catch(() => '')
+    const titleAfter = await page.locator(`${S.chatRail} .dsh-partner__title-text`).innerText().catch(() => '')
+    if (!keptDraft.trim()) failures.push('C17: draft lost after cancelling the leave confirm')
+    if (titleAfter !== titleBefore) failures.push(`C17: conversation switched despite cancel ('${titleBefore}' -> '${titleAfter}')`)
+    note('partner', `C17 cancel keeps draft (${keptDraft.length} chars) on '${titleAfter}'`)
+    // Clear the draft again for downstream steps.
+    await page.locator(S.composerInputInner).first().fill('').catch(() => undefined)
+  } else {
+    failures.push('C17: leaving with a draft did not show the discard-draft confirm')
+  }
+
   // §4 margin rules: both 版心竖线 must draw in the same margin-rule colour
   // (a stray grey/different element over the right rule once showed up).
   const ruleColors = await page.evaluate(() => {

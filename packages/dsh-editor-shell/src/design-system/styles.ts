@@ -159,7 +159,7 @@ export const componentStyles = [
   r(['.home-entry-title'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.home-hint', '.home-recent-empty'], 'color: var(--dsh-ui-muted);'),
   r(['.icon-button:active', '.editor-tools button:active', '.editor-tools button:hover'], 'transform: none;'),
-  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
+  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
   r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
   // Neutral navigation: location is not a primary action. File rail styles
@@ -195,22 +195,11 @@ export const componentStyles = [
   // Conversation: open assistant prose, one bubble fill, grouped process rows.
   r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-sidebar);'),
   r(['.chat-header'], 'flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: 0; background: var(--dsh-ui-sidebar);'),
-  r(['.conversation-select .select-trigger'], 'border: 0; box-shadow: none; background: transparent; font-weight: var(--dsh-ui-weight-medium);'),
-  r(['.chat-status', '.composer-mode'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
-  r(['.chat .archived-conversations'], `flex-shrink: 0; border-bottom: ${hairline};`),
-  r(['.archived-conversations-summary'], 'display: flex; align-items: center; gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-control-sm); padding-inline: var(--dsh-ui-space-3); list-style: none; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); cursor: pointer;'),
-  r(['.archived-conversations-summary::-webkit-details-marker'], 'display: none;'),
-  r(['.archived-conversations-summary > svg'], 'transition: transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);'),
-  r(['.archived-conversations[open] > .archived-conversations-summary > svg'], 'transform: rotate(90deg);'),
-  r(['.archived-conversations-list'], 'list-style: none; margin: 0; padding: 0 0 0 var(--dsh-ui-space-6);'),
-  r(['.archived-conversation-row'], 'min-height: var(--dsh-ui-control-sm); min-width: 0;'),
+  r(['.chat-status'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
   r(['.chat > .chat-history'], 'flex: 1 1 0%; min-height: 0; height: auto; overflow: hidden;'),
-  r(['.chat-header-actions'], 'flex: 0 0 auto; min-width: max-content;'),
   r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-6); padding: var(--dsh-ui-space-5);'),
   r(['.chat-row'], 'min-width: 0; max-width: 100%; overflow-wrap: anywhere;'),
   r(['.chat-row.user'], 'align-self: flex-end; width: fit-content; max-width: 92%;'),
-  r(['.chat-row.user > .rt-Card'], 'background: var(--dsh-ui-bubble); border: 0; border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4);'),
-  r(['.chat-row.user > .rt-Card::before', '.chat-row.user > .rt-Card::after'], 'display: none;'),
   r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-regular); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
   r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-4);'),
   r(['.chat-markdown li'], 'margin-block: var(--dsh-ui-space-2);'),
@@ -223,24 +212,14 @@ export const componentStyles = [
   r(['.chat-markdown code'], 'border-radius: var(--dsh-ui-radius-xs);'),
   r(['.chat-markdown pre', '.chat-step-code', '.chat-step-body pre'], 'background: var(--dsh-ui-surface); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); box-shadow: none; font-family: var(--dsh-ui-font-mono);'),
   r(['.chat-markdown th', '.chat-markdown td'], `border-width: 0.5px; border-style: solid; border-color: var(--dsh-ui-line); padding: var(--dsh-ui-space-2);`),
-  r(['.chat-quiet-title'], 'margin: 0; min-width: 0; color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-process-toggle'], 'min-height: var(--dsh-ui-space-8); height: auto; padding: var(--dsh-ui-space-2) 0; border: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); transition: color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
-  r(['.chat-process-toggle:hover'], 'color: var(--dsh-ui-text);'),
-  r(['.chat-process'], 'padding: var(--dsh-ui-space-4); background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-lg); border-left: 3px solid var(--dsh-ui-line-strong);'),
-  r(['.chat-process-body'], `margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line);`),
-  r(['.chat-step:not([open])'], 'height: var(--dsh-ui-space-8);'),
   r(['.chat-step-head'], 'height: var(--dsh-ui-space-8); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-step-summary'], 'border-radius: var(--dsh-ui-radius-md);'),
-  r(['.chat-step-summary:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.chat-step-status.is-ok'], 'background: var(--dsh-ui-success);'),
   r(['.chat-step-status.is-error', '.chat-step-error-dot'], 'background: var(--dsh-ui-danger);'),
 
   // A single composer surface, not an input box plus a separate configuration bar.
   r(['.chat > .composer'], 'flex-shrink: 0; width: auto; margin: var(--dsh-ui-space-2) var(--dsh-ui-space-2) var(--dsh-ui-space-3); padding: var(--dsh-ui-space-2); background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-soft); transition: box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
   r(['.chat > .composer:focus-within'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
-  r(['.composer .rt-TextAreaRoot', '.composer .rt-TextAreaRoot:focus-within'], 'min-height: 0; padding: 0; background: transparent; border: 0; box-shadow: none;'),
-  r(['.composer .rt-TextAreaRoot::before', '.composer .rt-TextAreaRoot::after'], 'display: none;'),
-  r(['.composer .rt-TextAreaInput'], 'min-height: 48px; max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-2); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
+
   r(['.composer-toolbar'], 'gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-space-8); margin-top: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-2); border-top: 0.5px solid var(--dsh-ui-line);'),
   // Voice input is an optional plugin surface: idle it is one compact trigger beside send,
   // an active capture takes the first wrapped line. `order` and `flex-basis` are structural
@@ -260,11 +239,12 @@ export const componentStyles = [
   r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); box-shadow: none; transition: none;'),
 
   // Review and approvals remain visually distinct from routine tool logs.
-  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-left: 4px solid var(--dsh-ui-accent); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-5);'),
+  /* §5：提案/回执/冲突/过期卡统一为扁平 raised + line-strong，无侧边色条。 */
+  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-5);'),
   r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-md); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text); display: block; margin-bottom: var(--dsh-ui-space-3);'),
   r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-4); margin-top: var(--dsh-ui-space-4); border-top: 0.5px solid var(--dsh-ui-line);'),
   r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
-  r(['.proposal-conflict'], 'background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); border: 1px solid var(--dsh-ui-danger); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
+  r(['.proposal-conflict'], 'background: var(--dsh-ui-raised); color: var(--dsh-ui-text); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
 
   // Portals. Menus are a solid surface now (menu-blur: none). Modal masks stay sharp.
@@ -350,7 +330,6 @@ export const responsiveStyles = `
   ${r(['.plugins-page'], 'grid-template-rows: auto minmax(0, 1fr);')}
   ${r(['.shell > .plugins-page-header'], 'height: auto; min-height: var(--dsh-ui-header-height); flex-wrap: wrap; row-gap: var(--dsh-ui-space-2); padding-block: var(--dsh-ui-space-2);')}
   ${r(['.plugins-page-search'], 'flex: 1 1 6rem;')}
-  ${r(['.composer-mode'], 'max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;')}
   ${r(['.chat > .composer'], 'margin: var(--dsh-ui-space-2);')}
   ${r(['.editor-header'], 'gap: var(--dsh-ui-space-2); padding-inline: var(--dsh-ui-space-3); flex-wrap: wrap;')}
   ${r(['.editor-doc-title'], 'padding-inline-start: 0;')}

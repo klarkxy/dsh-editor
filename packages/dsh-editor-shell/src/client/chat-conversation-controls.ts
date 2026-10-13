@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatRow } from '../adapter.ts'
 import type { SessionFace, SessionId, SessionListState, WorkspaceId, WorkspaceListState, WorkspaceView } from '../dsh-compat.ts'
 import {
   canConfirmConversationPreset, cancelNewConversationPresetPicker, confirmNewConversationPreset,
-  firstAvailableConversationPreset, loadNewConversationPresets, startNewConversationPresetFlow,
+  loadNewConversationPresets, projectNewConversationPresets,
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
 import {
@@ -11,6 +11,7 @@ import {
   conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, shouldConfirmConversationSwitch,
 } from '../conversation-lifecycle.ts'
 import { isActiveSessionArchiveError, orderedConversationIds, type ConversationFilter } from '../native-conversation-state.ts'
+import { resolveNewChatMode, writeLastChatMode } from '../model/chat-last-mode.ts'
 import { applyChatModelDefault, takeCreatedChatModelError } from './ui-workspace.ts'
 import { t } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
@@ -25,6 +26,9 @@ type ChatConversationControlsInput = {
   sessionList: SessionListState
   workspaceList: WorkspaceListState
   developerMode: boolean
+  /** Host preset roster snapshot; undefined while the first list() is in flight or failed. */
+  presetRoster: unknown
+  locale: string
   rows: ChatRow[]
   draft: string
   setNote(note: string): void
@@ -34,26 +38,16 @@ type ChatConversationControlsInput = {
 /** Conversation mutations use the native host; only pending presentation lives here. */
 export function useChatConversationControls({
   ctx, session, workspaceId, workspace, sessionList, workspaceList, developerMode,
-  rows, draft, setNote, openConversation,
+  presetRoster, locale, rows, draft, setNote, openConversation,
 }: ChatConversationControlsInput) {
-  const [renamingConversation, setRenamingConversation] = useState(false)
-  const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
-  const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
-  const conversationMenuYields = useRef(false)
+  const [renameTarget, setRenameTarget] = useState<SessionId | null>(null)
+  const [conversationListOpen, setConversationListOpen] = useState(false)
+  const conversationListTrigger = useRef<HTMLButtonElement | null>(null)
   const [conversationBusy, setConversationBusy] = useState(false)
   const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('active')
   const [archiveStopConfirm, setArchiveStopConfirm] = useState<{ id: string; nextId?: string } | null>(null)
   const [titleOverrides, setTitleOverrides] = useState<Record<string, { title: string; status: 'pending' | 'confirmed' | 'failed' }>>({})
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
-  const [presetPicker, setPresetPicker] = useState<{
-    kind: 'closed' | 'loading' | 'list-error' | 'ready'
-    presets: ConversationPresetChoice[]
-    selectedId?: string
-    pendingSessionId?: SessionId
-    error?: string
-    busy?: boolean
-  }>({ kind: 'closed', presets: [] })
-  const newConversationButton = useRef<HTMLButtonElement | null>(null)
   const titleAttempted = useRef(new Set<string>())
   const workspaceSessionIds = workspace?.sessionIds.length ? [...workspace.sessionIds] : [session.sessionId]
   const archivedIds = workspaceList.archivedSessionIds ?? []
@@ -96,19 +90,38 @@ export function useChatConversationControls({
   const conversationById = new Map([...conversations, ...archivedConversations].map((item) => [item.id, item]))
   const filteredConversations = visibleConversationIds.map((id) => conversationById.get(id)!).filter(Boolean)
   const currentIsArchived = archivedIds.includes(session.sessionId)
-  const currentIsPinned = hostPinnedIds.includes(session.sessionId)
   const canMutateConversation = conversations.some((item) => item.id !== session.sessionId) || canArchiveOrDeleteConversation(conversations.length)
-  const queueConversationRename = (title: string, failureNote: string, automatic = false) => {
-    const id = session.sessionId
+
+  /* 「新对话」SplitButton 的模式投影：roster 一次载入即可复用；roster 还在路上
+     或失败时 presetChoices 为 undefined，点击主按钮再懒加载一次（§5）。 */
+  const presetChoices = useMemo(
+    () => presetRoster === undefined ? undefined : projectNewConversationPresets(presetRoster, { developerMode }),
+    [presetRoster, developerMode, locale],
+  )
+
+  /* 当前会话直接用 retained face；列表里其它会话经 binding/retain 拿 face。 */
+  const renameSessionById = async (id: SessionId, title: string) => {
+    if (id === session.sessionId) return session.rename(title)
+    const bound = ctx.sessions.binding(id)
+    if (bound) return bound.session.rename(title)
+    const ref = ctx.sessions.retain(id, { source: 'workspaceOperation' })
+    try {
+      const { session: face } = await ref.ready
+      return await face.rename(title)
+    } finally {
+      ref.release()
+    }
+  }
+  const queueConversationRename = (title: string, failureNote: string, automatic = false, id: SessionId = session.sessionId) => {
     const pending = { title, status: 'pending' as const }
     setTitleOverrides((current) => ({ ...current, [id]: pending }))
-    void conversationRenameQueue.enqueue(session.sessionId, async () => {
+    void conversationRenameQueue.enqueue(id, async () => {
       try {
         if (automatic && !conversationRenameQueue.canAutomaticallyRename(id, ctx.sessions.list.getSnapshot().byId[id]?.title, automaticTitleManaged(ctx))) {
           setTitleOverrides((current) => { const next = { ...current }; if (next[id] === pending) delete next[id]; return next })
           return
         }
-        const result = await session.rename(title)
+        const result = await renameSessionById(id, title)
         if (!result.ok) throw new Error(failureNote)
         conversationRenameQueue.acknowledgeTitle(id, result.value.title, ctx.sessions.list.getSnapshot().byId[id]?.title)
         setTitleOverrides((current) => {
@@ -157,68 +170,36 @@ export function useChatConversationControls({
     openConversation(nextId as SessionId)
   }
   const renameConversation = (title: string) => {
-    setRenamingConversation(false)
-    titleAttempted.current.add(session.sessionId)
+    const target = renameTarget
+    setRenameTarget(null)
+    if (!target) return
+    if (target === session.sessionId) titleAttempted.current.add(session.sessionId)
     setNote('')
-    queueConversationRename(title, t('chat.renameFailed'))
+    queueConversationRename(title, t('chat.renameFailed'), false, target)
   }
 
   const applyDefaultChatModel = (sessionId: SessionId) => applyChatModelDefault(ctx, sessionId)
-  const closePresetPicker = () => {
-    setPresetPicker({ kind: 'closed', presets: [] })
-  }
-  const createConversation = async () => {
-    if (!workspaceId || conversationBusy || presetPicker.kind !== 'closed') return
-    try {
-      const started = await startNewConversationPresetFlow({
-        canDiscardDraft: () => canDiscardDraft('__new-conversation__'),
-        list: () => {
-          setConversationBusy(true)
-          setNote('')
-          return ctx.remote.agentPresets.list()
-        },
-        projection: { developerMode },
-      })
-      if (started.kind === 'blocked') return
-      if (started.kind === 'list-error') {
-        setPresetPicker({ kind: 'list-error', presets: [], error: started.error })
-        return
-      }
-      setPresetPicker({
-        kind: 'ready',
-        presets: started.presets,
-        selectedId: firstAvailableConversationPreset(started.presets),
-      })
-    } catch {
-      setPresetPicker({ kind: 'list-error', presets: [], error: t('chat.presetListFailed') })
-    } finally {
+  /* 新对话（§5）：主按钮用上次模式，菜单项按点选的模式；确认草稿在前，
+     create→select→默认模型→open 的顺序与旧 picker 相同，成功后记 last-mode。 */
+  const newConversation = async (presetId?: string) => {
+    if (!workspaceId || conversationBusy) return
+    if (!(await canDiscardDraft('__new-conversation__'))) return
+    let choices = presetChoices
+    if (choices === undefined) {
+      setConversationBusy(true)
+      setNote('')
+      const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list(), { developerMode })
       setConversationBusy(false)
+      if (!loaded.ok) { setNote(loaded.error); return }
+      choices = loaded.presets
     }
-  }
-  const retryPresetList = async () => {
-    if (presetPicker.busy) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    setPresetPicker((current) => ({ ...current, kind: 'loading', error: undefined }))
-    const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list(), { developerMode })
-    if (!loaded.ok) {
-      setPresetPicker({ kind: 'list-error', presets: [], pendingSessionId, error: loaded.error })
+    const resolved = presetId ?? resolveNewChatMode(globalThis.localStorage, choices)
+    if (!resolved || !canConfirmConversationPreset(choices, resolved)) {
+      setNote(t('chat.presetSelectFailed'))
       return
     }
-    setPresetPicker({
-      kind: 'ready',
-      presets: loaded.presets,
-      selectedId: firstAvailableConversationPreset(loaded.presets),
-      pendingSessionId,
-    })
-  }
-  const confirmPresetPicker = async () => {
-    if (!workspaceId || presetPicker.kind !== 'ready' || presetPicker.busy) return
-    if (!canConfirmConversationPreset(presetPicker.presets, presetPicker.selectedId)) return
-    const presetId = presetPicker.selectedId
-    if (!presetId) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    setPresetPicker((current) => ({ ...current, busy: true, error: undefined }))
     setConversationBusy(true)
+    setNote('')
     try {
       const result = await confirmNewConversationPreset({
         create: ({ workspaceId }) => ctx.sessions.create({ workspaceId }),
@@ -231,38 +212,29 @@ export function useChatConversationControls({
             if (error) setNote(error)
           }
         },
-      }, { workspaceId, presetId, pendingSessionId, allowCustomPreset: developerMode, allowedPresetIds: presetPicker.presets.map((preset) => preset.id) })
+      }, { workspaceId, presetId: resolved, allowCustomPreset: developerMode, allowedPresetIds: choices.map((preset) => preset.id) })
       if (!result.ok) {
-        setPresetPicker((current) => ({
-          ...current,
-          kind: current.kind === 'closed' ? 'ready' : current.kind,
-          pendingSessionId: result.sessionId ?? pendingSessionId,
-          error: result.error,
-          busy: false,
-        }))
+        setNote(result.error)
+        /* create 成功但 select 失败会留下一条空白会话：沿用旧 picker 取消路径归档它。 */
+        void cancelNewConversationPresetPicker({
+          pendingSessionId: result.sessionId,
+          archive: (id) => ctx.workspaces.archiveSession(id),
+        })
         return
       }
-      closePresetPicker()
+      writeLastChatMode(globalThis.localStorage, resolved)
     } finally {
       setConversationBusy(false)
     }
   }
-  const cancelPresetPicker = () => {
-    if (presetPicker.busy) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    closePresetPicker()
-    void cancelNewConversationPresetPicker({
-      pendingSessionId,
-      archive: (id) => ctx.workspaces.archiveSession(id),
-    })
-  }
   const archiveConversation = async (id: string, stopActivity = false, selectedNextId?: string) => {
-    if (!workspaceId || conversationBusy || !canMutateConversation) return
-    setConversationMenuOpen(false)
-    const nextId = selectedNextId ?? (id === session.sessionId
+    const isCurrent = id === session.sessionId
+    if (!workspaceId || conversationBusy || (isCurrent && !canMutateConversation)) return
+    setConversationListOpen(false)
+    const nextId = selectedNextId ?? (isCurrent
       ? nextVisibleConversationId(conversations.map((item) => item.id), id)
       : undefined)
-    if (id === session.sessionId) {
+    if (isCurrent) {
       if (!nextId || (!selectedNextId && !(await canDiscardDraft(nextId)))) return
     }
     setConversationBusy(true)
@@ -270,7 +242,7 @@ export function useChatConversationControls({
     try {
       await ctx.workspaces.archiveSession(id as SessionId, stopActivity ? { stopActivity: true } : undefined)
       setArchiveStopConfirm(null)
-      if (id === session.sessionId && nextId) openConversation(nextId as SessionId)
+      if (isCurrent && nextId) openConversation(nextId as SessionId)
     } catch (error) {
       if (!stopActivity && isActiveSessionArchiveError(error)) {
         setArchiveStopConfirm({ id, nextId })
@@ -283,7 +255,7 @@ export function useChatConversationControls({
   }
   const restoreConversation = async (id: string) => {
     if (!workspaceId || conversationBusy) return
-    setConversationMenuOpen(false)
+    setConversationListOpen(false)
     if (!(await canDiscardDraft(id))) return
     setConversationBusy(true)
     setNote('')
@@ -296,16 +268,16 @@ export function useChatConversationControls({
       setConversationBusy(false)
     }
   }
-  const toggleConversationPin = async () => {
-    if (conversationBusy || currentIsArchived) return
-    setConversationMenuOpen(false)
+  const toggleConversationPinFor = async (id: string) => {
+    if (conversationBusy || archivedIds.includes(id)) return
+    const pinned = hostPinnedIds.includes(id)
     setConversationBusy(true)
     setNote('')
     try {
-      if (currentIsPinned) await ctx.workspaces.unpinSession(session.sessionId)
-      else await ctx.workspaces.pinSession(session.sessionId)
+      if (pinned) await ctx.workspaces.unpinSession(id as SessionId)
+      else await ctx.workspaces.pinSession(id as SessionId)
     } catch {
-      setNote(t(currentIsPinned ? 'chat.unpinFailed' : 'chat.pinFailed'))
+      setNote(t(pinned ? 'chat.unpinFailed' : 'chat.pinFailed'))
     } finally {
       setConversationBusy(false)
     }
@@ -313,16 +285,18 @@ export function useChatConversationControls({
   const currentConversationTitle = conversations.find((item) => item.id === session.sessionId)?.title
     ?? archivedConversations.find((item) => item.id === session.sessionId)?.title
     ?? t('chat.newConversation')
-  const renameInitialValue = titleOverrides[session.sessionId]?.title
-    ?? (currentConversationTitle === t('chat.newConversation') ? '' : currentConversationTitle)
+  const renameTargetTitle = renameTarget
+    ? titleOverrides[renameTarget]?.title ?? conversationById.get(renameTarget)?.title ?? ''
+    : ''
+  const renameInitialValue = renameTargetTitle === t('chat.newConversation') ? '' : renameTargetTitle
   return {
-    renamingConversation, setRenamingConversation, conversationMenuOpen, setConversationMenuOpen,
-    conversationMenuTrigger, conversationMenuYields, conversationBusy, conversationFilter, setConversationFilter,
-    archiveStopConfirm, setArchiveStopConfirm, titleOverrides, draftConfirm, presetPicker, setPresetPicker,
-    newConversationButton, conversations, archivedConversations, hostPinnedIds, archivedIds,
-    filteredConversations, currentIsArchived, currentIsPinned, canMutateConversation,
+    renameTarget, setRenameTarget, conversationListOpen, setConversationListOpen,
+    conversationListTrigger, conversationBusy, conversationFilter, setConversationFilter,
+    archiveStopConfirm, setArchiveStopConfirm, titleOverrides, draftConfirm,
+    presetChoices, conversations, archivedConversations, hostPinnedIds, archivedIds,
+    filteredConversations, currentIsArchived, canMutateConversation,
     queueConversationRename, resolveDraftConfirm, switchConversation, renameConversation,
-    createConversation, retryPresetList, confirmPresetPicker, cancelPresetPicker,
-    archiveConversation, restoreConversation, toggleConversationPin, currentConversationTitle, renameInitialValue
+    newConversation,
+    archiveConversation, restoreConversation, toggleConversationPinFor, currentConversationTitle, renameInitialValue
   }
 }

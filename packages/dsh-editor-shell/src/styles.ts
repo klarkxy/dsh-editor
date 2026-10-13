@@ -345,7 +345,6 @@ ${historyStyles}
 }
 .shell .chat-history { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
 .shell .chat-history .rt-ScrollAreaViewport { overscroll-behavior: contain; }
-.shell .conversation-select .select { display: block; min-width: 0; max-width: 100%; }
 .radix-themes .chat-row { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .shell .proposal-card pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .radix-themes .chat-row.chat-row-enter { animation: shell-message-in 200ms both; }
@@ -360,27 +359,6 @@ ${chatMessageStyles}
 .radix-themes .chapter-ops-dialog .proposal-card .proposal-actions { display: flex; width: auto; justify-content: flex-end; }
 .radix-themes .chapter-ops-dialog .proposal-card .proposal-actions button { width: auto; }
 .radix-themes .file-dialog-actions { max-height: clamp(160px, calc(100dvh - 300px), 520px); }
-.radix-themes .preset-picker-dialog .file-dialog-actions button { width: 100%; text-align: left; }
-.radix-themes .preset-picker-dialog .rt-RadioCardsItem {
-  justify-content: flex-start;
-  align-items: flex-start;
-  min-height: calc((var(--space-3) / 1.2) * 2 + var(--line-height-2) + var(--space-1) + var(--line-height-1) * 2);
-}
-.radix-themes .preset-picker-dialog .preset-choice-body {
-  flex: 1;
-  min-width: 0;
-  width: 100%;
-}
-.radix-themes .preset-picker-dialog .preset-choice-name {
-  white-space: nowrap;
-}
-.radix-themes .preset-picker-dialog .preset-choice-copy {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  width: 100%;
-}
 
 /* ── Focus mode / layout toggles ────────────────────────── */
 /* 工作台网格：.dsh-frame 是 flex 列容器，PanelGroup 占满剩余高度。 */

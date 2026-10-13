@@ -195,21 +195,6 @@ export function canConfirmConversationPreset(presets: readonly ConversationPrese
   return Boolean(presetId && presets.some((item) => item.id === presetId && item.available))
 }
 
-export async function startNewConversationPresetFlow(input: {
-  canDiscardDraft(): Promise<boolean>
-  list(): Promise<RpcResult<unknown>>
-  projection?: PresetProjectionOptions
-}): Promise<
-  | { kind: 'blocked' }
-  | { kind: 'listed'; presets: ConversationPresetChoice[] }
-  | { kind: 'list-error'; error: string }
-> {
-  if (!await input.canDiscardDraft()) return { kind: 'blocked' }
-  const loaded = await loadNewConversationPresets(input.list, input.projection)
-  if (!loaded.ok) return { kind: 'list-error', error: loaded.error }
-  return { kind: 'listed', presets: loaded.presets }
-}
-
 export async function loadNewConversationPresets(list: () => Promise<RpcResult<unknown>>, options?: PresetProjectionOptions): Promise<
   { ok: true; presets: ConversationPresetChoice[] } | { ok: false; error: string }
 > {

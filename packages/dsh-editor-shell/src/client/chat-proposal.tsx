@@ -512,24 +512,34 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       </Box>
     );
   }
-  const renderBody = () => {
-    const targets = renderTargets()
-    const basis = renderBasis()
-    if (!targets && !basis) return renderKindBody()
-    return (
-      <Fragment>
-        {targets}
-        {basis}
-        {renderKindBody()}
-      </Fragment>
-    );
-  }
+  /* §5 提案卡：header=操作类型+路径+摘要；中部 diff；底部按钮顺序
+     主「应用修改」→ 次「放弃」→ 状态行 → 依据行。 */
+  const renderBody = () => renderKindBody()
 
   const canRecheckNow = state === 'deferred' || (state === 'expired' && canRecheck)
   const canUndo = state === 'applied' && props.proposal.kind === 'edit' && Boolean(appliedVersion)
   const hasActions = state === 'ready' || canRecheckNow || canUndo
   const footer = <Flex asChild direction="column" gap="2" mt="3">
     <footer>
+      {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
+        {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void apply()}>
+          {t('chat.applyChanges')}
+        </Button> : null}
+        {state === 'ready' ? <Button
+          type="button"
+          variant="soft"
+          color="gray"
+          className="proposal-dismiss"
+          onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
+          {t('chat.discardProposal')}
+        </Button> : null}
+        {canRecheckNow ? <Button type="button" variant="solid" onClick={() => void check()}>
+          {t('chat.recheck')}
+        </Button> : null}
+        {canUndo ? <Button type="button" variant="soft" color="gray" onClick={() => void undo()}>
+          {t('chat.undoThis')}
+        </Button> : null}
+      </Flex> : null}
       <Text
         size="1"
         color={state === 'expired' ? 'red' : 'gray'}
@@ -542,37 +552,10 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
             : null}
         {note}
       </Text>
-      {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
-        {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void apply()}>
-          {t('common.apply')}
-        </Button> : null}
-        {state === 'ready' ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
-          {t('chat.defer')}
-        </Button> : null}
-        {state === 'ready' ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          className="proposal-dismiss"
-          onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
-          {t('common.ignore')}
-        </Button> : null}
-        {canRecheckNow ? <Button type="button" variant="solid" onClick={() => void check()}>
-          {t('chat.recheck')}
-        </Button> : null}
-        {canUndo ? <Button type="button" variant="soft" color="gray" onClick={() => void undo()}>
-          {t('chat.undoThis')}
-        </Button> : null}
-      </Flex> : null}
+      {renderTargets()}
+      {renderBasis()}
     </footer>
   </Flex>
-  const titleBlock = <Text size="2" weight="medium" className="proposal-heading">
-    {props.proposal.summary}
-  </Text>
   const metaBlock = <Flex className="proposal-meta" align="center" gap="2" wrap="wrap" minWidth="0">
     {kindBadge ? <Badge className="proposal-kind" variant="soft" size="1">
       {kindBadge}
@@ -581,15 +564,18 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       {headerPathLabel}
     </Text>
   </Flex>
+  const titleBlock = <Text size="2" weight="medium" className="proposal-heading">
+    {props.proposal.summary}
+  </Text>
   if (settled) {
     return (
       <Card className={`proposal-card ${state} proposal-card-settled`} size="2" aria-label={t('chat.fileProposal')}>
         <details>
           <summary>
             <Flex direction="column" gap="1" minWidth="0">
-              {titleBlock}
+              {metaBlock}
               <Flex align="center" justify="between" gap="2" wrap="wrap">
-                {metaBlock}
+                {titleBlock}
                 <Text size="1" color="gray" className="proposal-status" role="status">
                   {state === 'applied' || state === 'undone' ? <SuccessMark /> : null}
                   {note}
@@ -605,10 +591,10 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
   return (
     <Card className={`proposal-card ${state}`} size="2" aria-label={t('chat.fileProposal')}>
-      <Flex asChild align="start" justify="between" gap="2" wrap="wrap" mb="3">
+      <Flex asChild align="start" direction="column" gap="1" mb="3">
         <header>
-          {titleBlock}
           {metaBlock}
+          {titleBlock}
         </header>
       </Flex>
       {renderBody()}
