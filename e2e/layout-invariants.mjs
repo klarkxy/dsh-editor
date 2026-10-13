@@ -551,18 +551,27 @@ try {
   const sendState = await page.evaluate(() => {
     const btn = document.querySelector('aside.chat .composer-actions .send')
     if (!btn) return null
+    /* 探针必须挂在 token 作用域内（html[data-dsh-ui] 下的 .radix-themes/
+       [data-dsh-theme] 子树）；挂 document.body 上 var() 无法解析，会得到
+       transparent，和坏按钮的透明背景"相等"造成空断言。 */
+    const scope = document.querySelector('.radix-themes, [data-dsh-theme]') ?? document.documentElement
     const probe = document.createElement('div')
-    probe.style.backgroundColor = 'var(--dsh-ui-brand)'
+    probe.style.backgroundColor = 'var(--dsh-ui-accent)'
     probe.style.display = 'none'
-    document.body.appendChild(probe)
+    scope.appendChild(probe)
     const accent = getComputedStyle(probe).backgroundColor
     probe.remove()
-    return { disabled: btn.disabled, bg: getComputedStyle(btn).backgroundColor, accent }
+    const glyph = getComputedStyle(btn).color
+    return { disabled: btn.disabled, bg: getComputedStyle(btn).backgroundColor, accent, glyph }
   })
+  const WHITEISH = /rgba?\(25[0-9],\s*25[0-9],\s*25[0-9]/
+  const TRANSPARENT = 'rgba(0, 0, 0, 0)'
   if (!sendState) failures.push('partner-send: .send button missing')
   else {
     if (sendState.disabled) failures.push('partner-send: disabled while a filled draft is submittable')
+    if (sendState.accent === TRANSPARENT) failures.push('partner-send: --dsh-ui-accent probe did not resolve (scoped to body?)')
     if (sendState.bg !== sendState.accent) failures.push(`partner-send: bg ${sendState.bg} != accent ${sendState.accent}`)
+    if (sendState.bg === TRANSPARENT || WHITEISH.test(sendState.bg)) failures.push(`partner-send: enabled bg is transparent/white (${sendState.bg})`)
   }
 
   // C17: with a draft, 新对话 must prompt; cancel keeps place and draft.

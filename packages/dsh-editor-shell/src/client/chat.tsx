@@ -573,6 +573,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
           <Flex className="composer-actions" align="center" gap="2" flexShrink="0">
             {snapshot.running ? <UiIconButton
               className="chat-stop"
+              variant="secondary"
               label={t('chat.stop')}
               onClick={() => {
                 void settleConversationStop({
@@ -584,6 +585,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
             </UiIconButton> : null}
             <UiIconButton
               className="send"
+              variant="primary"
               type="submit"
               label={t('chat.send')}
               title={sendBlock ? t(`chat.sendBlocked.${sendBlock}`) : undefined}

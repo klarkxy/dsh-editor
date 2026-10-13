@@ -108,4 +108,19 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 }
 .composer-model .model-effort .select-trigger { flex: none; min-width: max-content; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
 .composer-model .model-picker { min-width: 0; }
+
+/* 发送/停止：填充色、禁用与悬停色归 UiIconButton data-variant（primary/
+   secondary）；这里只定尺寸与圆形，层序在本文件（dsh.surfaces）成立。 */
+.composer-actions .send {
+  width: var(--dsh-ui-control-xl); height: var(--dsh-ui-control-xl);
+  min-width: var(--dsh-ui-control-xl); min-height: var(--dsh-ui-control-xl);
+  margin: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round;
+  transition: background var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);
+}
+.composer-actions .send:hover:not(:disabled) { transform: scale(1.05); }
+.composer-actions .chat-stop {
+  width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8);
+  margin: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round;
+}
+@media (prefers-reduced-motion: reduce) { .composer-actions .send { transition: none; } .composer-actions .send:hover { transform: none; } }
 `)

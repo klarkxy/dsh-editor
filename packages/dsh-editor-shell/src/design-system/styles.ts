@@ -232,14 +232,8 @@ export const componentStyles = [
   r(['.composer-voice-expanded'], 'order: -1; flex-basis: 100%;'),
   r(['.composer-model'], 'min-width: 0;'),
   r(['.composer-model .select-trigger'], 'min-height: var(--dsh-ui-control-sm); max-width: 100%; border: 0; box-shadow: none; background: transparent; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
-  // Send button: base dimensions and appearance apply to all states
-  r(['button.rt-BaseButton.send', '.composer-actions .send'], 'width: var(--dsh-ui-control-xl); height: var(--dsh-ui-control-xl); min-width: var(--dsh-ui-control-xl); min-height: var(--dsh-ui-control-xl); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; box-shadow: none; transition: background var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);'),
-  // Enabled send gets brand background
-  r(['button.rt-BaseButton.send:not(:disabled):not([disabled])', '.composer-actions .send:not(:disabled):not([disabled])'], 'background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand);'),
-  r(['button.rt-BaseButton.send:hover:not(:disabled):not([disabled])', '.composer-actions .send:hover:not(:disabled):not([disabled])'], 'background: var(--dsh-ui-brand-hover); transform: scale(1.05);'),
-  // Disabled send overrides with transparent
-  r(['button.rt-BaseButton.send:disabled', 'button.rt-BaseButton.send[disabled]', '.composer-actions .send:disabled', '.composer-actions .send[disabled]'], 'background: transparent; color: var(--dsh-ui-muted); opacity: 1; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); transform: none; cursor: not-allowed;'),
-  r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-raised); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); transition: none;'),
+  /* 发送/停止的填充色由 UiIconButton data-variant 提供（dsh.components 层在
+     legacy 之后，这里声明颜色会被组件层盖掉）；尺寸与圆形见 app/assistant。 */
 
   // Review and approvals remain visually distinct from routine tool logs.
   /* §5：提案/回执/冲突/过期卡统一为扁平 raised + line-strong，无侧边色条。 */
