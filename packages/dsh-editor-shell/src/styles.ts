@@ -318,7 +318,9 @@ ${historyStyles}
 .radix-themes .editor-tools .ghost-actions > small { font-size: var(--font-size-1); color: var(--gray-11); }
 .radix-themes .editor-tools .ghost-actions .kbd { font-family: var(--code-font-family); font-size: var(--font-size-1); padding: 2px var(--space-1); border-radius: var(--radius-2); background: var(--gray-3); color: var(--gray-11); margin-right: var(--space-1); }
 .radix-themes .editor-tools .ghost-actions .fim-sep { color: var(--gray-6); padding: 0 var(--space-1); user-select: none; }
-.radix-themes .danger-action { color: var(--red-9); }
+/* 软/描边样式的危险按钮用红字；solid 变体保持 Radix 自带的 on-accent 白字，
+   否则红字落在红色填充上等于没有标签。 */
+.radix-themes .danger-action:not(.rt-variant-solid) { color: var(--red-9); }
 
 .radix-themes .proposal { position: relative; padding: var(--space-3); margin: var(--space-3) 0 var(--space-2); max-width: 100%; background: var(--color-panel-solid); box-shadow: inset 0 0 0 1px var(--gray-a5); border-radius: var(--radius-3); display: grid; gap: var(--space-2); }
 .radix-themes .proposal > strong { font: 500 var(--font-size-2)/1.4 var(--default-font-family); color: var(--gray-12); }
@@ -449,18 +451,15 @@ ${chatMessageStyles}
    全页设置的 .dsh-settings-page；弹窗自身的网格/导航/翻页规则随 C36 退役。 */
 .radix-themes .dsh-settings-page { font: 400 var(--font-size-2)/1.5 var(--default-font-family); color: var(--gray-12); --control-h: 34px; }
 .radix-themes .dsh-settings-section > :is(.settings-general,.models-page,.usage-page) { display: grid; gap: var(--space-5); }
-.radix-themes .dsh-settings-page .settings-block { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
-.radix-themes .dsh-settings-page .settings-block.rt-Card { --card-padding: 0px; --card-border-width: 0px; }
 .radix-themes .dsh-settings-page .settings-block.rt-Card::before,
 .radix-themes .dsh-settings-page .settings-block.rt-Card::after { display: none; }
-.radix-themes .settings-block-head { margin-bottom: var(--space-3); }
+.radix-themes .settings-block-head { margin-bottom: var(--space-2); }
 .radix-themes .settings-block-title,
 .radix-themes .dsh-settings-page h3 { margin: 0; font-size: var(--font-size-3); font-weight: 600; line-height: 1.5; }
 .radix-themes .dsh-settings-page .settings-row { min-height: 56px; gap: var(--space-4); padding-block: var(--space-3); }
 .radix-themes .settings-row-title { font-size: var(--font-size-2); font-weight: 400; }
 .radix-themes .settings-row-text { flex: 1; }
 .radix-themes .settings-row-description { font-size: var(--font-size-1); line-height: 1.5; }
-.radix-themes .dsh-settings-page .settings-block + .settings-block { padding-top: var(--space-5); border-top: 1px solid var(--gray-a5); }
 .radix-themes .dsh-settings-page .rt-BaseButton:not([role="switch"]) { font-size: var(--font-size-2); min-height: var(--control-h); }
 .radix-themes .dsh-settings-page :is(input,textarea,select) { font-family: var(--default-font-family); font-size: var(--font-size-2); }
 .radix-themes .dsh-settings-page .rt-TextFieldRoot { min-height: var(--control-h); }

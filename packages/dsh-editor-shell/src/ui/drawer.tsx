@@ -26,6 +26,8 @@ export function Drawer(props: {
   side?: 'left' | 'right'
   title: ReactNode
   closeLabel: string
+  /** 关闭时优先回焦的元素（如抽屉内导航选中后的分区标题）。 */
+  returnFocusRef?: { current: HTMLElement | null }
   /** 无标题条模式：标题进 VisuallyHidden，内容第一行（页签条）自己充当
       抽屉顶行，关闭按钮绝对定位压在它的右端。 */
   bare?: boolean
@@ -59,7 +61,7 @@ export function Drawer(props: {
               }}
               onCloseAutoFocus={(event) => {
                 event.preventDefault()
-                scheduleReturnFocus(returnFocus.current, restoreGen)
+                scheduleReturnFocus(props.returnFocusRef?.current ?? returnFocus.current, restoreGen)
               }}
             >
               {props.bare ? (

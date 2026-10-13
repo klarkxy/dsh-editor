@@ -88,6 +88,54 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .dsh-settings-section__tools .dsh-search-field { width: 16rem; }
 .dsh-settings-error { margin: 0; color: var(--dsh-ui-danger, var(--dsh-ui-text)); font-size: var(--dsh-ui-text-sm); }
 
+/* ── 设置卡片：0.5px 描边无阴影的平面卡片，space-4 横向 / space-3-4 纵向内边距；
+     标题 text-sm 加粗、下方留 space-2；行分隔线自然缩进在内边距内。 ── */
+.dsh-settings-page .settings-block {
+  padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4) var(--dsh-ui-space-4);
+  border: 0.5px solid var(--dsh-ui-line-strong);
+  border-radius: var(--dsh-ui-radius-xl);
+  background: var(--dsh-ui-raised);
+}
+.dsh-settings-page .settings-block.rt-Card {
+  --card-padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4) var(--dsh-ui-space-4);
+}
+.dsh-settings-page .settings-block-head { margin-bottom: var(--dsh-ui-space-2); }
+.dsh-settings-page .settings-block-title {
+  font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);
+}
+/* 跳转型操作（查看全部快捷键等）按链接上色，不用 Radix 默认 accent。 */
+.dsh-settings-page .settings-link-button { color: var(--dsh-ui-link); }
+/* Radix ghost 按钮自带 -8px 光学外溢（让文字对齐内边距）；卡片内的可点
+   目标盒子仍须留在内边距里，关掉外溢而不是让点击区探出描边。 */
+.dsh-settings-page .settings-block .rt-Button.rt-variant-ghost {
+  --margin-left-override: 0px; --margin-right-override: 0px;
+}
+
+/* ── 窄窗导航（<760px）：导航列收成「当前分区」触发行，抽屉里放同一棵导航树 ── */
+.dsh-settings-nav-mobile { display: none; }
+.dsh-settings-nav-trigger {
+  display: flex; align-items: center; gap: var(--dsh-ui-space-2);
+  width: 100%; min-height: 40px; padding: 0 var(--dsh-ui-space-3);
+  background: none; border: 0; border-bottom: 0.5px solid var(--dsh-ui-line);
+  font: inherit; font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-text);
+  cursor: pointer;
+}
+.dsh-settings-nav-trigger:hover { background: var(--dsh-ui-hover); }
+.dsh-settings-nav-trigger:focus-visible { outline: 2px solid var(--dsh-ui-accent); outline-offset: -2px; }
+.dsh-settings-nav-trigger__label { flex: 1 1 auto; min-width: 0; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-settings-nav-trigger svg { flex: none; color: var(--dsh-ui-muted); }
+.dsh-settings-nav-drawer {
+  display: flex; flex-direction: column; gap: var(--dsh-ui-space-1);
+  flex: 1 1 auto;
+  padding: var(--dsh-ui-space-4) var(--dsh-ui-space-2);
+  overflow-y: auto; overflow-x: hidden; min-height: 0;
+}
+@media (max-width: 759px) {
+  .dsh-settings-page__layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .dsh-settings-page__nav { display: none; }
+  .dsh-settings-nav-mobile { display: block; min-width: 0; }
+}
+
 /* ── 写作分区：控件列 + 实时预览列，预览与编辑器共用 --paper-* 变量 ── */
 .dsh-writing-settings {
   display: grid; grid-template-columns: minmax(280px, 430px) minmax(0, 1fr);
@@ -123,22 +171,8 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .writing-slider-group .dsh-slider-row { width: 100%; }
 .writing-slider-group .dsh-slider-row__value { font-variant-numeric: tabular-nums; }
 
-/* 窄窗：导航收成紧凑列；写作预览落回文档流。 */
+/* 窄窗：内容内边距收窄、写作预览落回文档流；导航列在 <760px 换成触发行+抽屉。 */
 @media (max-width: 900px) {
-  .dsh-settings-page__layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .dsh-settings-page__nav {
-    flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: var(--dsh-ui-space-1);
-    padding: var(--dsh-ui-space-3); border-right: 0; border-bottom: 0.5px solid var(--dsh-ui-line);
-    max-height: 40vh;
-  }
-  .dsh-settings-nav-group { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .dsh-settings-nav-group + .dsh-settings-nav-group { margin-top: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-2); }
-  .dsh-settings-nav-group__label { flex: 1 1 100%; padding-bottom: 0; }
-  .dsh-settings-nav-group .dsh-list-row { width: auto; flex: none; }
-  .dsh-settings-config { flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .dsh-settings-config__label { flex: 1 1 100%; }
-  .dsh-settings-config .dsh-input, .dsh-settings-config .dsh-search-field { flex: 1 1 12rem; min-width: 0; }
-  .dsh-settings-config__links { flex: 1 1 100%; }
   .dsh-settings-page__content { padding: var(--dsh-ui-space-4) var(--dsh-ui-space-3) var(--dsh-ui-space-8); }
   .dsh-writing-settings { grid-template-columns: minmax(0, 1fr); }
   .dsh-settings-preview { position: static; }

@@ -48,7 +48,7 @@ export function ConfirmDialog(props: {
             children={<Button ref={cancel} disabled={props.busy}>
               {t('common.cancel')}
             </Button>} />
-          <ThemesButton variant="solid" color="red" className="danger-action" disabled={props.busy} onClick={props.onConfirm}>
+          <ThemesButton variant="solid" color="red" highContrast className="danger-action" disabled={props.busy} onClick={props.onConfirm}>
             {display.confirmLabel}
           </ThemesButton>
         </Flex>

@@ -320,6 +320,17 @@ try {
   })
   await zhihuCard.getByRole('button', { name: '复制规格', exact: true }).click()
   await discovery.getByText(`请手动复制：${installSpec}`, { exact: true }).waitFor()
+  // A submitted query with no matches shows a no-match state naming the term;
+  // with no network the search surfaces its error alert instead.
+  await query.fill('查无此插件zzz')
+  await discovery.locator(S.form).getByRole('button', { name: '搜索', exact: true }).click()
+  const noMatch = discovery.locator('.dsh-plugins-empty', { hasText: '查无此插件zzz' })
+  const searchError = discovery.locator('.dsh-plugins-error')
+  await noMatch.or(searchError).first().waitFor({ timeout: 15_000 })
+  report.interactions.push({
+    name: 'discovery no-match state names the submitted term',
+    ok: await noMatch.isVisible().catch(() => false),
+  })
   // 发现 search is scoped to that page: it must not filter the 已安装 list.
   const installedBefore = await plugins.locator(S.pluginsCatalogRow).count()
   await showPluginList(plugins)

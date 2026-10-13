@@ -36,8 +36,8 @@ import {
   type WritingPresetsBundle,
 } from '../model/plugins-catalog.ts'
 import { ActivityText, Button } from './ui/index.ts'
-import { SwitchControl } from '../ui/index.ts'
-import { AppBrandMark, PluginIcon, ThemePaperIcon } from './icons.tsx'
+import { FileTextIcon, SwitchControl } from '../ui/index.ts'
+import { AppBrandMark, PluginIcon } from './icons.tsx'
 
 export function usePluginCatalog(ctx: unknown): PluginCatalogBundle {
   const [sections, setSections] = useState<PluginCatalogSection[] | null>(null)
@@ -131,7 +131,7 @@ export type CatalogKind = 'official' | 'builtin' | 'user' | 'preset'
 /** 三类目录的统一类型图标：官方=DSH 标志,内置/预设=稿纸,用户=拼图。 */
 function CatalogKindIcon({ kind }: { kind: CatalogKind }) {
   if (kind === 'official') return <AppBrandMark size={20} />
-  if (kind === 'builtin' || kind === 'preset') return <ThemePaperIcon size={20} />
+  if (kind === 'builtin' || kind === 'preset') return <FileTextIcon size="lg" />
   return <PluginIcon size={20} />
 }
 

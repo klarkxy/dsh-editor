@@ -368,7 +368,7 @@ export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
             <Flex direction="column" align="start" gap="2" mt="3">
               <Text size="2"><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')}</Text>
               <Text size="2"><Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</Text>
-              {onOpenShortcuts ? <Button variant="ghost" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
+              {onOpenShortcuts ? <Button variant="ghost" className="settings-link-button" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
             </Flex>
           </Card>
           <Card className="paper-typography settings-block">

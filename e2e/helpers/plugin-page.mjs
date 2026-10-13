@@ -165,7 +165,19 @@ export async function nativePluginRpc(page, method, args = {}) {
  * nav's scroll metrics, is the only way to see that failure.
  */
 export async function assertConfigNavLinksReachable(plugins) {
-  const nav = plugins.locator(S.pluginsPageNav)
+  /* <760px 时导航列收成触发行，同样的链接树在左侧抽屉里展开；两种形态
+     都按「链接可达且不越界」度量。抽屉 Portal 在页面外，需从 page 查。 */
+  const column = plugins.locator(S.pluginsPageNav)
+  const columnVisible = await column.evaluate(el => getComputedStyle(el).display !== 'none').catch(() => false)
+  const page = plugins.page()
+  let nav = column
+  let drawer = null
+  if (!columnVisible) {
+    await plugins.locator(S.settingsNavTrigger).click()
+    drawer = page.locator(S.settingsNavDrawer)
+    await drawer.waitFor({ state: 'visible', timeout: 8_000 })
+    nav = drawer
+  }
   const measured = await nav.evaluate((element, linkSelector) => {
     const box = element.getBoundingClientRect()
     const style = getComputedStyle(element)
@@ -196,6 +208,10 @@ export async function assertConfigNavLinksReachable(plugins) {
     element.scrollTop = 0
     return { links, nav: { client: element.clientWidth, scroll: element.scrollWidth } }
   }, S.pluginsPageLink)
+  if (drawer) {
+    await page.keyboard.press('Escape')
+    await drawer.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined)
+  }
   assert.ok(measured.links.length > 0, 'the plugins nav renders its links')
   const unreachable = measured.links.filter(link => !link.reachable)
   assert.equal(unreachable.length, 0,

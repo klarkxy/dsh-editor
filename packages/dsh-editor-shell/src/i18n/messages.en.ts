@@ -1042,7 +1042,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'search.hideReplace': 'Hide replace',
   'workspace.saveFirstVersion': 'Save first version',
   'chat.fixDefaultModel': 'Fix default model',
-  'settings.groupWriting': 'Writing & shortcuts',
+  'settings.groupWriting': 'Creation',
   'settings.groupAssistant': 'Assistant and models',
   'settings.groupExtensions': 'Extensions and connections',
   'settings.groupApp': 'App',

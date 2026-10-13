@@ -174,6 +174,8 @@ export const S = Object.freeze({
   settingsDialog: '.dsh-settings-page',
   settingsNav: '.dsh-settings-page__nav',
   settingsNavTab: '.dsh-settings-nav-item',
+  settingsNavTrigger: '[data-testid="settings-mobile-nav-trigger"]',
+  settingsNavDrawer: '[data-testid="settings-mobile-nav-drawer"]',
   settingsNavSection: (id) => `[data-testid="settings-nav-${id}"]`,
   settingsSection: (id) => `[data-testid="settings-section-${id}"]`,
   settingsBack: '[data-testid="settings-back"]',

@@ -152,7 +152,9 @@ describe('plugin discovery', () => {
     })
     expect(tree.type).toBe('section')
     expect(tree.props.open).toBeUndefined()
-    expect((Array.isArray(tree.props.children) ? tree.props.children[0] : tree.props.children)?.type).toBe('h3')
+    // 页面标题在宿主设置页，发现页内部不再重复 h3。
+    expect(elements(tree).some(el => el.type === 'h3')).toBe(false)
+    expect((Array.isArray(tree.props.children) ? tree.props.children[0] : tree.props.children)?.type).toBe('p')
     const html = collectText(tree)
     expect(html).toContain('人物卡与世界书')
     expect(html).toContain('本地发行')
@@ -200,10 +202,26 @@ describe('plugin discovery', () => {
     const present = render([{ name: 'optional', installed: true, optional: false, enabled: false }])
     expect(collectText(present)).toContain('已安装 · 未启用')
     const configure = elements(present).find(el => el.props.children === '配置与详情')!
+    // 已安装条目的「配置与详情」是次级操作；primary 只留给「安装」。
+    expect(configure.props.variant).toBe('default')
     ;(configure.props.onClick as () => void)()
     expect(onOpen).toHaveBeenCalledExactlyOnceWith('optional')
     expect(onInstall).toHaveBeenCalledOnce()
     expect(elements(present).some(el => el.type === 'details' && collectText(el).includes('复制规格'))).toBe(true)
+  })
+
+  it('names the submitted term in the no-match state and keeps the hint for an unsearched empty list', () => {
+    const render = (submittedQuery?: string) => PluginDiscovery({
+      query: submittedQuery ?? '', listings: [], searching: false, note: '', error: '',
+      submittedQuery,
+      onQuery: vi.fn(), onSearch: vi.fn(), onCopy: vi.fn(),
+    })
+    const miss = render('不存在插件zzz')
+    expect(collectText(miss)).toContain('没有找到与「不存在插件zzz」匹配的插件。')
+    expect(collectText(miss)).not.toContain('留空点「搜索」')
+    const initial = render('')
+    expect(collectText(initial)).toContain('留空点「搜索」')
+    expect(collectText(initial)).not.toContain('没有找到')
   })
 
   it('disables installation when the native inventory is unavailable or an install is pending', () => {

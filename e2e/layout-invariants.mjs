@@ -835,6 +835,93 @@ try {
     if (so.pageRight != null && so.pageRight > so.innerWidth + 1) failures.push(`settings/${vp.width}: page right ${so.pageRight.toFixed(1)} > innerWidth ${so.innerWidth}`)
     note(`settings/${vp.width}`, `scrollWidth=${so.scrollWidth} innerWidth=${so.innerWidth}`)
   }
+
+  // ---- Settings cards carry inner padding: every visible card's first and
+  // last in-flow child sits >=12px inside both side borders (review fix). ----
+  const cardPaddingCheck = async (label) => {
+    const bad = await page.evaluate(() => {
+      const out = []
+      const cards = [...document.querySelectorAll('.dsh-settings-section:not([hidden]) .settings-block')]
+        .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
+      for (const card of cards) {
+        const kids = [...card.children].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
+        if (!kids.length) continue
+        const cr = card.getBoundingClientRect()
+        const first = kids[0].getBoundingClientRect()
+        const last = kids[kids.length - 1].getBoundingClientRect()
+        const gaps = [
+          first.left - cr.left, cr.right - first.right,
+          last.left - cr.left, cr.right - last.right,
+        ]
+        if (Math.min(...gaps) < 11.5) out.push({ cls: card.className.slice(0, 80), gaps: gaps.map((g) => +g.toFixed(1)) })
+      }
+      return out
+    })
+    for (const b of bad) failures.push(`settings-cards/${label}: child flush with card border ${JSON.stringify(b)}`)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(600)
+  for (const id of ['writing', 'advanced']) {
+    await page.locator(S.settingsNav).locator(S.settingsNavSection(id)).click()
+    await page.waitForTimeout(500)
+    await cardPaddingCheck(`${id}@1440`)
+  }
+
+  // ---- Narrow nav (<760): trigger row replaces the column; the drawer holds
+  // the same nav tree, closes on select, and focuses the section title. ----
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(600)
+  const navChrome = await page.evaluate(() => {
+    const col = document.querySelector('.dsh-settings-page__nav')
+    const trigger = document.querySelector('[data-testid="settings-mobile-nav-trigger"]')
+    const content = document.querySelector('.dsh-settings-page__content')
+    const colStyle = col ? getComputedStyle(col) : null
+    const tr = trigger?.getBoundingClientRect()
+    const cr = content?.getBoundingClientRect()
+    return {
+      colHidden: !col || colStyle.display === 'none',
+      triggerVisible: Boolean(tr && tr.width > 0 && tr.height > 0),
+      triggerLabel: trigger?.textContent?.trim() ?? '',
+      noOverlap: tr && cr ? tr.bottom <= cr.top + 1 : false,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }
+  })
+  if (!navChrome.colHidden) failures.push('settings/390: nav column still visible below 760px')
+  if (!navChrome.triggerVisible || !navChrome.triggerLabel) {
+    failures.push(`settings/390: nav trigger missing/empty ${JSON.stringify(navChrome)}`)
+  }
+  if (!navChrome.noOverlap) failures.push(`settings/390: nav trigger overlaps content ${JSON.stringify(navChrome)}`)
+  if (navChrome.scrollWidth > navChrome.innerWidth) failures.push(`settings/390: horizontal overflow ${navChrome.scrollWidth}`)
+  await page.locator(S.settingsNavTrigger).click()
+  const navDrawer = page.locator(S.settingsNavDrawer)
+  await navDrawer.waitFor({ state: 'visible', timeout: 8_000 }).catch(() => undefined)
+  if (!(await navDrawer.isVisible().catch(() => false))) {
+    failures.push('settings/390: nav drawer did not open')
+  } else {
+    const drawerState = await navDrawer.evaluate((el) => ({
+      groups: [...el.querySelectorAll('.dsh-settings-nav-group__label')].map((g) => g.textContent.trim()),
+      items: el.querySelectorAll('[data-testid^="settings-nav-"]').length,
+      search: Boolean(el.querySelector('.dsh-settings-config .dsh-search-field, .dsh-settings-config input')),
+    }))
+    if (drawerState.groups.length < 4) failures.push(`settings/390: drawer nav groups ${JSON.stringify(drawerState.groups)}`)
+    if (drawerState.items < 11) failures.push(`settings/390: drawer nav incomplete (${drawerState.items} items)`)
+    if (!drawerState.search) failures.push('settings/390: drawer nav missing the config search')
+    await navDrawer.locator(S.settingsNavSection('writing')).click()
+    await navDrawer.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
+    if (await navDrawer.isVisible().catch(() => false)) failures.push('settings/390: nav drawer did not close after selecting a section')
+    const headFocus = await page.evaluate(() => ({
+      isTitle: document.activeElement?.classList?.contains('dsh-settings-section__title') ?? false,
+      inWriting: Boolean(document.activeElement?.closest?.('[data-testid="settings-section-writing"]')),
+      active: `${document.activeElement?.tagName}.${document.activeElement?.className ?? ''}`.slice(0, 120),
+      titles: [...document.querySelectorAll('.dsh-settings-section:not([hidden]) .dsh-settings-section__title')]
+        .map((el) => `${el.textContent.trim()}|ti=${el.tabIndex}`).join(';'),
+    }))
+    if (!(headFocus.isTitle && headFocus.inWriting)) {
+      failures.push(`settings/390: section title not focused after drawer select ${JSON.stringify(headFocus)}`)
+    }
+    await cardPaddingCheck('writing@390')
+  }
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.waitForTimeout(500)
   await page.keyboard.press('Escape')

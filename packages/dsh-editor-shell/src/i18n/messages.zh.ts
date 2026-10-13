@@ -1040,7 +1040,7 @@ export const zh = {
   'search.hideReplace': '收起替换',
   'workspace.saveFirstVersion': '保存第一个版本',
   'chat.fixDefaultModel': '修复默认模型',
-  'settings.groupWriting': '写作与快捷键',
+  'settings.groupWriting': '创作',
   'settings.groupAssistant': '助手与模型',
   'settings.groupExtensions': '扩展与连接',
   'settings.groupApp': '应用',

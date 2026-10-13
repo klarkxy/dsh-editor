@@ -56,7 +56,7 @@ import {
 import { PLUGINS_SETTINGS_SLOT } from '../../root-registration.ts'
 import { titleBarDoubleClick } from '../../model/window-controls.ts'
 import { WindowControls } from '../../client/window-controls.tsx'
-import { Button, ChevronLeftIcon, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
+import { Button, ChevronDownIcon, ChevronLeftIcon, Drawer, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
 import { Button as SeatButton, Input as SeatInput } from '../../client/ui/index.ts'
 import './settings.styles.ts'
 
@@ -289,14 +289,80 @@ export function SettingsPage(props: SettingsPageProps) {
     return links.find(link => link.id === id)?.label ?? t('common.settings')
   }
 
+  /* 窄窗（<760px）：导航列换成「当前分区」触发行，同一棵导航树放进左侧抽屉；
+     选定后关抽屉并把焦点移到分区标题（盖过抽屉自带的回焦）。 */
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false)
+  const navFocusRef = useRef<HTMLElement | null>(null)
+  const focusHeadRef = useRef(false)
+  const selectFromDrawer = (id: string) => {
+    select(id)
+    /* 固定分区标题始终渲染（hidden 只遮内容），关抽屉前锁定为回焦目标；
+       动态分区没有固定 testid，交给下面的可见标题兜底。 */
+    navFocusRef.current = contentRef.current
+      ?.querySelector<HTMLElement>(`[data-testid="settings-section-${id}"] .dsh-settings-section__title`) ?? null
+    focusHeadRef.current = !navFocusRef.current
+    setNavDrawerOpen(false)
+  }
+  useEffect(() => {
+    if (navDrawerOpen || !focusHeadRef.current) return
+    focusHeadRef.current = false
+    const timer = setTimeout(() => {
+      contentRef.current
+        ?.querySelector<HTMLElement>('.dsh-settings-section:not([hidden]) .dsh-settings-section__title')
+        ?.focus()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [navDrawerOpen])
+
+  const navTree = (onPick: (id: string) => void) => navGroups.map(group => <div key={group.label} className="dsh-settings-nav-group">
+    <div className="dsh-settings-nav-group__label" aria-hidden="true">{t(group.label)}</div>
+    {group.items.map(item => <ListRow
+      key={item.id}
+      label={t(item.label)}
+      leading={item.warn ? <WarningIcon /> : undefined}
+      selected={active === item.id}
+      onSelect={() => onPick(item.id)}
+      className="dsh-settings-nav-item"
+      data-warn={item.warn || undefined}
+      data-testid={`settings-nav-${item.id}`} />)}
+    {group.label === 'settings.plugins' ? <div className="dsh-settings-config">
+      <div className="dsh-settings-config__label">{t('plugins.configuration')}</div>
+      <SearchField
+        aria-label={t('plugins.search')}
+        placeholder={t('plugins.search')}
+        clearLabel={t('search.close')}
+        value={configQuery}
+        onChange={setConfigQuery}
+        onClear={() => setConfigQuery('')} />
+      <ul className="dsh-settings-config__links">
+        {ordinaryLinks.map(link => <li key={link.id}><ListRow
+          density="compact"
+          label={link.label}
+          selected={active === link.id}
+          onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager'); return } onPick(link.id) }}
+          className="dsh-settings-nav-item" /></li>)}
+        {!filteredLinks.length ? <li><p className="dsh-settings-config__empty">{t('plugins.empty')}</p></li> : null}
+      </ul>
+      {advancedLinks.length ? <details className="dsh-settings-config__advanced" open={configQuery.trim() ? true : undefined}>
+        <summary>{t('plugins.catalogAdvanced')}</summary>
+        <ul className="dsh-settings-config__links">{advancedLinks.map(link => <li key={link.id}><ListRow
+          density="compact"
+          label={link.label}
+          selected={active === link.id}
+          onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager') } else onPick(link.id) }}
+          className="dsh-settings-nav-item" /></li>)}</ul>
+      </details> : null}
+    </div> : null}
+  </div>)
+
   const section = (id: string, title: string, children: ReactNode, opts?: { tools?: ReactNode }) => (
     <div hidden={active !== id} className="dsh-settings-section" data-testid={`settings-section-${id}`}>
       {opts?.tools
         ? <div className="dsh-settings-section__head">
-          <h2 className="dsh-settings-section__title">{title}</h2>
+          <h2 className="dsh-settings-section__title" tabIndex={-1}>{title}</h2>
           <div className="dsh-settings-section__tools">{opts.tools}</div>
         </div>
-        : <h2 className="dsh-settings-section__title">{title}</h2>}
+        : <h2 className="dsh-settings-section__title" tabIndex={-1}>{title}</h2>}
       {mounted(id) ? children : null}
     </div>
   )
@@ -336,47 +402,16 @@ export function SettingsPage(props: SettingsPageProps) {
     {note ? <p className="dsh-settings-error" role="alert">{note}</p> : null}
     <div className="dsh-settings-page__layout">
       <nav className="dsh-settings-page__nav" data-testid="settings-nav" aria-label={t('settings.nav')}>
-        {navGroups.map(group => <div key={group.label} className="dsh-settings-nav-group">
-          <div className="dsh-settings-nav-group__label" aria-hidden="true">{t(group.label)}</div>
-          {group.items.map(item => <ListRow
-            key={item.id}
-            label={t(item.label)}
-            leading={item.warn ? <WarningIcon /> : undefined}
-            selected={active === item.id}
-            onSelect={() => select(item.id)}
-            className="dsh-settings-nav-item"
-            data-warn={item.warn || undefined}
-            data-testid={`settings-nav-${item.id}`} />)}
-          {group.label === 'settings.plugins' ? <div className="dsh-settings-config">
-            <div className="dsh-settings-config__label">{t('plugins.configuration')}</div>
-            <SearchField
-              aria-label={t('plugins.search')}
-              placeholder={t('plugins.search')}
-              clearLabel={t('search.close')}
-              value={configQuery}
-              onChange={setConfigQuery}
-              onClear={() => setConfigQuery('')} />
-            <ul className="dsh-settings-config__links">
-              {ordinaryLinks.map(link => <li key={link.id}><ListRow
-                density="compact"
-                label={link.label}
-                selected={active === link.id}
-                onSelect={() => { if (link.entry) { openEntryInManager(link.entry); return } select(link.id) }}
-                className="dsh-settings-nav-item" /></li>)}
-              {!filteredLinks.length ? <li><p className="dsh-settings-config__empty">{t('plugins.empty')}</p></li> : null}
-            </ul>
-            {advancedLinks.length ? <details className="dsh-settings-config__advanced" open={configQuery.trim() ? true : undefined}>
-              <summary>{t('plugins.catalogAdvanced')}</summary>
-              <ul className="dsh-settings-config__links">{advancedLinks.map(link => <li key={link.id}><ListRow
-                density="compact"
-                label={link.label}
-                selected={active === link.id}
-                onSelect={() => { if (link.entry) openEntryInManager(link.entry); else select(link.id) }}
-                className="dsh-settings-nav-item" /></li>)}</ul>
-            </details> : null}
-          </div> : null}
-        </div>)}
+        {navTree(select)}
       </nav>
+      <div className="dsh-settings-nav-mobile">
+        <button type="button" className="dsh-settings-nav-trigger" data-testid="settings-mobile-nav-trigger"
+          aria-haspopup="dialog" aria-expanded={navDrawerOpen || undefined}
+          onClick={() => setNavDrawerOpen(true)}>
+          <span className="dsh-settings-nav-trigger__label">{labelOf(active)}</span>
+          <ChevronDownIcon size="sm" />
+        </button>
+      </div>
       <div ref={contentRef} className="dsh-settings-page__content" data-testid="settings-content" tabIndex={0} role="region" aria-label={labelOf(active)}>
         {section('writing', t('settings.writing'),
           <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} onOpenShortcuts={() => selectSection('shortcuts')} />)}
@@ -423,7 +458,7 @@ export function SettingsPage(props: SettingsPageProps) {
           </>,
         })}
         <div hidden={active !== 'plugins-discovery'} className="dsh-settings-section" data-testid="plugins-discovery">
-          <h2 className="dsh-settings-section__title">{t('plugins.navDiscovery')}</h2>
+          <h2 className="dsh-settings-section__title" tabIndex={-1}>{t('plugins.navDiscovery')}</h2>
           <PluginSettingsContent contribution={props.renderSlot
             ? props.renderSlot(PLUGINS_SETTINGS_SLOT, { Button: SeatButton, Input: SeatInput, inventory: manager?.inventory,
               onInstall: openInstall, onOpen: (packageName: string) => openDetail({ key: `bundle:${packageName}`, packageName,
@@ -432,7 +467,7 @@ export function SettingsPage(props: SettingsPageProps) {
         </div>
         {/* The official manager stays mounted while hidden: its pluginNavigation service must survive. */}
         <div hidden={active !== 'plugins-manager'} className="dsh-settings-section" data-testid="plugins-manager-seat">
-          <h2 className="dsh-settings-section__title">{t('plugins.navManager')}</h2>
+          <h2 className="dsh-settings-section__title" tabIndex={-1}>{t('plugins.navManager')}</h2>
           {managerError ? <p className="dsh-settings-error" role="alert">{managerError}</p> : null}
           <div data-dsh-plugin-surface="">
             {props.renderSlot ? props.renderSlot(NATIVE_PLUGIN_MANAGER_SEAT, {}, { entryKey: NATIVE_PLUGIN_MANAGER_KEY }) : <p className="dsh-settings-error">{t('plugins.unavailable')}</p>}
@@ -460,6 +495,14 @@ export function SettingsPage(props: SettingsPageProps) {
           onClose={() => selectSection('plugins-installed')} /> : null}
       </div>
     </div>
+    <Drawer open={navDrawerOpen} side="left"
+      onOpenChange={(next) => { if (next) navFocusRef.current = null; setNavDrawerOpen(next) }}
+      returnFocusRef={navFocusRef}
+      title={t('settings.nav')} closeLabel={t('search.close')}>
+      <nav className="dsh-settings-nav-drawer" data-testid="settings-mobile-nav-drawer" aria-label={t('settings.nav')}>
+        {navTree(selectFromDrawer)}
+      </nav>
+    </Drawer>
   </section>
 }
 

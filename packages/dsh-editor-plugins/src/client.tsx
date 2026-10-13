@@ -194,6 +194,7 @@ export function PluginDiscovery(props: {
   error: string
   Button?: ShellToolSeatContext['Button']
   Input?: ShellToolSeatContext['Input']
+  submittedQuery?: string
   onQuery(value: string): void
   onSearch(): void
   onCopy(spec: string): void
@@ -211,7 +212,6 @@ export function PluginDiscovery(props: {
   }
   return (
     <section className="dsh-plugins-group" data-testid="plugins-settings" aria-label="发现插件">
-      <h3>发现插件</h3>
       <p className="dsh-plugins-intro">
         搜索写作需要的功能，或留空查看本机可选插件。选择「安装」后，在安装窗口确认；已有插件可打开配置与详情。
       </p>
@@ -231,7 +231,9 @@ export function PluginDiscovery(props: {
       </p> : discoveryInstallBusy(props.inventory) ? <p className="dsh-plugins-status" role="status">安装正在进行，请在「安装与卸载」页查看进度。</p> : null}
       {props.searching ? <p className="dsh-plugins-status">正在搜索…</p> : null}
       {!props.searching && props.listings.length === 0
-        ? <p className="dsh-plugins-empty">留空点「搜索」列出本机可选包，或输入关键词搜索 GitHub、npm 包名、GitHub 仓库。</p>
+        ? (props.submittedQuery?.trim()
+          ? <p className="dsh-plugins-empty">没有找到与「{props.submittedQuery.trim()}」匹配的插件。</p>
+          : <p className="dsh-plugins-empty">留空点「搜索」列出本机可选包，或输入关键词搜索 GitHub、npm 包名、GitHub 仓库。</p>)
         : <div className="dsh-plugins-group">
           {props.listings.map((item) => {
             const view = listingPresentation(item)
@@ -263,7 +265,7 @@ export function PluginDiscovery(props: {
               </div>
               <div className="dsh-plugins-actions">
                 {installed && packageName && !explicit
-                  ? <SeatButton host={props.Button} variant="primary" className="dsh-plugins-primary"
+                  ? <SeatButton host={props.Button} variant="default"
                     disabled={!props.onOpen} onClick={() => props.onOpen?.(packageName)}>配置与详情</SeatButton>
                   : <SeatButton host={props.Button} variant="primary" className="dsh-plugins-primary"
                     disabled={!discoveryCanInstall(props.inventory, props.onInstall)}
@@ -291,6 +293,7 @@ function PluginSettings(props: {
 }) {
   const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [query, setQuery] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
   const [searching, setSearching] = useState(true)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
@@ -303,6 +306,7 @@ function PluginSettings(props: {
     request.current?.abort()
     const controller = new AbortController()
     request.current = controller
+    setSubmittedQuery(value)
     setSearching(true)
     setError('')
     try {
@@ -331,7 +335,8 @@ function PluginSettings(props: {
   }
   return <div className="dsh-plugins">
     <PluginDiscovery query={query} listings={listings} searching={searching} note={note} error={error}
-      Button={props.Button} Input={props.Input} onQuery={setQuery} onSearch={() => { void search(query) }}
+      Button={props.Button} Input={props.Input} submittedQuery={submittedQuery}
+      onQuery={setQuery} onSearch={() => { void search(query) }}
       onCopy={(spec) => { void onCopy(spec) }} onOpen={props.openBundle} inventory={inventory} onInstall={props.onInstall} />
   </div>
 }

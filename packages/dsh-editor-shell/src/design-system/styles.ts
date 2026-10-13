@@ -255,10 +255,9 @@ export const componentStyles = [
   r(['.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback'], 'border-radius: 50%; corner-shape: round;'),
 
   // Settings are a settings page, not a collection of differently themed cards.
-  r(['.settings-block-title', '.dsh-settings-page h3'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
+  r(['.settings-block-title', '.dsh-settings-page h3'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.dsh-settings-page .settings-row'], 'min-height: 56px; padding-block: var(--dsh-ui-space-3);'),
   r(['.settings-row-description'], 'font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-muted);'),
-  r(['.dsh-settings-page .settings-block + .settings-block'], `border-top: ${hairline}; padding-top: var(--dsh-ui-space-5);`),
   r(['.settings-segmented'], 'background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-lg); box-shadow: none;'),
   r(['.settings-segmented button[aria-pressed="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.settings-content.is-active .settings-page'], 'animation: none;'),
