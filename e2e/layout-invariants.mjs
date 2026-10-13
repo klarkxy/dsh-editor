@@ -464,7 +464,60 @@ try {
   }, 'official resource preview mounted in 资料 tab', 15_000)
   const alerts = await page.locator(`${S.filesRail} [role="alert"]`).count()
   if (alerts > 0) failures.push(`rightbar preview: ${alerts} alert(s) in files rail after opening map.png`)
-  note('rightbar', 'map.png preview mounted in 资料 tab, no alerts')
+
+  // Containment: the preview must live INSIDE the aux 资料 panel — inside
+  // the aux rail box, below the tab strip, never intersecting the paper.
+  const contain = await page.evaluate(() => {
+    const rect = (el) => {
+      if (!el) return null
+      const b = el.getBoundingClientRect()
+      return { x: b.x, y: b.y, w: b.width, h: b.height, left: b.left, right: b.right, top: b.top, bottom: b.bottom }
+    }
+    const intersects = (a, b) => Boolean(a && b && a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5)
+    const panel = document.querySelector('[data-sidebar-right-panel]')
+    const aux = document.querySelector('.dsh-pane--aux')
+    const strip = document.querySelector('.dsh-aux-rail__tabs')
+    const cm = document.querySelector('.cm-content')
+    const media = panel ? [...panel.querySelectorAll('img,canvas')].find((el) => el.getBoundingClientRect().width > 0) : null
+    return {
+      panel: rect(panel),
+      aux: rect(aux),
+      strip: rect(strip),
+      stripVisible: Boolean(strip && strip.getBoundingClientRect().height > 0),
+      hitsStrip: intersects(rect(panel), rect(strip)),
+      hitsCm: intersects(rect(panel), rect(cm)),
+      media: rect(media),
+    }
+  })
+  if (!contain.panel || !contain.aux) failures.push('rightbar contain: panel or aux rail not rendered')
+  else {
+    if (contain.panel.left < contain.aux.left - 1 || contain.panel.right > contain.aux.right + 1
+      || contain.panel.top < contain.aux.top - 1 || contain.panel.bottom > contain.aux.bottom + 1) {
+      failures.push(`rightbar contain: preview ${JSON.stringify(contain.panel)} escapes aux rail ${JSON.stringify(contain.aux)}`)
+    }
+    if (!contain.stripVisible) failures.push('rightbar contain: aux tab strip not visible')
+    if (contain.hitsStrip) failures.push('rightbar contain: preview intersects the aux tab strip')
+    if (contain.hitsCm) failures.push('rightbar contain: preview intersects .cm-content (covers the paper)')
+    if (!contain.media) failures.push('rightbar contain: no rendered img/canvas inside preview')
+  }
+  note('rightbar', `map.png preview mounted in 资料 tab, no alerts, contained=${JSON.stringify(contain.panel)}`)
+
+  // §4 margin rules: both 版心竖线 must draw in the same margin-rule colour
+  // (a stray grey/different element over the right rule once showed up).
+  const ruleColors = await page.evaluate(() => {
+    const paper = document.querySelector('.paper-input')
+    if (!paper) return null
+    return {
+      left: getComputedStyle(paper, '::before').backgroundColor,
+      right: getComputedStyle(paper, '::after').backgroundColor,
+    }
+  })
+  if (!ruleColors) failures.push('margin-rules/color: .paper-input missing')
+  else if (ruleColors.left !== ruleColors.right) {
+    failures.push(`margin-rules/color: left rule ${ruleColors.left} != right rule ${ruleColors.right}`)
+  } else {
+    note('margin-rules/color', `both rules ${ruleColors.left}`)
+  }
 } catch (error) {
   failures.push(`fatal: ${error instanceof Error ? error.message : String(error)}`)
 } finally {

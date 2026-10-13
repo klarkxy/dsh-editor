@@ -90,12 +90,25 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 .dsh-aux-panel__empty {
   padding: var(--dsh-ui-space-4); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);
 }
-/* 官方资源面板在资料页签内退成静态块（旧 .official-resource-panel aside
-   已退役，面板自身钩子改为 data-sidebar-right-panel）。 */
-.dsh-aux-panel [data-sidebar-right-panel] {
-  position: static; inset: auto; width: auto; flex: 1 1 auto; min-height: 0; border-left: 0;
-  /* 面板内联 width: min(680px, viewport)，栏宽不足时收窄不溢出。 */
-  max-width: 100%;
+/* 官方 rightbar 槽位宿主（§4）。插件面板自带 position:absolute +
+   top/bottom/right:0 与 pointer-events:none，宽度吃 slot props 的 width。
+   插件样式不进层（永远压过分层规则），所以这里只给宿主定位上下文
+   与 clip，不改面板自身定位：push 模式填满槽位（width 由宿主按实际
+   栏宽喂给它），溢出部分裁掉。槽位本身带 data-dsh-plugin-surface，
+   这些规则必须是原始选择器，不能走 uiRule 的插件排除。 */
+.dsh-aux-rightbar-slot {
+  position: relative; overflow: hidden;
+  flex: 1 1 auto; min-height: 0; background: var(--dsh-ui-bg);
+}
+/* 面板根是 pointer-events:none 的命中穿透层；官方框架用 overlayLayer
+   给子树恢复命中，这里等价恢复 —— 折叠时子树 visibility:hidden，
+   不会拦截点击。!important 用来压过插件的未分层 normal 声明。 */
+.dsh-aux-rightbar-slot [data-sidebar-right-panel] { pointer-events: auto !important; }
+/* 作者在面板里请求全屏（fullscreen 模式）时，槽位提升为固定覆盖层，
+   盖住顶栏以下整个工作台；退出全屏/收起控件是插件自己的。
+   面板 width:100vw 锚定槽位右缘，正好铺满覆盖层。 */
+.dsh-aux-rightbar-slot:has([data-sidebar-right-panel="fullscreen"]) {
+  position: fixed; inset: 44px 0 0 0; z-index: var(--dsh-ui-z-rail-overlay); overflow: visible;
 }
 
 /* 启动按钮：稿纸右下角。 */

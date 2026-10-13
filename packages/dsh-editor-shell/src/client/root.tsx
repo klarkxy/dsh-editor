@@ -7,7 +7,7 @@ import { useRootFileActions } from './root-file-actions.ts'
 import { useWorkbenchLayout } from '../app/shell/use-workbench-layout.ts'
 import { Workbench } from '../app/shell/workbench.tsx'
 import { Topbar } from '../app/shell/topbar.tsx'
-import { AuxRail, ReferencePanel } from '../app/shell/aux-rail.tsx'
+import { AuxRail, ReferencePanel, RightbarSlotSurface } from '../app/shell/aux-rail.tsx'
 import { FilesRail } from '../app/files/files-rail.tsx'
 import { useSurface } from './plugin-surfaces.tsx'
 import { Button as DshButton, Notice } from '../ui/index.ts'
@@ -677,11 +677,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           setWorkbenchNote(t('pin.missing'))
           setPinnedPath(null)
         }} /> : null}
-      preview={<div data-dsh-plugin-surface="" className="dsh-aux-rightbar-slot">
-        {renderSlot?.('rightbar', {
-          width: Math.min(680, previewViewport), viewportWidth: previewViewport, canShow: !pluginsOpen,
-        })}
-      </div>} />}
+      preview={<RightbarSlotSurface renderSlot={renderSlot} canShow={!pluginsOpen} viewportWidth={previewViewport} />} />}
     tools={<SidebarTools renderSlot={renderSlot} seatContext={seatContext} />} />
 
   return (

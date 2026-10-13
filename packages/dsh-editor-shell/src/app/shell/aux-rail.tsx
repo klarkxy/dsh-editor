@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { SegmentedControl, Tab, TabList, TabPanel, Tabs } from '../../ui/index.ts'
 import { t } from '../../i18n/index.ts'
 import { useLocale } from '../../i18n/index.ts'
 import type { AuxTab } from '../../model/workbench-layout.ts'
+import type { SettingsRenderSlot } from '../../client/settings-plugins.tsx'
 
 /*
  * 辅助栏（spec §2.1）：三个页签 —— 「搭档」承载对话，「资料」承载钉住预览
@@ -32,6 +33,44 @@ export function AuxRail(props: {
       <TabPanel value="reference" forceMount className="dsh-aux-panel">{props.reference}</TabPanel>
       {props.hasTools ? <TabPanel value="tools" forceMount className="dsh-aux-panel">{props.tools}</TabPanel> : null}
     </Tabs>
+  )
+}
+
+/*
+ * 官方 rightbar 槽位宿主（§4）：官方面板自带 position:absolute + 顶/底/右
+ * 锚点与 pointer-events:none，宽度吃 slot props 里的 width。容器量出
+ * 「资料」页签的实际内宽喂给 width，自身做定位上下文（样式在
+ * shell.styles.ts，必须走原始规则 —— data-dsh-plugin-surface 排除
+ * uiRule，插件样式不进层）。viewportWidth 保持真实窗口宽：插件只用它
+ * 派生 <768px 的自动全屏，喂栏宽会强制永远全屏并废掉它自己的全屏开关。
+ */
+export function RightbarSlotSurface(props: {
+  renderSlot?: SettingsRenderSlot
+  canShow: boolean
+  viewportWidth: number
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const measure = () => {
+      const next = Math.round(host.getBoundingClientRect().width)
+      setWidth((current) => (current === next ? current : next))
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(host)
+    measure()
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <div ref={hostRef} data-dsh-plugin-surface="" className="dsh-aux-rightbar-slot">
+      {props.renderSlot?.('rightbar', {
+        width: width || 320,
+        viewportWidth: props.viewportWidth,
+        canShow: props.canShow,
+      })}
+    </div>
   )
 }
 

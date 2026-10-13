@@ -368,8 +368,8 @@ export const responsiveStyles = `
 }
 `
 
-export const officialResourceStyles = `
-${r(['.dsh-aux-rightbar-slot'], 'flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--dsh-ui-bg);')}
-`
+/* 官方资源预览的槽位宿主规则在 app/shell/shell.styles.ts —— 宿主元素
+   自带 data-dsh-plugin-surface，会被 uiRule 的插件排除跳过，不能用 r()。 */
+export const officialResourceStyles = ``
 
 export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}`
