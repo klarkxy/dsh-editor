@@ -156,7 +156,7 @@ function SplitFormDialog(props: {
                 {t('common.cancel')}
               </Button>
               <Button
-                variant="primary"
+                variant={anchor.trim() && newName.trim() ? 'primary' : undefined}
                 type="submit"
                 className="primary-action"
                 disabled={busy || !anchor.trim() || !newName.trim()}>

@@ -1,6 +1,6 @@
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox'
 import { forwardRef, type ReactNode } from 'react'
-import { CheckIcon } from './icons.tsx'
+import { CheckIcon, MinusIcon } from './icons.tsx'
 import { cx } from './shared.ts'
 import './checkbox.styles.ts'
 
@@ -26,7 +26,9 @@ export const Checkbox = forwardRef<HTMLButtonElement, {
         disabled={props.disabled}
       >
         <CheckboxPrimitive.Indicator className="dsh-checkbox__indicator">
-          <CheckIcon size="sm" />
+          {/* 两种字形都渲染，由根节点 data-state 决定谁可见（半选是横杠）。 */}
+          <CheckIcon size="sm" className="dsh-checkbox__glyph dsh-checkbox__glyph--check" />
+          <MinusIcon size="sm" className="dsh-checkbox__glyph dsh-checkbox__glyph--minus" />
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
       <span className="dsh-checkbox-row__text">

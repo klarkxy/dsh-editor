@@ -228,6 +228,7 @@ export function GallerySectionSelection() {
       <Switch checked={on} onCheckedChange={setOn} label="打字机滚动" description="光标保持在屏幕中部" shortcut="Ctrl+Alt+T" />
       <Switch checked={false} onCheckedChange={() => {}} label="禁用开关" disabled />
       <Checkbox checked={check} onCheckedChange={setCheck} label="分节标记居中" description="支持半选状态" />
+      <Checkbox checked="indeterminate" onCheckedChange={() => {}} label="目录部分选中" description="半选显示横杠" />
       <RadioGroup
         aria-label="补全方式"
         value={radio}

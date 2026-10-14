@@ -43,6 +43,7 @@ export const FolderIcon = make(<>
 </>)
 export const CrossIcon = make(<path d="m6 6 12 12M18 6 6 18" />)
 export const CheckIcon = make(<path d="m5 12.5 4.5 4.5L19 7.5" />)
+export const MinusIcon = make(<path d="M5 12h14" />)
 export const DotsIcon = make(<path d="M5 12h.01M12 12h.01M19 12h.01" />)
 export const PanelLeftIcon = make(<>
   <rect x="3.5" y="5" width="17" height="14" rx="2" />

@@ -136,7 +136,7 @@ export function TextPromptDialog(props: {
                 {t('common.cancel')}
               </Button>
               <Button
-                variant="primary"
+                variant={value.trim() ? 'primary' : undefined}
                 type="submit"
                 className="primary-action"
                 disabled={props.busy || !value.trim()}>
@@ -236,7 +236,7 @@ export function NewProjectDialog(props: {
                 {t('common.cancel')}
               </Button>
               <Button
-                variant="primary"
+                variant={title.trim() ? 'primary' : undefined}
                 type="submit"
                 className="primary-action"
                 disabled={props.busy || !title.trim()}>

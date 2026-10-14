@@ -218,6 +218,13 @@ describe('selection controls', () => {
     expect(out).toContain('记住选择')
   })
 
+  it('Checkbox renders a distinct minus glyph for indeterminate', () => {
+    const out = html(createElement(Checkbox, { checked: 'indeterminate' as const, onCheckedChange() {}, label: '目录半选' }))
+    expect(out).toContain('data-state="indeterminate"')
+    expect(out).toContain('dsh-checkbox__glyph--minus')
+    expect(out).toContain('dsh-checkbox__glyph--check')
+  })
+
   it('RadioGroup renders radiogroup with checked item', () => {
     const out = html(createElement(RadioGroup, {
       value: 'b',

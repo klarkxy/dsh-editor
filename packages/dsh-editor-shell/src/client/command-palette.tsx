@@ -1,5 +1,6 @@
 import { useOfficialShortcut } from './official-surfaces.tsx'
 import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
+import { displayTreeFileName } from '../project-files.ts'
 /*
  * DSH Editor 命令面板:Cmd/Ctrl+K 触发的浮层。Radix Dialog 负责焦点陷阱/aria
  * (cmdk 自带 Dialog 用的是同一个底层库,但我们要把 token 和现有对话框/首页卡
@@ -89,6 +90,8 @@ type CommandAction = {
   hint?: string
   keywords?: string[]
   icon: ReactNode
+  /* 文件跳转项把完整路径放进 title，标签则只显示去扩展名的文档名。 */
+  title?: string
   run(): void
   disabled?: boolean
 }
@@ -333,7 +336,9 @@ export function CommandPalette(props: CommandPaletteProps) {
           const { directory, name } = splitPath(filePath)
           return {
             id: `file.${filePath}`,
-            label: name,
+            /* §3：显示名去扩展名；标题仍带全名，keywords 保留全路径可搜。 */
+            label: displayTreeFileName(name),
+            title: filePath,
             hint: directory || t('command.rootDir'),
             keywords: [directory, filePath],
             icon: <FileIcon />,
@@ -414,6 +419,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                       value={action.label}
                       keywords={action.keywords}
                       disabled={action.disabled}
+                      title={action.title}
                       onSelect={() => {
                         if (action.disabled) return
                         focusSearchOnClose.current = action.id === 'cmd.search'

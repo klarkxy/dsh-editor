@@ -20,6 +20,8 @@ defineStyles('dsh.components', 'dsh-checkbox', `
 }
 .dsh-checkbox:disabled { opacity: 0.5; cursor: default; }
 .dsh-checkbox__indicator { display: inline-flex; }
+.dsh-checkbox[data-state='checked'] .dsh-checkbox__glyph--minus { display: none; }
+.dsh-checkbox[data-state='indeterminate'] .dsh-checkbox__glyph--check { display: none; }
 @media (forced-colors: active) {
   .dsh-checkbox[data-state='checked'], .dsh-checkbox[data-state='indeterminate'] { background: Highlight; }
 }
