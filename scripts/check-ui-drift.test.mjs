@@ -83,12 +83,35 @@ test('explicit head checks committed content, not uncommitted edits', t => {
   assert.equal(checkWorkingTree({ cwd, base, head: 'HEAD' }).issues.length, 1)
   assert.equal(checkWorkingTree({ cwd, base }).issues.length, 0)
 })
-test('renames cannot launder legacy literals; deleted files do not fail', t => {
-  const { cwd, git, base } = repository(t)
+test('moved rules draw on the shared removed budget; new literals still fail', t => {
+  const { cwd, git, write, base } = repository(t)
+  // 原样改名 = 搬移：既有发现进共享池，新文件消耗后不再报。
   renameSync(join(cwd, path), join(cwd, path.replace('example', 'renamed'))); git('add', '-A')
-  assert.equal(checkWorkingTree({ cwd, base }).issues.length, 1)
+  assert.equal(checkWorkingTree({ cwd, base }).issues.length, 0)
+  // 改名夹带新字面量仍被拦下（池中只有被移除的发现）。
+  write(path.replace('example', 'renamed'), '.x { color: #ffffff; }\n.y { color: #222222; }\n'); git('add', '-A')
+  const report = checkWorkingTree({ cwd, base })
+  assert.equal(report.issues.length, 1)
+  assert.equal(report.issues[0].value, '#222222')
   rmSync(join(cwd, path.replace('example', 'renamed'))); git('add', '-A')
   assert.equal(checkWorkingTree({ cwd, base }).issues.length, 0)
+})
+test('rules moved into an existing modified file also draw on the budget', t => {
+  const { cwd, git, write } = repository(t)
+  write('packages/dsh-editor-shell/src/client/existing.tsx', '.y { color: #333333; }\n')
+  git('add', '.'); git('commit', '-qm', 'second file')
+  const base = git('rev-parse', 'HEAD')
+  // 删除旧文件，把同一条声明并入既有文件：属于搬移，不报。
+  rmSync(join(cwd, path))
+  write('packages/dsh-editor-shell/src/client/existing.tsx', '.y { color: #333333; }\n.x { color: #ffffff; }\n')
+  git('add', '-A')
+  assert.equal(checkWorkingTree({ cwd, base }).issues.length, 0)
+  // 接收方再夹带一条新字面量，仍按新增违规报出。
+  write('packages/dsh-editor-shell/src/client/existing.tsx', '.y { color: #333333; }\n.x { color: #ffffff; }\n.z { color: #444444; }\n')
+  git('add', '-A')
+  const report = checkWorkingTree({ cwd, base })
+  assert.equal(report.issues.length, 1)
+  assert.equal(report.issues[0].path, 'packages/dsh-editor-shell/src/client/existing.tsx')
 })
 test('missing or invalid base is an error, not a successful skip', t => {
   const { cwd } = repository(t)

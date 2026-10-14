@@ -40,23 +40,31 @@ export function findings(source) {
   for (const [rule, pattern] of rules) {
     for (const match of text.matchAll(pattern)) {
       if (rule === 'literal-scale' && /^0(?:px|rem|em|%)?$/.test(match[1])) continue
+      /* literal-shadow 的形状由几何值界定；颜色变量改名（--accent-a4 →
+         --dsh-ui-accent-soft 这类 token 迁移）不算新增违规。 */
       const value = match[0].replace(/\s+/g, ' ').toLowerCase()
-      result.push({ rule, value, line: text.slice(0, match.index).split('\n').length })
+      const normalized = rule === 'literal-shadow' ? value.replace(/var\(--[\w-]+\)/g, 'var(--x)') : value
+      result.push({ rule, value: normalized, line: text.slice(0, match.index).split('\n').length })
     }
   }
   return result
 }
 
 export function regressions(before, after) {
-  const budget = new Map()
-  for (const f of findings(before)) {
+  return subtract(findings(after), findings(before))
+}
+
+/* first \ second（按 rule:value 做多集差）：返回 first 中未被 second 覆盖的发现。 */
+function subtract(first, second) {
+  const remaining = new Map()
+  for (const f of second) {
     const key = `${f.rule}:${f.value}`
-    budget.set(key, (budget.get(key) ?? 0) + 1)
+    remaining.set(key, (remaining.get(key) ?? 0) + 1)
   }
-  return findings(after).filter(f => {
-    const key = `${f.rule}:${f.value}`, count = budget.get(key) ?? 0
+  return first.filter(f => {
+    const key = `${f.rule}:${f.value}`, count = remaining.get(key) ?? 0
     if (!count) return true
-    budget.set(key, count - 1)
+    remaining.set(key, count - 1)
     return false
   })
 }
@@ -86,9 +94,41 @@ export function checkWorkingTree({ cwd = process.cwd(), base, head } = {}) {
   const start = git(root, 'merge-base', revision(root, base), target).trim()
   const changed = git(root, 'diff', '--name-only', '--no-renames', '--diff-filter=ACMRT', '-z', start, ...(head ? [target] : []), '--')
   const untracked = head ? '' : git(root, 'ls-files', '--others', '--exclude-standard', '-z')
-  const paths = [...new Set(`${changed}${untracked}`.split('\0').filter(Boolean))].filter(isUiSource)
-  const issues = paths.flatMap(path => regressions(contents(root, start, path), contents(root, head ? target : undefined, path))
-    .map(f => ({ path, ...f })))
+  const allChanged = `${changed}${untracked}`.split('\0').filter(Boolean)
+  const paths = [...new Set(allChanged)].filter(isUiSource)
+  /* 文件级预算对规则迁移不公平：声明原样搬到其他文件（如 6a-3 的 sheet 折叠）
+     时接收方没有存量预算。把本次 diff 里所有被移除的发现汇成共享池 —— 包括被删
+     文件、被修改文件里删掉的行，以及 owners 源（design-system 单文件折叠前规则
+     所在处，本身不参与扫描）。新增违规不在池中，仍会被拦下。 */
+  const tracked = path => isUiSource(path) || owners.has(path)
+  const deleted = git(root, 'diff', '--name-only', '--no-renames', '--diff-filter=D', '-z', start, ...(head ? [target] : []), '--')
+  const movedBudget = new Map()
+  const pool = list => {
+    for (const f of list) {
+      const key = `${f.rule}:${f.value}`
+      movedBudget.set(key, (movedBudget.get(key) ?? 0) + 1)
+    }
+  }
+  for (const path of deleted.split('\0').filter(Boolean).filter(tracked)) {
+    pool(findings(contents(root, start, path)))
+  }
+  for (const path of new Set(allChanged.filter(tracked))) {
+    const beforeText = contents(root, start, path)
+    if (!beforeText) continue
+    pool(subtract(findings(beforeText), findings(contents(root, head ? target : undefined, path))))
+  }
+  const consume = f => {
+    const key = `${f.rule}:${f.value}`, count = movedBudget.get(key) ?? 0
+    if (!count) return true
+    movedBudget.set(key, count - 1)
+    return false
+  }
+  const issues = paths.flatMap(path => {
+    const before = contents(root, start, path)
+    const after = contents(root, head ? target : undefined, path)
+    const added = before ? regressions(before, after) : findings(after)
+    return added.filter(consume).map(f => ({ path, ...f }))
+  })
   return { base: start, files: paths.length, issues }
 }
 
