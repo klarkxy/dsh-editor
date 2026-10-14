@@ -33,8 +33,7 @@ import {
   Content as RadixDialogContent,
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
-import { Button } from '@radix-ui/themes'
-import { Kbd } from '../ui/index.ts'
+import { Button, Kbd } from '../ui/index.ts'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from '../model/theme.ts'
 import { resolveThemePortalContainer, resolveThemePortalFromAnchor, type CommandPaletteProps, type RegistryCommandItem } from '../model/command-palette.ts'
@@ -459,8 +458,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
     <Button
       type="button"
       variant="ghost"
-      color="gray"
-      size="2"
+      size="md"
       className="palette-trigger"
       onClick={onClick}
       aria-label={t('command.searchCommands')}

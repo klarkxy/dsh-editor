@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { SessionFace } from '../dsh-compat.ts'
 import type { RpcResult, ShellContext } from './shared.ts'
-import { Box, Card, Flex, Heading } from '@radix-ui/themes'
+import { Box, Card, Flex, Heading } from '../ui/index.ts'
 import { Button, Dialog } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
 import { t } from '../i18n/index.ts'

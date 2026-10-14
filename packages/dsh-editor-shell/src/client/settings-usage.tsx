@@ -5,7 +5,7 @@
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Box, Button, Callout, Card, Flex, Grid, Heading, Text } from '@radix-ui/themes'
+import { Box, Button, Card, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { init, use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'
@@ -195,14 +195,12 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
     return (
       <section className="usage-page" aria-label={t('settings.usage')}>
         <Header />
-        <Callout.Root color="red" role="alert" className="usage-error">
-          <Callout.Text>
-            {`${text().loadFailedPrefix}${state.error}`}
-          </Callout.Text>
-          <Button type="button" variant="soft" color="gray" className="usage-button" onClick={() => void load()}>
+        <Notice tone="danger" className="usage-error"
+          action={<Button type="button" variant="secondary" size="sm" className="usage-button" onClick={() => void load()}>
             {text().retry}
-          </Button>
-        </Callout.Root>
+          </Button>}>
+          {`${text().loadFailedPrefix}${state.error}`}
+        </Notice>
       </section>
     );
   }
@@ -229,12 +227,12 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
         <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
           {text().todayHeading}
         </Heading>
-        <Grid className="usage-cards" columns={{ initial: '2', sm: '4' }} gap="3">
+        <div className="usage-cards">
           <UsageStatCard label={text().cacheHit} value={today?.cacheReadTokens ?? 0} />
           <UsageStatCard label={text().input} value={today?.inputTokens ?? 0} />
           <UsageStatCard label={text().output} value={today?.outputTokens ?? 0} />
           <UsageStatCard label={text().requests} value={today?.requests ?? 0} />
-        </Grid>
+        </div>
       </section>
       <section className="usage-recent settings-block" aria-label={text().recentHeading}>
         <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">

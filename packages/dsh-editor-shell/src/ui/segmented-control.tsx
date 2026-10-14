@@ -3,7 +3,7 @@ import { forwardRef, type ReactNode } from 'react'
 import { cx } from './shared.ts'
 import './segmented-control.styles.ts'
 
-export type SegmentedOption = { value: string; label: ReactNode; icon?: ReactNode; disabled?: boolean }
+export type SegmentedOption = { value: string; label: ReactNode; icon?: ReactNode; disabled?: boolean; className?: string; 'aria-label'?: string }
 
 export const SegmentedControl = forwardRef<HTMLDivElement, {
   value?: string
@@ -30,7 +30,8 @@ export const SegmentedControl = forwardRef<HTMLDivElement, {
           key={option.value}
           value={option.value}
           disabled={option.disabled}
-          className="dsh-segmented__item"
+          className={cx('dsh-segmented__item', option.className)}
+          aria-label={option['aria-label']}
         >
           {option.icon ? <span className="dsh-segmented__icon">{option.icon}</span> : null}
           {option.label}

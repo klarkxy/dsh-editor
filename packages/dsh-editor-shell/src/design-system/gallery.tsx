@@ -3,7 +3,9 @@ import { DESIGN_SOURCE, LIGHT_TOKENS, DARK_TOKENS } from './tokens.ts'
 import {
   ActivityDots,
   Badge,
+  Box,
   Button,
+  Card,
   Checkbox,
   ConfirmDialog,
   ContextMenu,
@@ -11,11 +13,14 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  DataList,
   Dialog,
   Disclosure,
   Drawer,
   EmptyState,
   Field,
+  Flex,
+  Heading,
   IconButton,
   Input,
   Kbd,
@@ -32,10 +37,13 @@ import {
   Notice,
   PlusIcon,
   Popover,
+  Progress,
   RadioGroup,
+  ScrollArea,
   SearchField,
   SegmentedControl,
   Select,
+  Separator,
   Slider,
   Spinner,
   SplitButton,
@@ -44,6 +52,7 @@ import {
   TabList,
   TabPanel,
   Tabs,
+  Text,
   TextArea,
   Tooltip,
   UiRoot,
@@ -249,6 +258,44 @@ export function GallerySectionSelection() {
   )
 }
 
+export function GallerySectionStructure() {
+  return (
+    <GallerySection title="排版与结构">
+      <Heading as="h3" size="4">章标题</Heading>
+      <Box p="0">
+        <Text size="2">正文文本 · </Text>
+        <Text size="2" color="gray">muted 说明 · </Text>
+        <Text size="2" color="red">danger 提示</Text>
+      </Box>
+      <Flex gap="2" align="center">
+        <Badge tone="accent">行内</Badge>
+        <Text size="1" color="gray">Flex gap=2</Text>
+      </Flex>
+      <Separator />
+      <Card size="2">
+        <DataList.Root>
+          <DataList.Item>
+            <DataList.Label>字数</DataList.Label>
+            <DataList.Value>2.1k</DataList.Value>
+          </DataList.Item>
+          <DataList.Item>
+            <DataList.Label>状态</DataList.Label>
+            <DataList.Value><Badge tone="success">已保存</Badge></DataList.Value>
+          </DataList.Item>
+        </DataList.Root>
+      </Card>
+      <Progress aria-label="导出进度示例" value={40} />
+      <ScrollArea scrollbars="vertical" style={{ maxHeight: '72px' }}>
+        <Text as="p" size="1" color="gray">滚动区域第一行。</Text>
+        <Text as="p" size="1" color="gray">滚动区域第二行。</Text>
+        <Text as="p" size="1" color="gray">滚动区域第三行。</Text>
+        <Text as="p" size="1" color="gray">滚动区域第四行。</Text>
+        <Text as="p" size="1" color="gray">滚动区域第五行。</Text>
+      </ScrollArea>
+    </GallerySection>
+  )
+}
+
 export function GallerySectionLists() {
   const [tab, setTab] = useState('body')
   return (
@@ -364,6 +411,7 @@ export function GalleryColumn(props: { theme: ThemeName; label?: ReactNode; chil
           <GallerySectionFeedback />
           <GallerySectionInputs />
           <GallerySectionSelection />
+          <GallerySectionStructure />
           <GallerySectionLists />
           <GallerySectionOverlays />
         </>

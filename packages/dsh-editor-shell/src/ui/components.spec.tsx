@@ -4,13 +4,18 @@ import { describe, expect, it } from 'vitest'
 import { collectStyles } from '../design-system/layers.ts'
 import {
   Badge,
+  Box,
   Button,
+  Card,
   Checkbox,
   ConfirmDialog,
+  DataList,
   Dialog,
   Disclosure,
   EmptyState,
   Field,
+  Flex,
+  Heading,
   IconButton,
   Input,
   Kbd,
@@ -26,10 +31,13 @@ import {
   MenuTrigger,
   Notice,
   Popover,
+  Progress,
   RadioGroup,
+  ScrollArea,
   SearchField,
   SegmentedControl,
   Select,
+  Separator,
   Slider,
   Spinner,
   Switch,
@@ -37,6 +45,7 @@ import {
   TabList,
   TabPanel,
   Tabs,
+  Text,
   TextArea,
   UiRoot,
 } from './index.ts'
@@ -340,6 +349,88 @@ describe('overlay components', () => {
     }))
     expect(out).toContain('pop-body')
     expect(out).toContain('dsh-popover')
+  })
+})
+
+describe('layout primitives', () => {
+  it('Flex maps direction/gap/align to data attributes', () => {
+    const out = html(createElement(Flex, {
+      direction: 'column', gap: '3', align: 'center', p: '2',
+    }, 'row'))
+    expect(out).toContain('dsh-flex')
+    expect(out).toContain('data-direction="column"')
+    expect(out).toContain('data-gap="3"')
+    expect(out).toContain('data-align="center"')
+    expect(out).toContain('data-p="2"')
+  })
+
+  it('Box honours the as tag and min-width escape hatch', () => {
+    const out = html(createElement(Box, { as: 'section', minWidth: '0' }, 'box'))
+    expect(out).toContain('<section')
+    expect(out).toContain('data-min-width="0"')
+  })
+
+  it('Separator renders role=separator with orientation', () => {
+    const out = html(createElement(Separator, { orientation: 'vertical' }))
+    expect(out).toContain('role="separator"')
+    expect(out).toContain('aria-orientation="vertical"')
+  })
+
+  it('ScrollArea marks the scroll axis and keeps overflow styles in css', () => {
+    const out = html(createElement(ScrollArea, { scrollbars: 'vertical' }, 'content'))
+    expect(out).toContain('dsh-scroll-area')
+    expect(out).toContain('data-scrollbars="vertical"')
+    expect(out).toContain('content')
+  })
+})
+
+describe('typography and card primitives', () => {
+  it('Text maps Radix color names to semantic tones and numeric sizes to the scale', () => {
+    const out = html(createElement(Text, { color: 'gray', size: '2', weight: 'medium' }, 'meta'))
+    expect(out).toContain('dsh-text')
+    expect(out).toContain('data-tone="muted"')
+    expect(out).toContain('data-size="base"')
+    expect(out).toContain('data-weight="medium"')
+  })
+
+  it('Text passes htmlFor through when rendered as label', () => {
+    const out = html(createElement(Text, { as: 'label', htmlFor: 'f1' }, '标签'))
+    expect(out).toContain('<label')
+    expect(out).toContain('for="f1"')
+  })
+
+  it('Heading renders the requested level', () => {
+    const out = html(createElement(Heading, { as: 'h3', size: '4' }, '章标题'))
+    expect(out).toContain('<h3')
+    expect(out).toContain('data-size="lg"')
+    expect(out).toContain('章标题')
+  })
+
+  it('Card renders a flat surface with a Radix-compatible size scale', () => {
+    const out = html(createElement(Card, { size: '1' }, '卡片'))
+    expect(out).toContain('dsh-card')
+    expect(out).toContain('data-size="1"')
+  })
+
+  it('DataList renders semantic dl/dt/dd', () => {
+    const out = html(createElement(DataList.Root, null,
+      createElement(DataList.Item, null,
+        createElement(DataList.Label, null, '字数'),
+        createElement(DataList.Value, null, '2.1k'))))
+    expect(out).toContain('<dl')
+    expect(out).toContain('<dt')
+    expect(out).toContain('<dd')
+    expect(out).toContain('字数')
+    expect(out).toContain('2.1k')
+  })
+
+  it('Progress exposes progressbar semantics and clamps value', () => {
+    const out = html(createElement(Progress, { 'aria-label': '导出进度', value: 40, max: 100 }))
+    expect(out).toContain('role="progressbar"')
+    expect(out).toContain('aria-valuenow="40"')
+    expect(out).toContain('data-state="determinate"')
+    const indeterminate = html(createElement(Progress, { 'aria-label': '加载' }))
+    expect(indeterminate).toContain('data-state="indeterminate"')
   })
 })
 

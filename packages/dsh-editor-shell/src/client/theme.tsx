@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { t, useLocale } from '../i18n/index.ts'
-import { IconButton } from '@radix-ui/themes'
+import { IconButton } from '../ui/index.ts'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
-import { Tooltip } from './ui/index.ts'
 import {
   hostPreferenceToTheme,
   persistTheme,
@@ -97,18 +96,15 @@ export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onC
   const value = theme === 'light' ? t('theme.light') : t('theme.dark')
   const hint = theme === 'light' ? t('theme.toDark') : t('theme.toLight')
   return (
-    <Tooltip
-      content={hint}
-      children={<IconButton
-        type="button"
-        className="theme-toggle"
-        variant="ghost"
-        color="gray"
-        size="2"
-        title={hint}
-        aria-label={t('theme.aria', { label: resolvedLabel, value })}
-        onClick={() => onChange(theme === 'light' ? 'dark' : 'light')}>
-        {theme === 'light' ? <ThemePaperIcon size={16} /> : <ThemeInkIcon size={16} />}
-      </IconButton>} />
+    <IconButton
+      type="button"
+      className="theme-toggle"
+      variant="ghost"
+      size="md"
+      label={t('theme.aria', { label: resolvedLabel, value })}
+      tooltip={hint}
+      onClick={() => onChange(theme === 'light' ? 'dark' : 'light')}>
+      {theme === 'light' ? <ThemePaperIcon size={16} /> : <ThemeInkIcon size={16} />}
+    </IconButton>
   );
 }

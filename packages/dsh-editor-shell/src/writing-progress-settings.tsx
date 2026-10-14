@@ -2,10 +2,9 @@ import {
   useEffect,
   useState,
   useSyncExternalStore,
-  type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
-import { Callout, Flex, Text, TextField } from '@radix-ui/themes'
+import { Flex, Input, Notice, Text } from './ui/index.ts'
 import {
   MAX_GOAL_CHARS,
   writingProgressFor,
@@ -36,8 +35,8 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
     setGoalDraft(String(progress.goalChars || ''))
   }, [progress.goalChars])
 
-  const onChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const digitsOnly = event.target.value.replace(/[^\d]/g, '').slice(0, String(MAX_GOAL_CHARS).length)
+  const onChange = (value: string) => {
+    const digitsOnly = value.replace(/[^\d]/g, '').slice(0, String(MAX_GOAL_CHARS).length)
     setGoalDraft(digitsOnly)
   }
 
@@ -75,11 +74,9 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
       <legend>
         {t('progress.dailyGoal')}
       </legend>
-      <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {t('progress.unavailable')}
-        </Callout.Text>
-      </Callout.Root>
+      <Notice tone="danger">
+        {t('progress.unavailable')}
+      </Notice>
     </fieldset>
   );
 
@@ -92,7 +89,7 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
         <Text as="span" size="2" weight="medium">
           {t('progress.goalChars')}
         </Text>
-        <TextField.Root
+        <Input
           type="text"
           inputMode="numeric"
           pattern={'\\d*'}
@@ -114,11 +111,9 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
           </span> : null}
         </Text>
       </Flex>
-      {failure ? <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {failure}
-        </Callout.Text>
-      </Callout.Root> : null}
+      {failure ? <Notice tone="danger">
+        {failure}
+      </Notice> : null}
     </fieldset>
   );
 }

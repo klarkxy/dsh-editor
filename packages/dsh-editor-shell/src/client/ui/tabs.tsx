@@ -1,5 +1,15 @@
-import { Tabs as ThemesTabs } from '@radix-ui/themes'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import {
+  Tabs as InternalTabs,
+  TabList as InternalTabList,
+  Tab as InternalTab,
+  TabPanel as InternalTabPanel,
+} from '../../ui/tabs.tsx'
+
+/*
+ * 旧壳层页签包装（client/ui 契约）：名字沿用 Themes 风格（TabsList /
+ * TabsTrigger / TabsContent），内部走 src/ui/ 的 dsh-tabs 原语。
+ */
 
 export function Tabs(props: {
   value: string
@@ -9,23 +19,19 @@ export function Tabs(props: {
   orientation?: 'horizontal' | 'vertical'
 }) {
   return (
-    <ThemesTabs.Root
+    <InternalTabs
       value={props.value}
       onValueChange={props.onValueChange}
       className={props.className}
       orientation={props.orientation ?? 'vertical'}
     >
       {props.children}
-    </ThemesTabs.Root>
+    </InternalTabs>
   )
 }
 
 export function TabsList(props: { children?: ReactNode; className?: string; 'aria-label'?: string }) {
-  return (
-    <ThemesTabs.List className={props.className} aria-label={props['aria-label']}>
-      {props.children}
-    </ThemesTabs.List>
-  )
+  return <InternalTabList className={props.className} aria-label={props['aria-label']}>{props.children}</InternalTabList>
 }
 
 export function TabsTrigger(props: {
@@ -35,30 +41,12 @@ export function TabsTrigger(props: {
   'aria-current'?: boolean | 'page' | 'step' | 'location' | 'date' | 'time' | 'true' | 'false'
 }) {
   return (
-    <ThemesTabs.Trigger value={props.value} className={props.className} aria-current={props['aria-current']}>
+    <InternalTab value={props.value} className={props.className} aria-current={props['aria-current']}>
       {props.children}
-    </ThemesTabs.Trigger>
+    </InternalTab>
   )
 }
 
-export function TabsContent(props: {
-  value: string
-  children?: ReactNode
-  className?: string
-  forceMount?: true
-  hidden?: boolean
-  style?: CSSProperties
-}) {
-  return (
-    <ThemesTabs.Content
-      value={props.value}
-      className={props.className}
-      forceMount={props.forceMount}
-      hidden={props.hidden}
-      aria-hidden={props.hidden || undefined}
-      style={props.style}
-    >
-      {props.children}
-    </ThemesTabs.Content>
-  )
+export function TabsContent(props: { value: string; children?: ReactNode; className?: string }) {
+  return <InternalTabPanel value={props.value} className={props.className}>{props.children}</InternalTabPanel>
 }

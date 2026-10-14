@@ -1,5 +1,4 @@
 import { createElement, type ReactNode } from 'react'
-import { Theme } from '@radix-ui/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from '../dsh-compat.ts'
@@ -9,7 +8,7 @@ import { WritingModelRoutesView } from './writing-model-routes.tsx'
 import { carriedReasoningEffort, firstUsableCatalogModel, mergeCatalogOptions, parseRouteKey, routeKey, saveWritingModelRoute, type CatalogModelOption } from '../model/writing-model-routes.ts'
 
 afterEach(resetLocaleForTests)
-const render = (node: ReactNode) => renderToStaticMarkup(createElement(Theme, null, node))
+const render = (node: ReactNode) => renderToStaticMarkup(createElement('div', null, node))
 const catalog: CatalogModelOption[] = [
   { provider: 'p', model: 'a', label: 'Provider · Alpha', efforts: [{ id: 'off', name: 'Off' }, { id: 'high', name: 'High' }] },
   { provider: 'p', model: 'b', label: 'Provider · Beta', efforts: [{ id: 'none', name: 'None' }, { id: 'low', name: 'Low' }] },

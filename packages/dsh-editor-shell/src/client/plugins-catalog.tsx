@@ -6,7 +6,7 @@
  * normalized: an unknown shape drops one card instead of the whole page.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { Badge, Button as ThemeButton, Callout, Flex, Heading, Text } from '@radix-ui/themes'
+import { Badge, Button as ThemeButton, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall } from './shared.ts'
 import {
@@ -165,7 +165,7 @@ export function CatalogRow(props: {
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{card.title}</Text>
-        {card.badges.map((badge) => <Badge key={badge} variant="soft" color="gray" className="plugins-catalog-badge">
+        {card.badges.map((badge) => <Badge key={badge} tone="neutral" className="plugins-catalog-badge">
           {catalogBadgeLabel(badge)}
         </Badge>)}
       </Flex>
@@ -177,7 +177,7 @@ export function CatalogRow(props: {
       {card.action === 'switch'
         ? <>
           {props.configurable
-            ? <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
+            ? <ThemeButton variant="ghost" className="plugins-catalog-action"
               data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
               {t('plugins.catalogConfigure')}
             </ThemeButton>
@@ -187,11 +187,11 @@ export function CatalogRow(props: {
             onCheckedChange={(enabled) => props.onToggle(card, enabled)} />
         </>
         : card.action === 'config'
-          ? <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
+          ? <ThemeButton variant="ghost" className="plugins-catalog-action"
             data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
             {t('plugins.catalogConfigure')}
           </ThemeButton>
-          : <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
+          : <ThemeButton variant="ghost" className="plugins-catalog-action"
             data-testid={`plugins-catalog-detail-${card.key}`} onClick={() => props.onDetail(card)}>
             {t('plugins.catalogDetails')}
           </ThemeButton>}
@@ -210,7 +210,7 @@ function PresetRow(props: {
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{preset.title}</Text>
-        {preset.locked ? <Badge variant="soft" color="gray" className="plugins-catalog-badge">
+        {preset.locked ? <Badge tone="neutral" className="plugins-catalog-badge">
           {t('plugins.badgeRequired')}
         </Badge> : null}
       </Flex>
@@ -395,17 +395,17 @@ export function PluginsCatalog(props: {
   const body: ReactNode = props.status === 'loading'
     ? <ActivityText className="plugins-catalog-loading">{t('plugins.catalogLoading')}</ActivityText>
     : props.status === 'error'
-      ? <Callout.Root color="red" role="alert" className="warning pad" data-testid="plugins-catalog-error">
-        <Callout.Text>{props.error || t('plugins.catalogError')}</Callout.Text>
-        {props.onRetry
+      ? <Notice tone="danger" className="warning pad" data-testid="plugins-catalog-error"
+        action={props.onRetry
           ? <Button type="button" onClick={props.onRetry}>{t('common.retry')}</Button>
-          : null}
-      </Callout.Root>
+          : null}>
+        {props.error || t('plugins.catalogError')}
+      </Notice>
       : <>
         {props.actionError
-          ? <Callout.Root color="red" role="alert" className="warning pad" data-testid="plugins-catalog-action-error">
-            <Callout.Text>{props.actionError}</Callout.Text>
-          </Callout.Root>
+          ? <Notice tone="danger" className="warning pad" data-testid="plugins-catalog-action-error">
+            {props.actionError}
+          </Notice>
           : null}
         {props.restartRequired
           ? <Text as="p" size="1" color="red" role="alert" className="plugins-catalog-hint">{t('plugins.catalogPresetRestart')}</Text>

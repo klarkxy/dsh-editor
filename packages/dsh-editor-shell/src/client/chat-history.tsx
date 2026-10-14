@@ -1,5 +1,5 @@
 import { Fragment, type MutableRefObject, type ReactNode, type RefObject } from 'react'
-import { Box, Button, Flex, ScrollArea, Text } from '@radix-ui/themes'
+import { Box, Button, Flex, ScrollArea, Text } from '../ui/index.ts'
 import { Notice } from '../ui/index.ts'
 import { loadOlder, WRITING_PROPOSE_TOOL_NAME, type PendingInteraction, type partialView } from '../adapter.ts'
 import type { ChatTranscript, SessionFace, SessionLifecycle } from '../dsh-compat.ts'
@@ -76,9 +76,7 @@ export function ChatHistory({
     <Box className="chat-history" data-running={snapshot.running ? 'true' : 'false'} minWidth="0" minHeight="0" height="100%">
       <ScrollArea
         ref={historyRef}
-        type="hover"
         scrollbars="vertical"
-        size="1"
         style={{ height: '100%' }}
         onScroll={(event: { currentTarget: HTMLDivElement }) => {
           const el = event.currentTarget
@@ -89,9 +87,8 @@ export function ChatHistory({
           {empty}
           {snapshot.hasMore ? <Button
             type="button"
-            variant="soft"
-            color="gray"
-            size="1"
+            variant="secondary"
+            size="sm"
             onClick={() => void loadOlder(session)}
             disabled={snapshot.loadingOlder}>
             {snapshot.loadingOlder ? <Fragment>

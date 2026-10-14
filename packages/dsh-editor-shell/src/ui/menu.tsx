@@ -17,7 +17,11 @@ export type MenuItemProps = {
   checked?: boolean
   title?: string
   className?: string
+  role?: string
   'data-testid'?: string
+  'data-danger'?: string
+  'aria-current'?: boolean | 'page' | 'step' | 'location' | 'date' | 'time' | 'true' | 'false'
+  'aria-label'?: string
   onSelect?(): void
   children?: ReactNode
 }
@@ -46,6 +50,7 @@ export function MenuContent(props: {
   align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   sideOffset?: number
+  id?: string
   'aria-label'?: string
   className?: string
   onCloseAutoFocus?(event: Event): void
@@ -53,6 +58,7 @@ export function MenuContent(props: {
   const container = useDshPortalContainer()
   const content = (
     <Dropdown.Content
+      id={props.id}
       className={cx('dsh-menu', props.className)}
       align={props.align ?? 'start'}
       side={props.side ?? 'bottom'}
@@ -68,14 +74,20 @@ export function MenuContent(props: {
 }
 
 export function MenuItem(props: MenuItemProps) {
+  const danger = props.tone === 'danger' || props['data-danger'] === 'true' || props['data-danger'] === ''
   return (
     <Dropdown.Item
       className={cx('dsh-menu__item', props.className)}
-      data-tone={props.tone === 'danger' ? 'danger' : undefined}
+      data-tone={danger ? 'danger' : undefined}
       disabled={props.disabled}
       title={props.title}
+      /* role 只能显式覆盖：传 undefined 会把 Radix Item 默认的 menuitem 抹掉。 */
+      {...(props.role ? { role: props.role } : {})}
+      data-danger={props['data-danger']}
       data-testid={props['data-testid']}
-      onSelect={props.onSelect}
+      aria-current={props['aria-current']}
+      aria-label={props['aria-label']}
+      onSelect={() => { if (!props.disabled) props.onSelect?.() }}
     >
       {itemMarkup(props)}
     </Dropdown.Item>
@@ -86,8 +98,26 @@ export function MenuSeparator(props: { className?: string }) {
   return <Dropdown.Separator className={cx('dsh-menu__separator', props.className)} />
 }
 
-export function MenuLabel(props: { children?: ReactNode }) {
-  return <Dropdown.Label className="dsh-menu__label">{props.children}</Dropdown.Label>
+export function MenuLabel(props: { children?: ReactNode; className?: string }) {
+  return <Dropdown.Label className={cx('dsh-menu__label', props.className)}>{props.children}</Dropdown.Label>
+}
+
+export function MenuCheckboxItem(props: MenuItemProps & {
+  checked?: boolean
+  onCheckedChange?(checked: boolean): void
+}) {
+  return (
+    <Dropdown.CheckboxItem
+      className={cx('dsh-menu__item', props.className)}
+      checked={Boolean(props.checked)}
+      disabled={props.disabled}
+      title={props.title}
+      data-testid={props['data-testid']}
+      onCheckedChange={(next) => { if (!props.disabled) props.onCheckedChange?.(next === true) }}
+    >
+      {itemMarkup(props)}
+    </Dropdown.CheckboxItem>
+  )
 }
 
 export function MenuSub(props: { children?: ReactNode }) {
@@ -108,10 +138,10 @@ export function MenuSubTrigger(props: MenuItemProps) {
   )
 }
 
-export function MenuSubContent(props: { children?: ReactNode; 'aria-label'?: string }) {
+export function MenuSubContent(props: { children?: ReactNode; 'aria-label'?: string; className?: string }) {
   const container = useDshPortalContainer()
   const content = (
-    <Dropdown.SubContent className="dsh-menu" collisionPadding={8} aria-label={props['aria-label']}>
+    <Dropdown.SubContent className={cx('dsh-menu', props.className)} collisionPadding={8} aria-label={props['aria-label']}>
       {props.children}
     </Dropdown.SubContent>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
-import { Button, Callout, Flex, Heading, Text } from '@radix-ui/themes'
+import { Button, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
@@ -61,13 +61,13 @@ export function ReferenceLookupDialog(props: {
       <Text size="2">{t('reference.query', { query })}</Text>
       <Text size="2" color="gray">{t('reference.description')}</Text>
       {state.kind === 'loading' ? <Text role="status" size="2">{t('common.loading')}</Text> : null}
-      {state.kind === 'error' ? <Callout.Root color="red" size="1" role="alert">
-        <Callout.Text>{state.message}</Callout.Text>
-      </Callout.Root> : null}
+      {state.kind === 'error' ? <Notice tone="danger">
+        {state.message}
+      </Notice> : null}
       {state.kind === 'ready' ? <>
-        {state.result.failures.map((failure) => <Callout.Root key={failure.directory} color="red" size="1" role="alert">
-          <Callout.Text>{t('reference.failed', { directory: failure.directory, error: failure.message })}</Callout.Text>
-        </Callout.Root>)}
+        {state.result.failures.map((failure) => <Notice key={failure.directory} tone="danger">
+          {t('reference.failed', { directory: failure.directory, error: failure.message })}
+        </Notice>)}
         {state.result.truncated || state.result.skipped ? <Text role="status" size="2" color="gray">
           {t('reference.partial', { skipped: state.result.skipped })}
         </Text> : null}
@@ -81,10 +81,10 @@ export function ReferenceLookupDialog(props: {
               {candidate.hit.excerpt}
             </Text> : null}
             <Flex gap="2" mt="2">
-              <Button type="button" variant="soft" size="2" onClick={() => { props.onClose(); props.onOpen(candidate.path, candidate.hit) }}>
+              <Button type="button" variant="secondary" size="md" onClick={() => { props.onClose(); props.onOpen(candidate.path, candidate.hit) }}>
                 {t('reference.open')}
               </Button>
-              <Button type="button" variant="soft" color="gray" size="2" onClick={() => { props.onClose(); props.onPin(candidate.path) }}>
+              <Button type="button" variant="secondary" size="md" onClick={() => { props.onClose(); props.onPin(candidate.path) }}>
                 {t('reference.pin')}
               </Button>
             </Flex>
@@ -92,8 +92,8 @@ export function ReferenceLookupDialog(props: {
         </Flex>
       </> : null}
       <Flex justify="end" gap="2">
-        {state.kind === 'error' || (state.kind === 'ready' && state.result.failures.length > 0) ? <Button type="button" variant="soft" onClick={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button> : null}
-        <Button type="button" variant="soft" color="gray" onClick={props.onClose}>{t('common.close')}</Button>
+        {state.kind === 'error' || (state.kind === 'ready' && state.result.failures.length > 0) ? <Button type="button" variant="secondary" onClick={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button> : null}
+        <Button type="button" variant="secondary" onClick={props.onClose}>{t('common.close')}</Button>
       </Flex>
     </Flex>
   </Dialog>

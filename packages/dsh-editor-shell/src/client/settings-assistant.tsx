@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { Button, Callout, Card, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { Button, Card, Flex, Heading, Notice, Text, TextArea } from '../ui/index.ts'
 import type { SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { AUTHOR_PREFERENCES_MAX_CHARS } from '../author-preferences.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
@@ -44,11 +44,9 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
 
   if (snapshot.status === 'unavailable') return (
     <section className="assistant-settings" aria-label={t('settings.assistant')}>
-      <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {t('writing.unavailable')}
-        </Callout.Text>
-      </Callout.Root>
+      <Notice tone="danger">
+        {t('writing.unavailable')}
+      </Notice>
     </section>
   );
 
@@ -64,11 +62,11 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
           <TextArea
             value={authorDraft.value}
             maxLength={AUTHOR_PREFERENCES_MAX_CHARS}
-            rows={5}
+            minRows={5}
             placeholder={t('writing.authorPlaceholder')}
             aria-labelledby="writing-author-pref"
             disabled={saving}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onAuthorDraftChange(event.target.value)} />
+            onChange={(value) => onAuthorDraftChange(value)} />
           <Text size="1" color="gray">
             {t('writing.authorCount', { count: authorDraft.value.length, max: AUTHOR_PREFERENCES_MAX_CHARS })}
           </Text>
@@ -76,16 +74,16 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
             {t('writing.authorUnsaved')}
           </Text> : null}
         </Flex>
-        {authorDraft.conflicted ? <Callout.Root color="amber" role="alert" mt="3">
-          <Callout.Text>{t('writing.authorConflict')}</Callout.Text>
-          <Flex gap="2" wrap="wrap" mt="2">
-            <Button type="button" variant="soft" color="gray" disabled={saving} onClick={onUseLatest}>{t('writing.authorUseLatest')}</Button>
-            <Button type="button" variant="soft" color="gray" disabled={saving} onClick={onKeepDraft}>{t('writing.authorKeepDraft')}</Button>
-          </Flex>
-        </Callout.Root> : null}
+        {authorDraft.conflicted ? <Notice tone="warning" mt="3"
+          action={<span className="author-conflict-actions">
+            <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={onUseLatest}>{t('writing.authorUseLatest')}</Button>
+            <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={onKeepDraft}>{t('writing.authorKeepDraft')}</Button>
+          </span>}>
+          {t('writing.authorConflict')}
+        </Notice> : null}
         <Button
           type="button"
-          variant="solid"
+          variant="primary"
           mt="3"
           disabled={saving || authorDraft.conflicted || authorDraft.value === authorDraft.saved}
           onClick={onSave}>
@@ -95,24 +93,20 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
           </Fragment> : t('writing.saveAuthor')}
         </Button>
       </Card>
-      {writeFailure ? <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {writeFailure}
-        </Callout.Text>
-      </Callout.Root> : null}
-      {migrationFailure.length ? <Callout.Root color="amber" role="alert">
-        <Callout.Text>
-          {t('writing.migrationPending')}
-        </Callout.Text>
-        <Button
+      {writeFailure ? <Notice tone="danger">
+        {writeFailure}
+      </Notice> : null}
+      {migrationFailure.length ? <Notice tone="warning"
+        action={<Button
           type="button"
-          variant="soft"
-          color="gray"
+          variant="secondary"
+          size="sm"
           onClick={() => void runMigration()}
           disabled={saving}>
           {t('writing.retryMigration')}
-        </Button>
-      </Callout.Root> : null}
+        </Button>}>
+        {t('writing.migrationPending')}
+      </Notice> : null}
     </section>
   );
 }

@@ -3,12 +3,11 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Callout, Card, Flex, Heading, IconButton, Text, TextArea } from '@radix-ui/themes'
+import { Card, Flex, Heading, IconButton, Notice, Text, TextArea } from '../ui/index.ts'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import {
   anchorOccurrences,
@@ -101,9 +100,9 @@ function SplitFormDialog(props: {
           </Heading>
           <IconButton
             variant="ghost"
-            color="gray"
+            size="sm"
             className="icon-button"
-            aria-label={t('common.close')}
+            label={t('common.close')}
             disabled={busy}
             onClick={props.onCancel}>
             <CrossIcon size={14} />
@@ -128,9 +127,10 @@ function SplitFormDialog(props: {
                 <TextArea
                   ref={textarea}
                   value={anchor}
-                  rows={4}
+                  minRows={4}
+                  maxRows={8}
                   disabled={busy}
-                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAnchor(event.target.value)} />
+                  onChange={setAnchor} />
               </Flex>
             </Text>
             <Text size="1" color="gray">
@@ -146,11 +146,9 @@ function SplitFormDialog(props: {
                   onChange={setNewName} />
               </Flex>
             </Text>
-            {note ? <Callout.Root className="warning" color="red" role="alert" size="1">
-              <Callout.Text>
-                {note}
-              </Callout.Text>
-            </Callout.Root> : null}
+            {note ? <Notice className="warning" tone="danger">
+              {note}
+            </Notice> : null}
             <Flex justify="end" gap="2">
               <Button disabled={busy} onClick={props.onCancel}>
                 {t('common.cancel')}
@@ -202,9 +200,9 @@ function ProposalReviewDialog(props: {
           <IconButton
             ref={close}
             variant="ghost"
-            color="gray"
+            size="sm"
             className="icon-button"
-            aria-label={t('common.close')}
+            label={t('common.close')}
             onClick={props.onClose}>
             <CrossIcon size={14} />
           </IconButton>

@@ -126,7 +126,9 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 /* 窄窗（≤760px）：快捷键提示先让位；作品菜单截断但保留真实命中区。 */
 @media (max-width: 760px) {
   .dsh-topbar .palette-trigger-kbd { display: none; }
-  .dsh-topbar .palette-trigger { padding-inline: var(--dsh-ui-space-2); min-width: var(--dsh-ui-control-md); }
+  .dsh-topbar .palette-trigger { padding-inline: var(--dsh-ui-space-2); min-width: var(--dsh-ui-control-sm); }
+  .dsh-topbar .dsh-icon-button { width: var(--dsh-ui-control-sm); height: var(--dsh-ui-control-sm); }
+  .dsh-topbar__group { gap: 0; }
   .dsh-topbar .workspace-menu-trigger { max-width: min(12rem, 30vw); }
   .dsh-topbar .workspace-menu-trigger .workspace-name { min-width: min(7em, 22vw); }
   .dsh-breadcrumb { display: none; }

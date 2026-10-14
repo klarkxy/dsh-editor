@@ -10,6 +10,7 @@ export function Tabs(props: {
   onValueChange?(value: string): void
   children?: ReactNode
   className?: string
+  orientation?: 'horizontal' | 'vertical'
 }) {
   return (
     <TabsPrimitive.Root
@@ -17,6 +18,7 @@ export function Tabs(props: {
       value={props.value}
       defaultValue={props.defaultValue}
       onValueChange={props.onValueChange}
+      orientation={props.orientation}
     >
       {props.children}
     </TabsPrimitive.Root>
@@ -27,8 +29,23 @@ export function TabList(props: { children?: ReactNode; 'aria-label'?: string; cl
   return <TabsPrimitive.List className={cx('dsh-tabs__list', props.className)} aria-label={props['aria-label']}>{props.children}</TabsPrimitive.List>
 }
 
-export function Tab(props: { value: string; children?: ReactNode; disabled?: boolean }) {
-  return <TabsPrimitive.Trigger className="dsh-tabs__tab" value={props.value} disabled={props.disabled}>{props.children}</TabsPrimitive.Trigger>
+export function Tab(props: {
+  value: string
+  children?: ReactNode
+  disabled?: boolean
+  className?: string
+  'aria-current'?: boolean | 'page' | 'step' | 'location' | 'date' | 'time' | 'true' | 'false'
+}) {
+  return (
+    <TabsPrimitive.Trigger
+      className={cx('dsh-tabs__tab', props.className)}
+      value={props.value}
+      disabled={props.disabled}
+      aria-current={props['aria-current']}
+    >
+      {props.children}
+    </TabsPrimitive.Trigger>
+  )
 }
 
 export function TabPanel(props: { value: string; children?: ReactNode; className?: string; forceMount?: true }) {

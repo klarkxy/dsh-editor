@@ -1,4 +1,3 @@
-import { Theme } from '@radix-ui/themes'
 import radixThemesCss from '@radix-ui/themes/styles.css'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
@@ -59,15 +58,20 @@ export function ManuscriptTheme(props: { children?: ReactNode }) {
     </div>
   )
   if (!needsTheme) return body
+  /* 与 Radix <Theme> 渲染出的 DOM 相同：注入表里的 accent/gray 变量与
+     .rt- 选择器以它为作用域，直到 6a 的变量退役完成。 */
   return (
-    <Theme
-      appearance={appearance}
-      grayColor="auto"
-      radius="medium"
-      scaling="100%"
-      panelBackground="solid"
+    <div
+      className={`radix-themes ${appearance} ${appearance}-theme`}
+      data-is-root-theme="true"
+      data-accent-color="indigo"
+      data-gray-color="auto"
+      data-has-background="true"
+      data-panel-background="solid"
+      data-radius="medium"
+      data-scaling="100%"
       style={{ display: 'contents' }}>
       {body}
-    </Theme>
+    </div>
   )
 }

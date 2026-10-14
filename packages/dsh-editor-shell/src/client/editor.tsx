@@ -42,8 +42,7 @@ import type { SearchHit } from '../model/search-panel.ts'
 import { normalizeReferenceQuery } from './reference-lookup.ts'
 import { ReferenceLookupDialog } from './reference-lookup-dialog.tsx'
 import { Button as HostButton, isImeEvent } from './ui/index.ts'
-import { Button, Input, Notice, Popover } from '../ui/index.ts'
-import { Button as ThemesButton, Callout, Text } from '@radix-ui/themes'
+import { Button, Input, Notice, Popover, Text } from '../ui/index.ts'
 import {
   clipboardResultMessage,
   copyEditorSelection,
@@ -473,9 +472,9 @@ export function Editor(props: {
           {t('editor.emptyHint')}
         </Text>}
         <div className="home-actions">
-          <ThemesButton variant="solid" type="button" onClick={create}>
+          <Button variant="primary" type="button" onClick={create}>
             {hasDocument ? t('editor.newChapter') : t('editor.writeFirstChapter')}
-          </ThemesButton>
+          </Button>
         </div>
       </PaperStage>
     );
@@ -571,16 +570,13 @@ export function Editor(props: {
             paperProjection={PAPER_PROJECTION}
             onReloadDisk={() => setReloadConfirm(true)}
             onSaveConflictCopy={saveConflictCopy}
-            footerExtras={note ? <Callout.Root
+            footerExtras={note ? <Notice
               className="editor-notice"
               data-testid="paper-notice"
               role={status === 'conflict' || status === 'error' ? 'alert' : 'status'}
-              color={status === 'conflict' || status === 'error' ? 'red' : 'gray'}
-              size="1">
-              <Callout.Text>
-                {note}
-              </Callout.Text>
-            </Callout.Root> : null} />
+              tone={status === 'conflict' || status === 'error' ? 'danger' : 'info'}>
+              {note}
+            </Notice> : null} />
         </div>
       </div>
       {referenceQuery && props.onOpenReference && props.onPinReference ? <ReferenceLookupDialog

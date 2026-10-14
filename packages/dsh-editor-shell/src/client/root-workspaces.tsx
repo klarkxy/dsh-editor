@@ -7,7 +7,7 @@ import { removeHomeResumeDoc } from '../model/home-resume.ts'
 import { errorMessage, resumableConversationId, safeRpcCall, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, cleanupFlowWorkspace as cleanupOwnedFlowWorkspace } from './shared.ts'
 import { NewProjectDialog } from './dialogs.tsx'
 import { ActivityDots, Input } from './ui/index.ts'
-import { Button as ThemesButton, Flex, Text } from '@radix-ui/themes'
+import { Button as InternalButton, Flex, Text } from '../ui/index.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.tsx'
 import { t } from '../i18n/index.ts'
@@ -584,23 +584,22 @@ export function useRootWorkspaces({
         </Flex>
       </Text>
       <Flex justify="end" gap="2" wrap="wrap">
-        <ThemesButton
-          variant="soft"
-          color="gray"
+        <InternalButton
+          variant="secondary"
           type="button"
           disabled={openingWorkspace}
           onClick={() => void pickWorkspaceDirectory()}>
           {t('home.chooseFolder')}
-        </ThemesButton>
-        <ThemesButton variant="solid" type="submit" disabled={openingWorkspace}>
+        </InternalButton>
+        <InternalButton variant="primary" type="submit" disabled={openingWorkspace}>
           {openingWorkspace ? <Fragment>
             <ActivityDots />
             {t('home.opening')}
           </Fragment> : t('home.openThisFolder')}
-        </ThemesButton>
-        <ThemesButton variant="soft" color="gray" type="button" disabled={openingWorkspace} onClick={closePathFallback}>
+        </InternalButton>
+        <InternalButton variant="secondary" type="button" disabled={openingWorkspace} onClick={closePathFallback}>
           {t('common.cancel')}
-        </ThemesButton>
+        </InternalButton>
       </Flex>
     </Flex>
   </form> : null

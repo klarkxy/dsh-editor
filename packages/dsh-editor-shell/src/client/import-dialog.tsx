@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Callout, Flex, Heading, Text } from '@radix-ui/themes'
+import { Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { importSummary, type ImportFlow } from './import-flow.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityRing, ActivityText, Button, Dialog } from './ui/index.ts'
@@ -42,11 +42,9 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
           <Text size="2">
             {cleaning ? t('import.cleanupOnly') : t('import.recoverBody', { summary: importSummary(probe!) })}
           </Text>
-          {probe?.message && !cleaning ? <Callout.Root className="warning" color="red" role="alert" size="1">
-            <Callout.Text>
-              {probe.message}
-            </Callout.Text>
-          </Callout.Root> : null}
+          {probe?.message && !cleaning ? <Notice className="warning" tone="danger">
+            {probe.message}
+          </Notice> : null}
         </Flex>
               : probe ? <Flex direction="column" gap="2">
           <Text size="2">

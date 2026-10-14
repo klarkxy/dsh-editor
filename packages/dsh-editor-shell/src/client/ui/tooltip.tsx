@@ -1,21 +1,23 @@
-import { Provider as TooltipProviderRoot } from '@radix-ui/react-tooltip'
-import { Tooltip as ThemesTooltip } from '@radix-ui/themes'
 import type { ReactElement, ReactNode } from 'react'
+import {
+  Tooltip as InternalTooltip,
+  TooltipProvider as InternalTooltipProvider,
+} from '../../ui/tooltip.tsx'
 
 /*
- * Themes Tooltip does not render its own Provider (it only wraps Root/Trigger/
- * Content). Keep a real Provider so delayDuration still applies; radix-ui's
- * Tooltip and @radix-ui/react-tooltip@1.2.16 share this context.
+ * 旧壳层提示包装（client/ui 契约）：内部走 src/ui/ 的 dsh-tooltip。
+ * Provider 默认 delayDuration 400 / skipDelay 200 保持不变。
  */
+
 export function TooltipProvider(props: {
   children?: ReactNode
   delayDuration?: number
   skipDelayDuration?: number
 }) {
   return (
-    <TooltipProviderRoot delayDuration={props.delayDuration ?? 400} skipDelayDuration={props.skipDelayDuration ?? 200}>
+    <InternalTooltipProvider delayDuration={props.delayDuration ?? 400} skipDelayDuration={props.skipDelayDuration ?? 200}>
       {props.children}
-    </TooltipProviderRoot>
+    </InternalTooltipProvider>
   )
 }
 
@@ -25,13 +27,8 @@ export function Tooltip(props: {
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
   return (
-    <ThemesTooltip
-      content={props.content}
-      side={props.side ?? 'bottom'}
-      sideOffset={6}
-      className="tooltip-content"
-    >
+    <InternalTooltip content={props.content} side={props.side ?? 'bottom'}>
       {props.children ?? <span />}
-    </ThemesTooltip>
+    </InternalTooltip>
   )
 }

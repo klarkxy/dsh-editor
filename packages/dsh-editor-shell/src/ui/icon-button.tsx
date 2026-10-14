@@ -4,8 +4,10 @@ import { Tooltip } from './tooltip.tsx'
 import './icon-button.styles.ts'
 
 export type IconButtonProps = {
-  /** 必填：同时作为 aria-label 和提示文案。 */
+  /** 必填：同时作为 aria-label 和默认提示文案。 */
   label: string
+  /** 覆盖提示文案；aria-label 仍用 label。 */
+  tooltip?: ReactNode
   variant?: 'ghost' | 'secondary' | 'primary'
   size?: 'sm' | 'md'
   /** 映射 aria-pressed；按下态文字用 accent。 */
@@ -15,7 +17,7 @@ export type IconButtonProps = {
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps & { disabled?: boolean }>(
   function IconButton(props, ref) {
-    const { label, variant = 'ghost', size = 'md', pressed, className, children, disabled, type, ...rest } = props
+    const { label, tooltip, variant = 'ghost', size = 'md', pressed, className, children, disabled, type, ...rest } = props
     const button = (
       <button
         ref={ref}
@@ -31,6 +33,6 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps & { disa
         {children}
       </button>
     )
-    return <Tooltip content={label}>{button}</Tooltip>
+    return <Tooltip content={tooltip ?? label}>{button}</Tooltip>
   },
 )

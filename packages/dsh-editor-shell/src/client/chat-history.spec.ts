@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { ScrollArea, Text } from '@radix-ui/themes'
+import { ScrollArea, Text } from '../ui/index.ts'
 import { ChatHistory } from './chat-history.tsx'
 import { ChatEntry, ChatProcessStack, ChatRowView, ChatStepItem, PendingCard } from './chat-cards.tsx'
 import { clusterChatRows } from '../model/chat-cards.ts'

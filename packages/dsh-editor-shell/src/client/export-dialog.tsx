@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState, type RefObject } from 'react';
-import { Callout, Card, Flex, Heading, ScrollArea, Text } from '@radix-ui/themes'
+import { Card, Flex, Heading, Notice, ScrollArea, Text } from '../ui/index.ts'
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { Checkbox } from '../ui/checkbox.tsx'
 import { SegmentedControl } from '../ui/segmented-control.tsx'
@@ -161,23 +161,18 @@ function ExportPreviewDialog(props: {
             </Text>
           </Flex>
         </Flex>}
-        {empty.length ? <Callout.Root className="warning" color="amber" role="alert" size="1">
-          <Callout.Text>
-            {t('export.emptyWarning', { count: empty.length })}
-          </Callout.Text>
-        </Callout.Root> : null}
-        {note && !collecting ? <Callout.Root
+        {empty.length ? <Notice className="warning" tone="warning" role="alert">
+          {t('export.emptyWarning', { count: empty.length })}
+        </Notice> : null}
+        {note && !collecting ? <Notice
           className={noteFailed ? 'warning' : undefined}
-          color={noteFailed ? 'red' : 'gray'}
-          role={noteFailed ? 'alert' : 'status'}
-          size="1">
-          <Callout.Text>
-            {packingNote ? <ActivityDots /> : null}
-            {note}
-          </Callout.Text>
-        </Callout.Root> : null}
+          tone={noteFailed ? 'danger' : 'info'}
+          role={noteFailed ? 'alert' : 'status'}>
+          {packingNote ? <ActivityDots /> : null}
+          {note}
+        </Notice> : null}
         {collecting ? null : <Card>
-          <ScrollArea className="export-chapters" type="auto" scrollbars="vertical">
+          <ScrollArea className="export-chapters" scrollbars="vertical">
             <Flex direction="column" gap="2">
               {groups.map((group) => (
                 <div key={group.dir || '.'} className="export-group" data-testid="dsh-export-group" data-dir={group.dir}>

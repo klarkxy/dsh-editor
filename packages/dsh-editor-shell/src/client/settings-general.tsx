@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Callout, Card, Flex, Heading, Separator, Text } from '@radix-ui/themes'
+import { Button, Card, Flex, Heading, Notice, Separator, Text } from '../ui/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
@@ -165,11 +165,9 @@ export function AdvancedSection(props: {
           checked={limitBreakMode}
           disabled={!limitBreakWritable}
           onCheckedChange={requestLimitBreak} />
-        <Callout.Root className="warning" color="red" role="alert" size="1" mt="2">
-          <Callout.Text>
-            {t('settings.limitBreakWarning')}
-          </Callout.Text>
-        </Callout.Root>
+        <Notice className="warning" tone="danger" mt="2">
+          {t('settings.limitBreakWarning')}
+        </Notice>
       </SettingsBlock>
       {showDeveloperMode ? <SettingsBlock label={t('settings.developer')}>
         <Switch
@@ -183,8 +181,7 @@ export function AdvancedSection(props: {
         <Button
           type="button"
           variant="ghost"
-          color="gray"
-          size="1"
+          size="sm"
           className="settings-reveal-developer"
           onClick={props.onRevealDeveloper}>
           {t('settings.showDeveloper')}

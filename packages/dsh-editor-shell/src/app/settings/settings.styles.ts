@@ -108,7 +108,8 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 /* Radix ghost 按钮自带 -8px 光学外溢 + 内边距（让文字对齐外缘）；卡片内的
    可点目标盒子仍须留在内边距里、文字要与同列正文同一起点，外溢和内边距
    都关掉。只作用在设置卡片内的 ghost 按钮，外面的光学对齐保持不变。 */
-.dsh-settings-page .settings-block .rt-Button.rt-variant-ghost {
+.dsh-settings-page .settings-block .rt-Button.rt-variant-ghost,
+.dsh-settings-page .settings-block .dsh-button[data-variant='ghost'] {
   --margin-left-override: 0px; --margin-right-override: 0px;
   padding-inline: 0;
 }
@@ -172,6 +173,22 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .writing-slider-group { display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding-block: var(--dsh-ui-space-3); }
 .writing-slider-group .dsh-slider-row { width: 100%; }
 .writing-slider-group .dsh-slider-row__value { font-variant-numeric: tabular-nums; }
+
+/* 用量统计卡与快捷键表（原 Radix Grid/Table 的原稿等价）：双列起步，
+   ≥768px 四列；表格沿用 hairline 行分隔。 */
+.usage-cards { display: grid; gap: var(--dsh-ui-space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px) {
+  .usage-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.dsh-shortcuts-table { width: 100%; border-collapse: collapse; font-size: var(--dsh-ui-text-sm); }
+.dsh-shortcuts-table th, .dsh-shortcuts-table td {
+  padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3) var(--dsh-ui-space-2) 0;
+  text-align: start; vertical-align: top;
+  border-bottom: 0.5px solid var(--dsh-ui-line);
+}
+.dsh-shortcuts-table thead th { font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); }
+.dsh-shortcuts-table tbody tr:last-child th, .dsh-shortcuts-table tbody tr:last-child td { border-bottom: 0; }
+.dsh-shortcuts-table tbody th { font-weight: var(--dsh-ui-weight-regular); }
 
 /* 窄窗：内容内边距收窄、写作预览落回文档流；导航列在 <760px 换成触发行+抽屉。 */
 @media (max-width: 900px) {

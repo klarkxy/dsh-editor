@@ -1,13 +1,13 @@
 /** Model catalog drafts, discovery and candidate selection for provider cards. */
-import { Fragment, useState, type ChangeEvent, type ReactNode } from 'react'
-import { Badge, Card, Checkbox, Callout, Flex, Heading, Text, TextField } from '@radix-ui/themes'
+import { Fragment, useState, type ReactNode } from 'react'
+import { Badge, Button, Card, Checkbox, Flex, Heading, IconButton, Input, Notice, Text } from '../ui/index.ts'
 import type { DiscoveredModelView } from '../dsh-compat.ts'
 import { reasoningChoiceOf, reasoningEffortsFor, type ReasoningChoice } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
 import { ActivityDots, Dialog } from './ui/index.ts'
-import { Button, IconButton } from '../ui/index.ts'
+
 import type { ShellContext } from './shared.ts'
 import { failureMessage, text } from './settings-models-copy.ts'
 
@@ -167,22 +167,22 @@ export function ModelListEditor(props: {
         key={index}
         className="models-catalog-entry">
         <Flex className="models-catalog-row" align="center" gap="2" wrap="wrap">
-          <TextField.Root
+          <Input
             type="text"
             className="models-input models-input-id"
             value={typeof model['id'] === 'string' ? (model['id'] as string) : ''}
             placeholder={t.modelId}
             aria-label={`${t.modelId} ${index + 1}`}
             disabled={disabled}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { id: event.target.value })} />
-          <TextField.Root
+            onChange={(value) => patch(index, { id: value })} />
+          <Input
             type="text"
             className="models-input models-input-name"
             value={typeof model['name'] === 'string' ? (model['name'] as string) : ''}
             placeholder={t.modelName}
             aria-label={`${t.modelName} ${index + 1}`}
             disabled={disabled}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { name: event.target.value === '' ? undefined : event.target.value })} />
+            onChange={(value) => patch(index, { name: value === '' ? undefined : value })} />
           <IconButton
             label={`${t.modelAdvanced} ${index + 1}`}
             className="models-button models-button-icon"
@@ -206,7 +206,7 @@ export function ModelListEditor(props: {
             <Text size="2" weight="medium" className="models-field-label">
               {t.modelContext}
             </Text>
-            <TextField.Root
+            <Input
               type="number"
               className="models-input"
               min={1}
@@ -215,8 +215,7 @@ export function ModelListEditor(props: {
               placeholder="256000"
               aria-label={`${t.modelContext} ${index + 1}`}
               disabled={disabled}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                const raw = event.target.value
+              onChange={(raw) => {
                 if (raw === '') patch(index, { contextWindow: undefined })
                 else {
                   const n = Number(raw)
@@ -230,7 +229,7 @@ export function ModelListEditor(props: {
             <Text size="2" weight="medium" className="models-field-label">
               {t.modelMax}
             </Text>
-            <TextField.Root
+            <Input
               type="number"
               className="models-input"
               min={1}
@@ -239,8 +238,7 @@ export function ModelListEditor(props: {
               placeholder="8192"
               aria-label={`${t.modelMax} ${index + 1}`}
               disabled={disabled}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                const raw = event.target.value
+              onChange={(raw) => {
                 if (raw === '') patch(index, { maxTokens: undefined })
                 else {
                   const n = Number(raw)
@@ -279,11 +277,9 @@ export function ModelListEditor(props: {
         onClick={add}>
         {`+ ${t.addModel}`}
       </Button>
-      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
-          {failure}
-        </Callout.Text>
-      </Callout.Root> : null}
+      {failure !== undefined ? <Notice tone="danger" className="models-warning">
+        {failure}
+      </Notice> : null}
       <Dialog
         open={candidates !== undefined}
         onOpenChange={(next: boolean) => { if (!next) closePicker() }}
@@ -319,7 +315,7 @@ export function ModelListEditor(props: {
               <Text as="label" htmlFor={`model-candidate-${candidate.id}`} size="2" weight="medium" className="models-candidate-id">
                 {candidate.id}
               </Text>
-              {candidate.name !== undefined ? <Badge size="1" color="gray" className="models-candidate-name">
+              {candidate.name !== undefined ? <Badge tone="neutral" className="models-candidate-name">
                 {candidate.name}
               </Badge> : null}
             </Flex>

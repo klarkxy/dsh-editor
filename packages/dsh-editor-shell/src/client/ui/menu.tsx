@@ -1,5 +1,23 @@
-import { Button, DropdownMenu } from '@radix-ui/themes'
 import { forwardRef, type ReactNode } from 'react'
+import {
+  Menu as InternalMenu,
+  MenuCheckboxItem as InternalMenuCheckboxItem,
+  MenuContent as InternalMenuContent,
+  MenuItem as InternalMenuItem,
+  MenuLabel as InternalMenuLabel,
+  MenuSeparator as InternalMenuSeparator,
+  MenuSub as InternalMenuSub,
+  MenuSubContent as InternalMenuSubContent,
+  MenuSubTrigger as InternalMenuSubTrigger,
+  MenuTrigger as InternalMenuTrigger,
+} from '../../ui/menu.tsx'
+import { Button } from '../../ui/button.tsx'
+
+/*
+ * 旧壳层菜单包装（client/ui 契约）：行为与可访问性不变，内部改走
+ * src/ui/ 的 dsh-menu 原语。dsh-menu__item 已含图标/快捷键排版，
+ * 这里的 props 原样透传，data-danger → tone="danger"。
+ */
 
 export type MenuProps = {
   open?: boolean
@@ -9,11 +27,7 @@ export type MenuProps = {
 }
 
 export function Menu(props: MenuProps) {
-  return (
-    <DropdownMenu.Root open={props.open} onOpenChange={props.onOpenChange} modal={props.modal !== false}>
-      {props.children}
-    </DropdownMenu.Root>
-  )
+  return <InternalMenu open={props.open} onOpenChange={props.onOpenChange} modal={props.modal}>{props.children}</InternalMenu>
 }
 
 export const MenuTrigger = forwardRef<HTMLButtonElement, {
@@ -27,12 +41,11 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, {
   'data-testid'?: string
 }>(function MenuTrigger(props, ref) {
   return (
-    <DropdownMenu.Trigger>
+    <InternalMenuTrigger>
       <Button
         ref={ref}
         type="button"
         variant="ghost"
-        color="gray"
         className={props.className}
         tabIndex={props.tabIndex}
         disabled={props.disabled}
@@ -43,7 +56,7 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, {
       >
         {props.children}
       </Button>
-    </DropdownMenu.Trigger>
+    </InternalMenuTrigger>
   )
 })
 
@@ -58,24 +71,18 @@ export function MenuContent(props: {
   onCloseAutoFocus?(event: Event): void
 }) {
   return (
-    <DropdownMenu.Content
+    <InternalMenuContent
       id={props.id}
       className={props.className ?? 'menu-content'}
-      align={props.align ?? 'start'}
-      side={props.side ?? 'bottom'}
-      sideOffset={props.sideOffset ?? 4}
-      collisionPadding={8}
+      align={props.align}
+      side={props.side}
+      sideOffset={props.sideOffset}
       aria-label={props['aria-label']}
       onCloseAutoFocus={props.onCloseAutoFocus}
     >
       {props.children}
-    </DropdownMenu.Content>
+    </InternalMenuContent>
   )
-}
-
-function isDangerItem(props: { className?: string; 'data-danger'?: string }): boolean {
-  if (props['data-danger'] === 'true' || props['data-danger'] === '') return true
-  return Boolean(props.className?.split(/\s+/).includes('danger'))
 }
 
 export function MenuItem(props: {
@@ -88,32 +95,34 @@ export function MenuItem(props: {
   'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
   'aria-label'?: string
   'data-testid'?: string
+  checked?: boolean
   onSelect?(): void
 }) {
   return (
-    <DropdownMenu.Item
+    <InternalMenuItem
       className={props.className}
       disabled={props.disabled}
       title={props.title}
-      role={props.role ?? 'menuitem'}
-      color={isDangerItem(props) ? 'red' : undefined}
+      role={props.role}
+      tone={props['data-danger'] === 'true' || props['data-danger'] === '' || props.className?.split(/\s+/).includes('danger') ? 'danger' : undefined}
       data-danger={props['data-danger']}
       data-testid={props['data-testid']}
       aria-current={props['aria-current']}
       aria-label={props['aria-label']}
-      onSelect={() => { if (!props.disabled) props.onSelect?.() }}
+      checked={props.checked}
+      onSelect={props.onSelect}
     >
       {props.children}
-    </DropdownMenu.Item>
+    </InternalMenuItem>
   )
 }
 
 export function MenuSeparator(props: { className?: string; 'aria-hidden'?: boolean | 'true' }) {
-  return <DropdownMenu.Separator className={props.className} aria-hidden={props['aria-hidden']} />
+  return <InternalMenuSeparator className={props.className} />
 }
 
 export function MenuSub(props: { children?: ReactNode }) {
-  return <DropdownMenu.Sub>{props.children}</DropdownMenu.Sub>
+  return <InternalMenuSub>{props.children}</InternalMenuSub>
 }
 
 export function MenuSubTrigger(props: {
@@ -123,13 +132,9 @@ export function MenuSubTrigger(props: {
   'data-testid'?: string
 }) {
   return (
-    <DropdownMenu.SubTrigger
-      className={props.className}
-      disabled={props.disabled}
-      data-testid={props['data-testid']}
-    >
+    <InternalMenuSubTrigger className={props.className} disabled={props.disabled} data-testid={props['data-testid']}>
       {props.children}
-    </DropdownMenu.SubTrigger>
+    </InternalMenuSubTrigger>
   )
 }
 
@@ -138,15 +143,7 @@ export function MenuSubContent(props: {
   className?: string
   'aria-label'?: string
 }) {
-  return (
-    <DropdownMenu.SubContent
-      className={props.className ?? 'menu-content'}
-      collisionPadding={8}
-      aria-label={props['aria-label']}
-    >
-      {props.children}
-    </DropdownMenu.SubContent>
-  )
+  return <InternalMenuSubContent className={props.className} aria-label={props['aria-label']}>{props.children}</InternalMenuSubContent>
 }
 
 export function MenuCheckboxItem(props: {
@@ -158,18 +155,18 @@ export function MenuCheckboxItem(props: {
   onCheckedChange?(checked: boolean): void
 }) {
   return (
-    <DropdownMenu.CheckboxItem
+    <InternalMenuCheckboxItem
       className={props.className}
-      checked={Boolean(props.checked)}
+      checked={props.checked}
       disabled={props.disabled}
       data-testid={props['data-testid']}
-      onCheckedChange={(next) => { if (!props.disabled) props.onCheckedChange?.(next === true) }}
+      onCheckedChange={props.onCheckedChange}
     >
       {props.children}
-    </DropdownMenu.CheckboxItem>
+    </InternalMenuCheckboxItem>
   )
 }
 
 export function MenuLabel(props: { children?: ReactNode; className?: string }) {
-  return <DropdownMenu.Label className={props.className}>{props.children}</DropdownMenu.Label>
+  return <InternalMenuLabel className={props.className}>{props.children}</InternalMenuLabel>
 }

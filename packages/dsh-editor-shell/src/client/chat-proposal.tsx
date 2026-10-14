@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Badge, Box, Button, Card, Flex, Text } from '@radix-ui/themes'
+import { Badge, Box, Button, Card, Flex, Text } from '../ui/index.ts'
 import { WRITING_PROPOSE_TOOL_NAME, type AuthorProposal } from '../adapter.ts'
 import { WORKBENCH_RPC_CHANNEL } from 'dsh-editor-workbench/contracts'
 import { t, useLocale } from '../i18n/index.ts'
@@ -512,13 +512,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   const footer = <Flex asChild direction="column" gap="2" mt="3">
     <footer>
       {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
-        {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void apply()}>
+        {state === 'ready' ? <Button type="button" variant="primary" onClick={() => void apply()}>
           {t('chat.applyChanges')}
         </Button> : null}
         {state === 'ready' ? <Button
           type="button"
-          variant="soft"
-          color="gray"
+          variant="secondary"
           className="proposal-dismiss"
           onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
           {t('chat.discardProposal')}
@@ -526,15 +525,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         {state === 'ready' ? <Button
           type="button"
           variant="ghost"
-          color="gray"
           className="proposal-defer"
           onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
           {t('chat.defer')}
         </Button> : null}
-        {canRecheckNow ? <Button type="button" variant="solid" onClick={() => void check()}>
+        {canRecheckNow ? <Button type="button" variant="primary" onClick={() => void check()}>
           {t('chat.recheck')}
         </Button> : null}
-        {canUndo ? <Button type="button" variant="soft" color="gray" onClick={() => void undo()}>
+        {canUndo ? <Button type="button" variant="secondary" onClick={() => void undo()}>
           {t('chat.undoThis')}
         </Button> : null}
       </Flex> : null}
@@ -555,7 +553,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     </footer>
   </Flex>
   const metaBlock = <Flex className="proposal-meta" align="center" gap="2" wrap="wrap" minWidth="0">
-    {kindBadge ? <Badge className="proposal-kind" variant="soft" size="1">
+    {kindBadge ? <Badge className="proposal-kind" tone="neutral">
       {kindBadge}
     </Badge> : null}
     <Text size="1" color="gray" className="proposal-path">

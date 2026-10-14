@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Flex, IconButton } from '@radix-ui/themes'
+import { Flex, IconButton } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 
 import { windowBridge } from '../model/window-controls.ts'
@@ -34,10 +34,8 @@ export function WindowControls() {
       <IconButton
         type="button"
         variant="ghost"
-        color="gray"
-        size="2"
-        radius="none"
-        aria-label={t('window.minimize')}
+        size="md"
+        label={t('window.minimize')}
         onClick={() => bridge.minimize()}>
         <WindowGlyph>
           <path d="M2 6h8" />
@@ -46,10 +44,8 @@ export function WindowControls() {
       <IconButton
         type="button"
         variant="ghost"
-        color="gray"
-        size="2"
-        radius="none"
-        aria-label={maximized ? t('window.restore') : t('window.maximize')}
+        size="md"
+        label={maximized ? t('window.restore') : t('window.maximize')}
         onClick={() => bridge.toggleMaximize()}>
         {maximized
           ? <WindowGlyph>
@@ -64,10 +60,8 @@ export function WindowControls() {
         type="button"
         className="window-close"
         variant="ghost"
-        color="gray"
-        size="2"
-        radius="none"
-        aria-label={t('window.close')}
+        size="md"
+        label={t('window.close')}
         onClick={() => bridge.close()}>
         <WindowGlyph>
           <path d="M3 3l6 6M9 3l-6 6" />

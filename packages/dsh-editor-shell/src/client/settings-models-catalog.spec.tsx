@@ -1,5 +1,5 @@
 import { isValidElement, useState, type ReactElement, type ReactNode, type SetStateAction } from 'react'
-import { Card, TextField } from '@radix-ui/themes'
+import { Card, Input } from '../ui/index.ts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelListEditor } from './settings-models-catalog.tsx'
 import { text } from './settings-models-copy.ts'
@@ -39,10 +39,10 @@ function nodes(tree: ReactNode, predicate: (node: ReactElement<Record<string, un
 }
 function rows(tree: ReactNode) { return nodes(tree, node => node.type === Card) }
 function field(tree: ReactNode, label: string) {
-  return nodes(tree, node => node.type === TextField.Root && node.props['aria-label'] === label)[0]!
+  return nodes(tree, node => node.type === Input && node.props['aria-label'] === label)[0]!
 }
 function typeValue(input: ReactElement<Record<string, unknown>>, value: string) {
-  (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } })
+  (input.props.onChange as (next: string) => void)(value)
 }
 function click(tree: ReactNode, label: string) {
   /* 内部 IconButton 的可访问名走 label prop（渲染成 aria-label），两种都要认。 */

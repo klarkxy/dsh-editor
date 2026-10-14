@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, Callout, Card, DataList, Flex, Heading, Progress, Text } from '@radix-ui/themes'
+import { Button, Card, DataList, Flex, Heading, Notice, Progress, Text } from '../ui/index.ts'
 import { windowBridge, type DownloadedUpdateInfo } from '../model/window-controls.ts'
 import { AppMascot } from './mascot.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
@@ -230,16 +230,16 @@ export function AboutSettingsSection(props: {
           <AppMascot size="about" decorative />
         </Flex>
         <div className="about-status">{renderStatus(state)}</div>
-        {installError ? <Callout.Root color="red" role="alert" className="about-error"><Callout.Text>{installError}</Callout.Text></Callout.Root> : null}
+        {installError ? <Notice tone="danger" className="about-error">{installError}</Notice> : null}
         {renderResultBody(state, download, appInfo, handlers)}
         {/* Recovery stays visible even when a later check fails or returns latest. */}
         {download.status === 'done' ? <CompletedUpdateActions download={download} appInfo={appInfo} handlers={handlers} /> : null}
         {appInfo?.platform === 'darwin' && state.status === 'ready' && state.result.status === 'update-available' ? <Text size="1" color="gray" className="about-note">{t('about.macHint')}</Text> : null}
         <Flex className="about-actions" gap="2" wrap="wrap">
-          <Button type="button" variant="soft" color="gray" className="about-button" disabled={!canCheck || state.status === 'loading'} onClick={() => void runCheck()}>
+          <Button type="button" variant="secondary" className="about-button" disabled={!canCheck || state.status === 'loading'} onClick={() => void runCheck()}>
             {state.status === 'loading' ? <Fragment><ActivityDots />{t('about.checking')}</Fragment> : t('about.check')}
           </Button>
-          {openDownloadFolder ? <Button type="button" variant="soft" color="gray" className="about-button" onClick={() => void openFolder()}>
+          {openDownloadFolder ? <Button type="button" variant="secondary" className="about-button" onClick={() => void openFolder()}>
             {t('about.openFolder')}
           </Button> : null}
         </Flex>
@@ -252,14 +252,14 @@ function renderStatus(state: CheckState): ReactNode {
   if (state.status === 'idle') return <Text size="2">{t('about.notChecked')}</Text>
   if (state.status === 'loading') return <ActivityText>{t('about.checkingStatus')}</ActivityText>
   const result = state.result
-  if (result.status === 'latest') return <Callout.Root color="green" className="about-status-tag latest"><Callout.Text>{t('about.latest')}</Callout.Text></Callout.Root>
+  if (result.status === 'latest') return <Notice tone="success" role="status" className="about-status-tag latest">{t('about.latest')}</Notice>
   if (result.status === 'update-available' && result.latest) return (
-    <Callout.Root color="indigo"><Callout.Text>
+    <Notice tone="info" role="status">
       <Text className="about-status-tag available">{t('about.updateAvailable')}</Text>{' '}
       {t('about.versionRange', { current: result.currentVersion, latest: result.latest.version })}
-    </Callout.Text></Callout.Root>
+    </Notice>
   )
-  return <Callout.Root color="red" className="about-status-tag error"><Callout.Text>{t('about.checkFailed')}</Callout.Text></Callout.Root>
+  return <Notice tone="danger" className="about-status-tag error">{t('about.checkFailed')}</Notice>
 }
 
 interface ResultBodyHandlers {
@@ -284,10 +284,10 @@ export function CompletedUpdateActions(props: {
     <Text size="2" className="about-download-meta"><SuccessMark />{' '}{download.revealed ? t('about.macRevealed') : t('about.downloadReady')}</Text>
     {download.filePath ? <Text as="p" size="1" color="gray" className="about-download-meta" title={download.filePath} style={{ overflowWrap: 'anywhere' }}>{download.filePath}</Text> : null}
     <Flex className="about-actions" gap="2" wrap="wrap">
-      {!download.revealed ? <Button type="button" variant="solid" className="about-button about-button-primary" disabled={handlers.installing} onClick={() => handlers.onInstall(download.updateId)}>
+      {!download.revealed ? <Button type="button" variant="primary" className="about-button about-button-primary" disabled={handlers.installing} onClick={() => handlers.onInstall(download.updateId)}>
         {handlers.installing ? <ActivityDots /> : null}{installButtonLabel(appInfo)}
       </Button> : null}
-      {handlers.onReveal ? <Button type="button" variant="soft" color="gray" className="about-button" onClick={() => handlers.onReveal?.(download.updateId)}>
+      {handlers.onReveal ? <Button type="button" variant="secondary" className="about-button" onClick={() => handlers.onReveal?.(download.updateId)}>
         {t('about.openFolder')}
       </Button> : null}
     </Flex>
@@ -297,7 +297,7 @@ export function CompletedUpdateActions(props: {
 function renderResultBody(state: CheckState, download: DownloadState, appInfo: AppInfo | null, handlers: ResultBodyHandlers): ReactNode {
   if (state.status !== 'ready') return null
   const result = state.result
-  if (result.status === 'error') return <Callout.Root color="red" role="alert" className="about-error"><Callout.Text>{result.error ?? t('about.checkFailedRetry')}</Callout.Text></Callout.Root>
+  if (result.status === 'error') return <Notice tone="danger" className="about-error">{result.error ?? t('about.checkFailedRetry')}</Notice>
   if (result.status === 'update-available' && result.latest) {
     const release = result.latest
     return <Card className="about-release" aria-label={t('about.releaseAria')}>
@@ -322,18 +322,18 @@ function renderDownloadArea(release: ReleaseInfo, download: DownloadState, _appI
         {download.verifying ? <Fragment><ActivityDots />{t('about.verifying')}</Fragment>
           : `${percent === undefined ? formatMB(download.received) + ' MB' : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB`}${download.mirror ? ` · ${download.mirror}` : ''}`}
       </Text>
-      <Flex className="about-actions" gap="2"><Button type="button" variant="soft" color="gray" className="about-button" onClick={handlers.onCancel}>{t('about.cancelDownload')}</Button></Flex>
+      <Flex className="about-actions" gap="2"><Button type="button" variant="secondary" className="about-button" onClick={handlers.onCancel}>{t('about.cancelDownload')}</Button></Flex>
     </Flex>
   }
   if (download.status === 'done') return null
   return <Fragment>
-    {download.status === 'error' ? <Callout.Root color="red" role="alert" className="about-error"><Callout.Text>{t('about.downloadFailed', { message: download.message })}</Callout.Text></Callout.Root> : null}
+    {download.status === 'error' ? <Notice tone="danger" className="about-error">{t('about.downloadFailed', { message: download.message })}</Notice> : null}
     {!asset && release.installBlockedReason === 'missing-integrity'
       ? <Text size="1" color="gray" className="about-note">{t('about.missingIntegrity')}</Text>
       : !asset ? <Text size="1" color="gray" className="about-note">{t('about.manualDownloadOnly')}</Text> : null}
     <Flex className="about-actions" gap="2" wrap="wrap">
-      {asset ? <Button type="button" variant="solid" className="about-button about-button-primary" onClick={() => handlers.onDownload(asset)}>{t('about.downloadUpdate', { size: formatMB(asset.size) })}</Button> : null}
-      <Button type="button" variant={asset ? 'soft' : 'solid'} color={asset ? 'gray' : undefined} className={asset ? 'about-button' : 'about-button about-button-primary'} onClick={() => handlers.onOpen(release.url)}>{t('about.goDownload')}</Button>
+      {asset ? <Button type="button" variant="primary" className="about-button about-button-primary" onClick={() => handlers.onDownload(asset)}>{t('about.downloadUpdate', { size: formatMB(asset.size) })}</Button> : null}
+      <Button type="button" variant={asset ? 'secondary' : 'primary'} className={asset ? 'about-button' : 'about-button about-button-primary'} onClick={() => handlers.onOpen(release.url)}>{t('about.goDownload')}</Button>
     </Flex>
   </Fragment>
 }

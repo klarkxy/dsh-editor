@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Button, Flex, Text } from '@radix-ui/themes'
+import { Button, Flex, Text } from '../ui/index.ts'
 import { readModels, selectModel } from '../adapter.ts'
 import type { SessionFace, SessionModels } from '../dsh-compat.ts'
 import { Select } from './select.tsx'
@@ -67,10 +67,10 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
             {t('common.loading')}
           </ActivityText>)}
         </Text>
-        <Button type="button" size="1" variant="soft" color="gray" onClick={() => void refresh()}>
+        <Button type="button" size="sm" variant="secondary" onClick={() => void refresh()}>
           {t('common.retry')}
         </Button>
-        <Button type="button" size="1" variant="soft" color="gray" onClick={onConfigure}>
+        <Button type="button" size="sm" variant="secondary" onClick={onConfigure}>
           {t('chat.setApi')}
         </Button>
       </Flex>
@@ -127,7 +127,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     </Flex>
     {!busy && !note && currentModelNeedsKey(models.current.provider, providers) ? <Flex align="center" gap="2" wrap="wrap" role="status">
       <Text size="2" color="gray">{t('chat.modelKeyMissing')}</Text>
-      <Button type="button" size="1" variant="soft" color="gray" onClick={onConfigure}>
+      <Button type="button" size="sm" variant="secondary" onClick={onConfigure}>
         {t('chat.setApi')}
       </Button>
     </Flex> : null}

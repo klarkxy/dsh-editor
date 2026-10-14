@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Callout, Flex, Text } from '@radix-ui/themes'
+import { Flex, Notice, Text } from '../ui/index.ts'
 import type { ConnectionHandle, SettingsScope, SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { normalizeWritingEffort, normalizeWritingModelRoute, type WritingModelRoute, type WritingPreferences } from '../writing-settings.tsx'
 import { Select } from './select.tsx'
@@ -61,10 +61,10 @@ export function WritingModelRoutesView(props: {
       </Flex>
     })}
     {props.snapshot.status === 'loading' ? <ActivityText>{t('common.loading')}</ActivityText> : null}
-    {props.failure || props.snapshot.status === 'unavailable' ? <Callout.Root color="red" role="alert">
-      <Callout.Text>{props.failure || t('models.routeLoadFailed')}</Callout.Text>
-      {props.onRetry ? <Button onClick={props.onRetry}>{t('common.retry')}</Button> : null}
-    </Callout.Root> : null}
+    {props.failure || props.snapshot.status === 'unavailable' ? <Notice tone="danger"
+      action={props.onRetry ? <Button onClick={props.onRetry}>{t('common.retry')}</Button> : null}>
+      {props.failure || t('models.routeLoadFailed')}
+    </Notice> : null}
   </>
 }
 export function WritingModelRoutes(props: {

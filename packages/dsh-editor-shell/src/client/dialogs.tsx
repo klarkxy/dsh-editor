@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
-import { Button as ThemesButton, Callout, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
+import { Flex, Heading, IconButton, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
@@ -38,19 +38,17 @@ export function ConfirmDialog(props: {
         <Text size="2" id={`${props.id}-message`}>
           {display.message}
         </Text>
-        {props.note ? <Callout.Root color="red" role="alert" size="1">
-          <Callout.Text>
-            {props.note}
-          </Callout.Text>
-        </Callout.Root> : null}
+        {props.note ? <Notice tone="danger">
+          {props.note}
+        </Notice> : null}
         <Flex justify="end" gap="2">
           <ConfirmCancel
             children={<Button ref={cancel} disabled={props.busy}>
               {t('common.cancel')}
             </Button>} />
-          <ThemesButton variant="solid" color="red" highContrast className="danger-action" disabled={props.busy} onClick={props.onConfirm}>
+          <Button variant="danger" disabled={props.busy} onClick={props.onConfirm}>
             {display.confirmLabel}
-          </ThemesButton>
+          </Button>
         </Flex>
       </Flex>
     </Confirm>
@@ -98,9 +96,9 @@ export function TextPromptDialog(props: {
           </Heading>
           <IconButton
             variant="ghost"
-            color="gray"
+            size="sm"
             className="icon-button"
-            aria-label={t('common.close')}
+            label={t('common.close')}
             disabled={props.busy}
             onClick={props.onCancel}>
             <CrossIcon size={14} />
@@ -126,11 +124,9 @@ export function TextPromptDialog(props: {
                   onChange={setValue} />
               </Flex>
             </Text>
-            {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
-              <Callout.Text>
-                {props.note}
-              </Callout.Text>
-            </Callout.Root> : null}
+            {props.note ? <Notice className="warning" tone="danger">
+              {props.note}
+            </Notice> : null}
             <Flex justify="end" gap="2">
               <Button disabled={props.busy} onClick={props.onCancel}>
                 {t('common.cancel')}
@@ -194,9 +190,9 @@ export function NewProjectDialog(props: {
           </Flex>
           <IconButton
             variant="ghost"
-            color="gray"
+            size="sm"
             className="icon-button"
-            aria-label={t('common.close')}
+            label={t('common.close')}
             disabled={props.busy}
             onClick={props.onClose}>
             <CrossIcon size={14} />
@@ -226,11 +222,9 @@ export function NewProjectDialog(props: {
             {!title.trim() && !props.note ? <Text size="1" color="gray">
               {t('dialog.workNameRequired')}
             </Text> : null}
-            {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
-              <Callout.Text>
-                {props.note}
-              </Callout.Text>
-            </Callout.Root> : null}
+            {props.note ? <Notice className="warning" tone="danger">
+              {props.note}
+            </Notice> : null}
             <Flex justify="end" gap="2">
               <Button disabled={props.busy} onClick={props.onClose}>
                 {t('common.cancel')}

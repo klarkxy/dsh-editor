@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Callout, Flex, Heading, IconButton, ScrollArea, Text } from '@radix-ui/themes'
+import { Flex, Heading, IconButton, Notice, ScrollArea, Text } from '../ui/index.ts'
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
@@ -92,27 +92,23 @@ export function PinnedPane(props: {
               <IconButton
                 type="button"
                 variant="ghost"
-                color="gray"
-                size="2"
-                title={t('pin.unpin')}
-                aria-label={t('pin.unpin')}
+                size="md"
+                label={t('pin.unpin')}
                 onClick={props.onUnpin}>
                 <PinIcon size={16} />
               </IconButton>
               <IconButton
                 type="button"
                 variant="ghost"
-                color="gray"
-                size="2"
-                title={t('pin.openEditor')}
-                aria-label={t('pin.openEditor')}
+                size="md"
+                label={t('pin.openEditor')}
                 onClick={() => props.onOpenDocument(props.path)}>
                 <FileIcon size={16} />
               </IconButton>
             </Flex>
           </header>
         </Flex>
-        <ScrollArea className="pinned-body" type="auto" scrollbars="vertical">
+        <ScrollArea className="pinned-body" scrollbars="vertical">
           <Flex direction="column" gap="4" px="5" pt="4" pb="6">
             {busy ? <div role="status" aria-live="polite">
               <ActivitySkeleton lines={6} className="pinned-loading" />
@@ -120,11 +116,9 @@ export function PinnedPane(props: {
                 {t('pin.loading')}
               </span>
             </div> : null}
-            {note ? <Callout.Root className="warning" color="red" size="1" role="alert">
-              <Callout.Text>
-                {note}
-              </Callout.Text>
-            </Callout.Root> : null}
+            {note ? <Notice className="warning" tone="danger">
+              {note}
+            </Notice> : null}
             {!busy && text !== null ? <div className="pinned-markdown md activity-reveal">
               <Markdown text={markdownBody} />
             </div> : null}

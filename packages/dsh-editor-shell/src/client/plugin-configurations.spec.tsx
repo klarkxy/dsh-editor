@@ -528,8 +528,9 @@ describe('plugin catalog', () => {
     const official = sectionHtml(html, 'official')
     expect(official.match(/plugins-catalog-action"/g)).toHaveLength(2)
     expect(official).not.toContain('plugins-catalog-config"')
-    expect(official).toMatch(/data-testid="plugins-catalog-config-[^"]+"[^>]*class="[^"]*plugins-catalog-action"/)
-    expect(official).toMatch(/data-testid="plugins-catalog-detail-[^"]+"[^>]*class="[^"]*plugins-catalog-action"/)
+    /* 内部 Button 的 class 先于 data-testid 输出，不按属性顺序断言。 */
+    expect(official).toMatch(/<button(?=[^>]*data-testid="plugins-catalog-config-[^"]+")(?=[^>]*plugins-catalog-action)[^>]*>/)
+    expect(official).toMatch(/<button(?=[^>]*data-testid="plugins-catalog-detail-[^"]+")(?=[^>]*plugins-catalog-action)[^>]*>/)
   })
 
   it('anchors the user section and highlights only the rows a refresh added', () => {

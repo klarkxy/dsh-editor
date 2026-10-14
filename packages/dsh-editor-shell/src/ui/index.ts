@@ -17,7 +17,7 @@ export { Dialog, type DialogProps } from './dialog.tsx'
 export { ConfirmDialog } from './confirm-dialog.tsx'
 export { Drawer } from './drawer.tsx'
 export {
-  Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuLabel,
+  Menu, MenuTrigger, MenuContent, MenuItem, MenuCheckboxItem, MenuSeparator, MenuLabel,
   MenuSub, MenuSubTrigger, MenuSubContent,
   ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
   type MenuItemProps,
@@ -32,6 +32,12 @@ export { Kbd } from './kbd.tsx'
 export { Spinner, ActivityDots } from './spinner.tsx'
 export { EmptyState } from './empty-state.tsx'
 export { ListRow } from './list-row.tsx'
+export { Flex, Box, Separator, type LayoutProps, type BoxProps } from './layout.tsx'
+export { Progress } from './progress.tsx'
+export { DataList, DataListRoot, DataListItem, DataListLabel, DataListValue } from './data-list.tsx'
+export { Text, Heading, type TextTone } from './typography.tsx'
+export { Card, type CardProps } from './card.tsx'
+export { ScrollArea } from './scroll-area.tsx'
 export { isImeEvent, IME_KEYCODE } from './ime.ts'
 export { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 export { m, useChromeMotion, type ChromeMotionKind, type PanelDirection } from './motion.ts'

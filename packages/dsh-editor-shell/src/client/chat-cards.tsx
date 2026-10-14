@@ -3,21 +3,20 @@ import {
   memo,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from 'react';
 import {
   Box,
   Button,
-  Callout,
   Card,
   Flex,
   IconButton,
+  Input,
+  Notice,
   SegmentedControl,
   Text,
-  TextField,
-} from '@radix-ui/themes'
+} from '../ui/index.ts'
 import {
   answerApproval,
   answerQuestions,
@@ -232,10 +231,10 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
               {item.payload.toolName ? <code> {item.payload.toolName}</code> : null}
             </Text>
             <Flex gap="2" wrap="wrap">
-              <Button type="button" variant="solid" disabled={busy} onClick={() => decide('allowed-once')}>
+              <Button type="button" variant="primary" disabled={busy} onClick={() => decide('allowed-once')}>
                 {t('chat.allowOnce')}
               </Button>
-              <Button type="button" variant="soft" color="gray" disabled={busy} onClick={() => decide('rejected')}>
+              <Button type="button" variant="secondary" disabled={busy} onClick={() => decide('rejected')}>
                 {t('chat.refuse')}
               </Button>
             </Flex>
@@ -281,19 +280,17 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
         aria-label={t('chat.answerQuestions')}
         onSubmit={submit}>
         <Flex direction="column" gap="3">
-          {questions.length > 1 ? <SegmentedControl.Root
+          {questions.length > 1 ? <SegmentedControl
             className="question-tabs"
+            aria-label={t('chat.answerQuestions')}
             value={String(tab)}
             onValueChange={(value) => setTab(Number(value))}
-            size="1">
-            {questions.map((question, index) => <SegmentedControl.Item
-              key={question.id}
-              value={String(index)}
-              className={`question-tab${index === tab ? ' is-active' : ''}${isAnswered(question.id) ? ' is-done' : ''}`}
-              aria-label={t('chat.questionTab', { index: index + 1 })}>
-              {isAnswered(question.id) ? '✓' : String(index + 1)}
-            </SegmentedControl.Item>)}
-          </SegmentedControl.Root> : null}
+            options={questions.map((question, index) => ({
+              value: String(index),
+              label: isAnswered(question.id) ? '✓' : String(index + 1),
+              className: `question-tab${index === tab ? ' is-active' : ''}${isAnswered(question.id) ? ' is-done' : ''}`,
+              'aria-label': t('chat.questionTab', { index: index + 1 }),
+            }))} /> : null}
           {current ? <Box className="question-panel" role="tabpanel">
             <Flex direction="column" gap="2">
               <Text size="1" color="gray" weight="medium">
@@ -309,8 +306,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
                 {current.options.map((option) => <Button
                   key={option.label}
                   type="button"
-                  variant="soft"
-                  color={answers[current.id] === option.label ? undefined : 'gray'}
+                  variant="secondary"
                   className={`question-option${answers[current.id] === option.label ? ' is-selected' : ''}`}
                   aria-pressed={answers[current.id] === option.label}
                   onClick={() => choose(current.id, option.label)}>
@@ -324,19 +320,18 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
                   </Flex>
                 </Button>)}
               </Flex> : null}
-              <TextField.Root
+              <Input
                 placeholder={t('chat.customAnswer')}
                 aria-label={t('chat.customAnswerFor', { question: current.question })}
                 value={current.options?.some((option) => option.label === answers[current.id]) ? '' : answers[current.id] ?? ''}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  const value = event.target.value
+                onChange={(value) => {
                   setAnswers((old) => ({ ...old, [current.id]: value }))
                   setNote('')
                 }}
                 className="question-custom" />
             </Flex>
           </Box> : null}
-          <Button type="submit" variant="solid" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy}>
             {busy ? <Fragment>
               <ActivityDots />
               {t('chat.submitting')}
@@ -379,8 +374,8 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
           : <Flex className="init-guide-actions" gap="2" wrap="wrap">
           <Button
             type="button"
-            variant="solid"
-            size="1"
+            variant="primary"
+            size="sm"
             disabled={props.busy || props.running}
             onClick={props.onStart}>
             {props.running ? <Fragment>
@@ -388,7 +383,7 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
               {t('chat.initRunning')}
             </Fragment> : t('chat.initStart')}
           </Button>
-          <Button type="button" variant="soft" color="gray" size="1" disabled={props.busy} onClick={props.onDismiss}>
+          <Button type="button" variant="secondary" size="sm" disabled={props.busy} onClick={props.onDismiss}>
             {t('common.ignore')}
           </Button>
         </Flex>}
@@ -403,30 +398,26 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
 /** 旧版会话顶部的迁移横幅：新建写作会话继续作品，旧会话保持可读；关闭仅记忆在内存。 */
 export function LegacyMigrationBanner(props: { onMigrate(): void; onDismiss(): void }) {
   return (
-    <Callout.Root
+    <Notice
       className="migration-banner"
       role="note"
       aria-label={t('chat.legacyMigrationTitle')}
-      color="indigo"
-      size="1">
-      <Callout.Text>
-        {t('chat.legacyMigrationBanner')}
-      </Callout.Text>
-      <Flex className="migration-banner-actions" align="center" gap="2" mt="2">
-        <Button type="button" size="1" variant="soft" onClick={props.onMigrate}>
+      tone="info"
+      action={<span className="migration-banner-actions">
+        <Button type="button" size="sm" variant="secondary" onClick={props.onMigrate}>
           {t('chat.legacyMigrationAction')}
         </Button>
         <IconButton
           type="button"
           variant="ghost"
-          color="gray"
-          size="1"
-          aria-label={t('common.close')}
+          size="sm"
+          label={t('common.close')}
           onClick={props.onDismiss}>
           <CrossIcon size={14} />
         </IconButton>
-      </Flex>
-    </Callout.Root>
+      </span>}>
+      {t('chat.legacyMigrationBanner')}
+    </Notice>
   );
 }
 

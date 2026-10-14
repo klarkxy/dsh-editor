@@ -1,4 +1,4 @@
-import { Skeleton, Spinner } from '@radix-ui/themes'
+import { Spinner } from '../../ui/index.ts'
 import type { ReactNode } from 'react'
 
 /* 统一活动反馈原语:加载 / 等待 / 进行中 / 完成。
@@ -49,8 +49,9 @@ export function ActivitySkeleton(props: { lines?: number; className?: string }) 
   return (
     <span className={['activity-skeleton', props.className].filter(Boolean).join(' ')} aria-hidden="true">
       {Array.from({ length: lines }, (_, index) => (
-        <Skeleton
+        <i
           key={index}
+          className="activity-skeleton__line"
           style={{ width: SKELETON_WIDTHS[index % SKELETON_WIDTHS.length], height: 10 }}
         />
       ))}

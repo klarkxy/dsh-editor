@@ -1,7 +1,7 @@
 import { useLocale } from '../i18n/index.ts'
 import { t } from '../i18n/index.ts'
 import { PluginIcon, SettingsIcon } from './icons.tsx'
-import { IconButton } from '@radix-ui/themes'
+import { IconButton } from '../ui/index.ts'
 
 export type { SettingsRenderSlot } from './settings-plugins.tsx'
 
@@ -13,11 +13,9 @@ export function SettingsTrigger(props: { onOpen(): void }) {
       <IconButton
         type="button"
         variant="ghost"
-        color="gray"
-        size="2"
+        size="md"
         className="settings-trigger"
-        aria-label={t('common.settings')}
-        title={t('common.settings')}
+        label={t('common.settings')}
         onClick={props.onOpen}>
         <span className="settings-trigger-icon" aria-hidden={true}>
           <SettingsIcon size={16} />
@@ -30,8 +28,8 @@ export function SettingsTrigger(props: { onOpen(): void }) {
 /** 顶栏插件入口：进入全页设置的插件分区。 */
 export function PluginsTrigger(props: { onOpen(): void }) {
   useLocale()
-  return <IconButton type="button" variant="ghost" color="gray" size="2" className="plugins-trigger"
-    aria-label={t('plugins.open')} title={t('plugins.open')} onClick={props.onOpen}>
+  return <IconButton type="button" variant="ghost" size="md" className="plugins-trigger"
+    label={t('plugins.open')} onClick={props.onOpen}>
     <PluginIcon size={18} />
   </IconButton>
 }

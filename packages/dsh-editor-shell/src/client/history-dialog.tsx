@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Flex, Heading, IconButton, Text } from '@radix-ui/themes'
+import { Flex, Heading, IconButton, Text } from '../ui/index.ts'
 import type { SnapshotChange, SnapshotResponse } from 'dsh-editor-workbench/contracts'
 import { formatRecentTime } from '../home-stage.ts'
 import { formatBytes, intlLocale, t, useLocale } from '../i18n/index.ts'
@@ -77,9 +77,9 @@ function HistoryPanel(props: {
           </Flex>
           <IconButton
             variant="ghost"
-            color="gray"
+            size="sm"
             className="icon-button"
-            aria-label={t('common.close')}
+            label={t('common.close')}
             disabled={props.busy}
             onClick={props.onClose}>
             <CrossIcon size={14} />

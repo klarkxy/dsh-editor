@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react'
-import { Box } from '@radix-ui/themes'
+import { Box } from '../ui/index.ts'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { windowBridge } from '../model/window-controls.ts'

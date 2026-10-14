@@ -1,12 +1,12 @@
 /** Provider drafts and credential submission stay local to each editing card. */
-import { Fragment, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
-import { Box, Callout, Flex, Text, TextField } from '@radix-ui/themes'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Box, Button, Flex, Input, Notice, Text } from '../ui/index.ts'
 import type { CredentialView, SettingsNamespaceView, SettingsPathOpView } from '../dsh-compat.ts'
 import { apiKeyFailure, deriveKeyRef, layoutOf, modelDrafts, pathOps, protocolChoices, providerIdOf, refFor, routeFailure, validateModels, type ProviderRow } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ActivityDots } from './ui/index.ts'
-import { Button } from '../ui/index.ts'
+
 import type { SettingsSchemaService, ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
 import { failureMessage, modelFailureLabel, targetLabel, text } from './settings-models-copy.ts'
@@ -221,7 +221,7 @@ export function ProviderEditor(props: {
         <Text size="2" weight="medium" className="models-field-label">
           {text().apiKey}
         </Text>
-        <TextField.Root
+        <Input
           type="password"
           autoComplete="off"
           className="models-input"
@@ -230,14 +230,14 @@ export function ProviderEditor(props: {
           aria-label={text().apiKey}
           aria-invalid={showKeyFailure !== undefined}
           disabled={readOnly || busy || keyLocked}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
+          onChange={setKeyDraft} />
         {showKeyFailure === undefined
           ? null
-          : <Callout.Root color="red" role="alert" className="models-warning">
-          <Callout.Text>
+          : <Notice tone="danger" className="models-warning">
+          <>
             {showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
-          </Callout.Text>
-        </Callout.Root>}
+          </>
+        </Notice>}
       </Flex>
       <details className="models-customized">
         <summary className="models-customized-summary">
@@ -248,27 +248,27 @@ export function ProviderEditor(props: {
             <Text size="2" weight="medium" className="models-field-label">
               {text().displayName}
             </Text>
-            <TextField.Root
+            <Input
               type="text"
               className="models-input"
               value={stringAt(draft, 'displayName') ?? ''}
               placeholder={stringAt(fallbackRecord, 'displayName') ?? providerIdOf(row.entry)}
               aria-label={text().displayName}
               disabled={readOnly || busy}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value)} />
+              onChange={(value) => setField('displayName', value)} />
           </Flex> : null}
           <Flex direction="column" gap="2" className="models-field" minWidth="0">
             <Text size="2" weight="medium" className="models-field-label">
               {text().baseUrl}
             </Text>
-            <TextField.Root
+            <Input
               type="text"
               className="models-input"
               value={stringAt(draft, 'baseURL') ?? ''}
               placeholder={family === 'deepseek' ? text().baseUrlDeepseekPlaceholder : text().baseUrlPlaceholder}
               aria-label={text().baseUrl}
               disabled={readOnly || busy}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value)} />
+              onChange={(value) => setField('baseURL', value)} />
           </Flex>
           {isPiAi && isDeclared ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
             <Text size="2" weight="medium" className="models-field-label">
@@ -298,11 +298,11 @@ export function ProviderEditor(props: {
             t={text()} />
         </div>
       </details>
-      {failure !== undefined || revisionChanged ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
+      {failure !== undefined || revisionChanged ? <Notice tone="danger" className="models-warning">
+        <>
           {failure ?? text().conflict}
-        </Callout.Text>
-      </Callout.Root> : null}
+        </>
+      </Notice> : null}
       {isSetup || keyFailure === undefined && modelFailure === undefined
         ? <Flex className="models-editor-actions" gap="2" justify="end">
         <Button
@@ -324,11 +324,11 @@ export function ProviderEditor(props: {
         </Button>
       </Flex>
         : null}
-      {modelFailureText !== null ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
+      {modelFailureText !== null ? <Notice tone="danger" className="models-warning">
+        <>
           {modelFailureText}
-        </Callout.Text>
-      </Callout.Root> : null}
+        </>
+      </Notice> : null}
     </Box>
   );
 }
@@ -425,7 +425,7 @@ export function CustomProviderCard(props: {
         <Text size="2" weight="medium" className="models-field-label">
           {text().customRoute}
         </Text>
-        <TextField.Root
+        <Input
           type="text"
           className="models-input"
           value={route}
@@ -433,14 +433,14 @@ export function CustomProviderCard(props: {
           aria-label={text().customRoute}
           aria-invalid={routeInvalid !== undefined}
           disabled={readOnly || busy || committed}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setRoute(event.target.value)} />
+          onChange={setRoute} />
       </Flex>
       {routeInvalid !== undefined
-        ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
+        ? <Notice tone="danger" className="models-warning">
+        <>
           {routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken}
-        </Callout.Text>
-      </Callout.Root>
+        </>
+      </Notice>
         : <Text size="1" color="gray" className="models-hint">
         {text().customRouteHint}
       </Text>}
@@ -448,27 +448,27 @@ export function CustomProviderCard(props: {
         <Text size="2" weight="medium" className="models-field-label">
           {text().displayName}
         </Text>
-        <TextField.Root
+        <Input
           type="text"
           className="models-input"
           value={displayName}
           placeholder={route.length > 0 ? route : text().displayName}
           aria-label={text().displayName}
           disabled={readOnly || busy || committed}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value)} />
+          onChange={setDisplayName} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
           {text().baseUrl}
         </Text>
-        <TextField.Root
+        <Input
           type="text"
           className="models-input"
           value={baseURL}
           placeholder="https://gateway.example/v1"
           aria-label={text().baseUrl}
           disabled={readOnly || busy || committed}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value)} />
+          onChange={setBaseURL} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
@@ -485,7 +485,7 @@ export function CustomProviderCard(props: {
         <Text size="2" weight="medium" className="models-field-label">
           {text().apiKey}
         </Text>
-        <TextField.Root
+        <Input
           type="password"
           autoComplete="off"
           className="models-input"
@@ -494,14 +494,14 @@ export function CustomProviderCard(props: {
           aria-label={text().apiKey}
           aria-invalid={keyFailure !== undefined}
           disabled={readOnly || busy}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
+          onChange={setKeyDraft} />
         {keyFailure === undefined
           ? null
-          : <Callout.Root color="red" role="alert" className="models-warning">
-          <Callout.Text>
+          : <Notice tone="danger" className="models-warning">
+          <>
             {keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
-          </Callout.Text>
-        </Callout.Root>}
+          </>
+        </Notice>}
       </Flex>
       <ModelListEditor
         ctx={ctx}
@@ -520,17 +520,17 @@ export function CustomProviderCard(props: {
             : null}
       </Text>
       {modelFailure !== undefined
-        ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
+        ? <Notice tone="danger" className="models-warning">
+        <>
           {text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))}
-        </Callout.Text>
-      </Callout.Root>
+        </>
+      </Notice>
         : null}
-      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
-        <Callout.Text>
+      {failure !== undefined ? <Notice tone="danger" className="models-warning">
+        <>
           {failure}
-        </Callout.Text>
-      </Callout.Root> : null}
+        </>
+      </Notice> : null}
       <Flex className="models-editor-actions" gap="2" justify="end">
         <Button
           variant="secondary"

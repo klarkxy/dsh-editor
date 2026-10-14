@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react'
-import { Box, Button, Callout, Heading } from '@radix-ui/themes'
+import { Box, Button, Heading, Notice } from '../ui/index.ts'
 import { getLocale, subscribeLocale, t } from '../i18n/index.ts'
 import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import type { SettingsScopeBinder } from './shared.ts'
@@ -112,13 +112,13 @@ class ConfigurationBoundary extends Component<{ identity: string; children: Reac
 
   render() {
     if (this.state.error !== null) return (
-      <Callout.Root color="red" role="alert" className="warning pad" data-testid="plugin-configuration-error">
-        <Callout.Text>{this.state.error}</Callout.Text>
-        <Button type="button" variant="soft" color="gray" data-testid="plugin-configuration-retry"
+      <Notice tone="danger" className="warning pad" data-testid="plugin-configuration-error"
+        action={<Button type="button" variant="secondary" size="sm" data-testid="plugin-configuration-retry"
           onClick={() => this.setState((state) => ({ error: null, nonce: state.nonce + 1 }))}>
           {t('common.retry')}
-        </Button>
-      </Callout.Root>
+        </Button>}>
+        {this.state.error}
+      </Notice>
     )
     return <Fragment key={this.state.nonce}>{this.props.children}</Fragment>
   }

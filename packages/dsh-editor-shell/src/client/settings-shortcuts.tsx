@@ -1,6 +1,6 @@
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { useEffect, useState } from 'react'
-import { Card, Heading, Kbd, Table, Text } from '@radix-ui/themes'
+import { Card, Heading, Kbd, Text } from '../ui/index.ts'
 import { useLocale } from '../i18n/index.ts'
 import { runtimeShortcutHint, runtimeShortcutPlatform } from '../palette-shortcut.ts'
 import type { ShellCommandRegistry } from '../seats.ts'
@@ -92,13 +92,13 @@ export function ShortcutsSettings({ commands, renderSlot }: { commands?: ShellCo
     ] as Row[]),
   ]
   const all = plugins.length ? [...builtin, { title: ['已启用的插件', 'Enabled plugins'] as [string, string], rows: plugins }] : builtin
-  const renderRows = (rows: Row[]) => <Table.Root size="1">
-    <Table.Header><Table.Row><Table.ColumnHeaderCell>{locale === 'en' ? 'Action' : '操作'}</Table.ColumnHeaderCell><Table.ColumnHeaderCell>{locale === 'en' ? 'Shortcut' : '快捷键'}</Table.ColumnHeaderCell></Table.Row></Table.Header>
-    <Table.Body>{rows.map(([keys, zh, en]) => <Table.Row key={keys + zh}>
-      <Table.RowHeaderCell>{locale === 'en' ? en : zh}</Table.RowHeaderCell>
-      <Table.Cell>{keys.split(' / ').map((key, i) => <span key={key}>{i > 0 ? ' / ' : ''}<Kbd>{runtimeShortcutHint(key)}</Kbd></span>)}</Table.Cell>
-    </Table.Row>)}</Table.Body>
-  </Table.Root>
+  const renderRows = (rows: Row[]) => <table className="dsh-shortcuts-table">
+    <thead><tr><th>{locale === 'en' ? 'Action' : '操作'}</th><th>{locale === 'en' ? 'Shortcut' : '快捷键'}</th></tr></thead>
+    <tbody>{rows.map(([keys, zh, en]) => <tr key={keys + zh}>
+      <th scope="row">{locale === 'en' ? en : zh}</th>
+      <td>{keys.split(' / ').map((key, i) => <span key={key}>{i > 0 ? ' / ' : ''}<Kbd>{runtimeShortcutHint(key)}</Kbd></span>)}</td>
+    </tr>)}</tbody>
+  </table>
   return <section aria-label={locale === 'en' ? 'Keyboard shortcuts' : '快捷键'}>
     <div data-dsh-plugin-surface="">{renderSlot?.('settings.general.item', {}, { only: 'shortcuts' })}</div>
     <Text as="p" size="2" color="gray" mb="4">{locale === 'en'

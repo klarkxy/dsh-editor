@@ -6,7 +6,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { Button, Callout, Card, Flex, Heading, Kbd, Separator, Text } from '@radix-ui/themes'
+import { Button, Card, Flex, Heading, Kbd, Notice, Separator, Text } from './ui/index.ts'
 import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { COMPLETION_DELAY, normalizeWritingEffort, normalizeWritingModelRoute, object, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -328,11 +328,9 @@ export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
 
   if (snapshot.status === 'unavailable') return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {t('writing.unavailable')}
-        </Callout.Text>
-      </Callout.Root>
+      <Notice tone="danger">
+        {t('writing.unavailable')}
+      </Notice>
     </section>
   );
 
@@ -456,24 +454,20 @@ export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
         </div>
         <ManuscriptPreview preferences={values} />
       </div>
-      {writeFailure ? <Callout.Root color="red" role="alert">
-        <Callout.Text>
-          {writeFailure}
-        </Callout.Text>
-      </Callout.Root> : null}
-      {migrationFailure.length ? <Callout.Root color="amber" role="alert">
-        <Callout.Text>
-          {t('writing.migrationPending')}
-        </Callout.Text>
-        <Button
+      {writeFailure ? <Notice tone="danger">
+        {writeFailure}
+      </Notice> : null}
+      {migrationFailure.length ? <Notice tone="warning"
+        action={<Button
           type="button"
-          variant="soft"
-          color="gray"
+          variant="secondary"
+          size="sm"
           onClick={() => void runMigration()}
           disabled={saving !== null}>
           {t('writing.retryMigration')}
-        </Button>
-      </Callout.Root> : null}
+        </Button>}>
+        {t('writing.migrationPending')}
+      </Notice> : null}
     </section>
   );
 }

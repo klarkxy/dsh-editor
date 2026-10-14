@@ -2,12 +2,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { SettingsNamespaceView, SettingsScope } from '../dsh-compat.ts'
 import { addableRows, credentialDot, modelDrafts, protocolChoices, providerIdOf, providerUsable, type ProviderRow } from './settings-models-store.ts'
-import { Badge, Box, Callout, Card, Flex, Heading, Text } from '@radix-ui/themes'
+import { Badge, Box, Button, Card, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ConfirmDialog } from './dialogs.tsx'
 import { ActivitySkeleton, ActivityText } from './ui/index.ts'
-import { Button } from '../ui/index.ts'
+
 import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsSchemaService, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { RpcResult } from '../dsh-compat.ts'
@@ -160,9 +160,10 @@ export function SettingsEditorModelsSection(props: { ctx: ShellContext; writingS
   }
   return <>
     {migrationBusy ? <ActivityText>{t('common.loading')}</ActivityText> : null}
-    {migrationFailure ? <Callout.Root color="red" role="alert"><Callout.Text>{migrationFailure}</Callout.Text>
-      <Button variant="secondary" disabled={migrationBusy} onClick={() => { void retryMigration() }}>{t('common.retry')}</Button>
-    </Callout.Root> : null}
+    {migrationFailure ? <Notice tone="danger"
+      action={<Button variant="secondary" size="sm" disabled={migrationBusy} onClick={() => { void retryMigration() }}>{t('common.retry')}</Button>}>
+      {migrationFailure}
+    </Notice> : null}
     <EditorModelSettings scope={props.writingScope} catalog={catalog} writable={!migrationBusy} />
     <Heading as="h3" size="3" mt="4" mb="3">{locale === 'en' ? 'Providers' : '供应商'}</Heading>
     <SettingsModelsSection {...props} showWritingRoutes={false} />
@@ -277,14 +278,12 @@ function Loaded(props: {
     return (
       <section className="models-page" aria-label={t('settings.models')}>
         <Header />
-        <Callout.Root color="red" role="alert" className="models-error">
-          <Callout.Text>
-            {`${text().loadFailed}：${message}`}
-          </Callout.Text>
-          <Button variant="secondary" className="models-button" onClick={() => void store.load()}>
+        <Notice tone="danger" className="models-error"
+          action={<Button variant="secondary" size="sm" className="models-button" onClick={() => void store.load()}>
             {text().retry}
-          </Button>
-        </Callout.Root>
+          </Button>}>
+          {`${text().loadFailed}：${message}`}
+        </Notice>
       </section>
     );
   }
@@ -308,15 +307,13 @@ function Loaded(props: {
     <section className="models-page" aria-label={t('settings.models')}>
       <Header note={section.savedNote} />
       {state.refreshing ? <ActivityText>{text().loading}</ActivityText> : null}
-      {state.error ? <Callout.Root color="red" className="models-error" role="alert">
-        <Callout.Text>{`${text().loadFailed}：${state.error}`}</Callout.Text>
-        <Button variant="secondary" onClick={() => void store.load()}>{text().retry}</Button>
-      </Callout.Root> : null}
-      {section.deleteError ? <Callout.Root color="red" className="models-error" role="alert">
-        <Callout.Text>
-          {section.deleteError}
-        </Callout.Text>
-      </Callout.Root> : null}
+      {state.error ? <Notice tone="danger" className="models-error"
+        action={<Button variant="secondary" size="sm" onClick={() => void store.load()}>{text().retry}</Button>}>
+        {`${text().loadFailed}：${state.error}`}
+      </Notice> : null}
+      {section.deleteError ? <Notice tone="danger" className="models-error">
+        {section.deleteError}
+      </Notice> : null}
       {props.showWritingRoutes ? <WritingModelRoutes
         connection={ctx.connection}
         scope={props.writingScope}
@@ -326,11 +323,9 @@ function Loaded(props: {
         {text().readOnly}
       </Text> : null}
       {state.credentialError !== null
-        ? <Callout.Root color="red" className="models-warning" role="status">
-        <Callout.Text>
-          {`${text().credentialErrorPrefix}${state.credentialError}`}
-        </Callout.Text>
-      </Callout.Root>
+        ? <Notice tone="danger" className="models-warning" role="status">
+        {`${text().credentialErrorPrefix}${state.credentialError}`}
+      </Notice>
         : null}
       <Flex asChild direction="column" gap="3" m="0" p="0">
         <ul className="models-rows">
@@ -511,11 +506,9 @@ function Header(props: { note?: string | null }): ReactNode {
   if (!props.note) return null
   return (
     <header className="models-header settings-block-head">
-      <Callout.Root color="green" className="models-saved" role="status">
-        <Callout.Text>
-          {props.note}
-        </Callout.Text>
-      </Callout.Root>
+      <Notice tone="success" className="models-saved">
+        {props.note}
+      </Notice>
     </header>
   );
 }
@@ -536,7 +529,7 @@ function RowHead(props: {
         <Text size="2" weight="medium" className="models-row-name">
           {label}
         </Text>
-        {row.entry.declared === true ? <Badge size="1" className="models-row-tag">
+        {row.entry.declared === true ? <Badge tone="neutral" className="models-row-tag">
           {text().custom}
         </Badge> : null}
         {dot === 'configured'

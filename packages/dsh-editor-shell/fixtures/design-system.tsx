@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Card, ScrollArea } from '@radix-ui/themes'
 import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
 import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
@@ -10,6 +9,7 @@ import { Markdown } from '../src/client/markdown.tsx'
 import {
   Badge,
   Button,
+  Card,
   Dialog,
   IconButton,
   Menu,
@@ -18,6 +18,7 @@ import {
   MenuSeparator,
   MenuTrigger,
   PlusIcon,
+  ScrollArea,
   SendIcon,
   Switch,
   TextArea,

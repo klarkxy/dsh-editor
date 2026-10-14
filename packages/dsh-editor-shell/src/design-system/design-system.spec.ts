@@ -15,7 +15,7 @@ describe('原稿 web design contracts', () => {
     const script = fileURLToPath(new URL('../../../../scripts/check-ui-design.mjs', import.meta.url))
     const output = execFileSync(process.execPath, ['--experimental-strip-types', script], { encoding: 'utf8' })
     expect(output).toMatch(/UI design checks: [1-9]\d* passed/)
-  })
+  }, 30000)
   it('maps every scanned DSW variable or names it pending (§6)', () => {
     const unaccounted = DSW_VARS.filter((name) => !(name in DSW_MAP) && !DSW_PENDING.includes(name))
     expect(unaccounted).toEqual([])

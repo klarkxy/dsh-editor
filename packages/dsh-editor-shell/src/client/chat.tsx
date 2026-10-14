@@ -45,13 +45,8 @@ import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageC
 import { useObservable } from './components.tsx'
 import { isObservableSource } from '../model/components.ts'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.tsx'
-import {
-  Box,
-  Flex,
-  Text,
-} from '@radix-ui/themes'
 import { ActivityDots } from './ui/index.ts'
-import { Button as UiButton, IconButton as UiIconButton, Notice, TextArea } from '../ui/index.ts'
+import { Box, Button as UiButton, Flex, IconButton as UiIconButton, Notice, Text, TextArea } from '../ui/index.ts'
 import { takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import {

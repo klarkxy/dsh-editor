@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Box } from '@radix-ui/themes'
+import { Box } from '../ui/index.ts'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle, EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'

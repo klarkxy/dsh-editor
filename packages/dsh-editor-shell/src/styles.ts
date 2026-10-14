@@ -97,6 +97,7 @@ export const componentStyles = `
   gap: var(--space-1);
 }
 .shell > .chrome button.rt-IconButton,
+.shell > .chrome button.dsh-icon-button,
 .shell > .chrome .window-controls button {
   display: inline-flex;
   align-items: center;
@@ -263,6 +264,8 @@ ${historyStyles}
 /* 选段改写浮层（§4）：预设一行 + 指令一行 + 操作行。 */
 .dsh-popover .rewrite-popover { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2, 8px); min-width: 300px; }
 .dsh-popover .rewrite-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.dsh-popover .rewrite-presets-custom .dsh-textarea { resize: vertical; }
+.radix-themes .migration-banner .migration-banner-actions { display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
 .dsh-popover .rewrite-instruction { width: 100%; }
 .dsh-popover .rewrite-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
@@ -566,13 +569,15 @@ ${chatMessageStyles}
 .radix-themes .activity-shimmer { position: relative; display: block; width: 96px; height: 3px; border-radius: 999px; background: var(--gray-a6); overflow: hidden; }
 .radix-themes .activity-shimmer i { position: absolute; top: 0; bottom: 0; left: 0; width: 33%; border-radius: inherit; background: var(--accent-9); opacity: .5; animation: shell-activity-shimmer 1.5s ease-in-out infinite; }
 .radix-themes .activity-skeleton { display: grid; gap: 8px; }
+.radix-themes .activity-skeleton__line { position: relative; display: block; border-radius: var(--radius-2); background: var(--gray-a5); overflow: hidden; }
 .radix-themes .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
 .radix-themes .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: shell-activity-pulse 1.4s ${EASE} infinite; }
 .radix-themes .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
 .radix-themes .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
 .radix-themes .panel-skeleton { display: grid; gap: var(--space-2); }
 .radix-themes .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-2); background: var(--gray-a5); overflow: hidden; }
-.radix-themes .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--gray-a3), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
+.radix-themes .panel-skeleton i::after,
+.radix-themes .activity-skeleton__line::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--gray-a3), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
 .radix-themes .activity-text { display: inline-flex; align-items: center; gap: 6px; animation: shell-fade-in 250ms ${EASE} both; }
 .radix-themes .success-mark { display: inline-block; width: 1.1em; height: 1.1em; color: var(--green-9); vertical-align: -.15em; }
 .radix-themes .success-mark path { stroke: currentColor; stroke-dasharray: 42; stroke-dashoffset: 0; animation: shell-success-draw 250ms ${EASE}; }
