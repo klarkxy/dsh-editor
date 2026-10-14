@@ -6,6 +6,7 @@ import { formatBytes, intlLocale, t, useLocale } from '../i18n/index.ts'
 import { ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
 import { isAuthorFacingDocumentPath } from '../project-files.ts'
+import './dialogs.styles.ts'
 import {
   normalizeSnapshot,
   selectedSnapshot,

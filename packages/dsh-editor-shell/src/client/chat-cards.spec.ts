@@ -18,8 +18,12 @@ import {
   turnProcessLabel,
 } from '../model/chat-cards.ts'
 import { ActivityDots } from './ui/index.ts'
-import { redesignedStyles } from '../styles.ts'
+import { collectStyles } from '../design-system/layers.ts'
+import './chat.styles.ts'
+import './base.styles.ts'
 import type { ChatRow } from '../adapter.ts'
+
+const shellStyles = collectStyles()
 
 type El = ReactElement & { props: Record<string, unknown> & { children?: ReactNode } }
 
@@ -190,10 +194,10 @@ describe('execution record disclosure (§5)', () => {
 
 describe('chat process CSS', () => {
   it('uses Disclosure rows instead of the old toggle/details chrome (§5)', () => {
-    expect(redesignedStyles).not.toContain('.chat-process-toggle')
-    expect(redesignedStyles).not.toContain('.chat-step-summary')
-    expect(redesignedStyles).toContain('.chat-step-preview')
-    expect(redesignedStyles).not.toContain('.chat-step-card')
+    expect(shellStyles).not.toContain('.chat-process-toggle')
+    expect(shellStyles).not.toContain('.chat-step-summary')
+    expect(shellStyles).toContain('.chat-step-preview')
+    expect(shellStyles).not.toContain('.chat-step-card')
     const layered = collectStyles()
     /* 单行执行记录：Disclosure 头行 + 箭头移到行尾 + 内容缩进对齐标题。 */
     expect(layered).toContain('.chat-step .dsh-disclosure__summary')
@@ -202,19 +206,19 @@ describe('chat process CSS', () => {
   })
 
   it('keeps collapsed process rows to one ellipsized line and wraps only the opened body', () => {
-    expect(redesignedStyles).toMatch(/\.chat-step-preview \{[^}]*white-space: nowrap/)
-    expect(redesignedStyles).toMatch(/\.chat-step-preview \{[^}]*text-overflow: ellipsis/)
-    expect(redesignedStyles).toMatch(/\.chat-step-body \{[^}]*white-space: pre-wrap/)
-    expect(redesignedStyles).toContain('.panel-resizer::before')
+    expect(shellStyles).toMatch(/\.chat-step-preview \{[^}]*white-space: nowrap/)
+    expect(shellStyles).toMatch(/\.chat-step-preview \{[^}]*text-overflow: ellipsis/)
+    expect(shellStyles).toMatch(/\.chat-step-body \{[^}]*white-space: pre-wrap/)
+    expect(shellStyles).toContain('.panel-resizer::before')
     // The grab strip is a named control: the hit area is at least the small
     // control height even though the drawn rule stays hairline-thin.
-    expect(redesignedStyles).toMatch(/\.panel-resizer \{[^}]*width: 12px/)
-    expect(redesignedStyles).toMatch(/\.panel-resizer::before \{[^}]*width: 1px/)
+    expect(shellStyles).toMatch(/\.panel-resizer \{[^}]*width: 12px/)
+    expect(shellStyles).toMatch(/\.panel-resizer::before \{[^}]*width: 1px/)
   })
 
   it('colors process-row status dots green for success and red for failure', () => {
-    expect(redesignedStyles).toContain('.chat-step-status.is-ok { background: var(--dsh-ui-success); }')
-    expect(redesignedStyles).toContain('.chat-step-status.is-error')
-    expect(redesignedStyles).toContain('background: var(--dsh-ui-danger)')
+    expect(shellStyles).toContain('.chat-step-status.is-ok { background: var(--dsh-ui-success); }')
+    expect(shellStyles).toContain('.chat-step-status.is-error')
+    expect(shellStyles).toContain('background: var(--dsh-ui-danger)')
   })
 })

@@ -2,7 +2,6 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
-import { componentStyles } from '../styles.ts'
 import { CenterOverlays, SidebarTools } from './root-columns.tsx'
 import { ExtensionsDock } from './root.tsx'
 import { PluginSettingsContent } from './settings-plugins.tsx'
@@ -50,7 +49,11 @@ describe('production plugin visual boundaries', () => {
   })
 
   it('retains the sidebar entry animation on real contribution children', () => {
-    /* 抽屉是 Portal，工具页签也可能出现在 .dsh-drawer 宿主里。 */
-    expect(componentStyles).toContain(':is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel)')
+    /* 抽屉是 Portal，工具页签也可能出现在 .dsh-drawer 宿主里；规则在
+       app/shell/shell.styles.ts（dsh.surfaces 层），collectStyles 读出。 */
+    return import('../app/shell/shell.styles.ts').then(async () => {
+      const { collectStyles } = await import('../design-system/layers.ts')
+      expect(collectStyles()).toContain(':is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel)')
+    })
   })
 })

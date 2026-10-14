@@ -8,13 +8,13 @@
 | 需要改变什么 | 唯一入口或既有入口 |
 | --- | --- |
 | 配色、字号/圆角/间距/动效尺度 | `src/design-system/tokens.ts` |
-| 产品外观与现有 DOM 的映射 | `src/design-system/styles.ts` 的原规则 |
-| 可访问的基础交互 | `src/client/ui/` 与已使用的 Radix 组件 |
-| CodeMirror、窗口拖拽、分栏、hidden/inert 等结构 | `src/styles.ts` 与现有布局组件 |
+| 产品外观与现有 DOM 的映射 | 所属区域的 `*.styles.ts`（`app/`、`client/`、`src/ui/`），外观规则用 `uiRule()` |
+| 可访问的基础交互 | `src/ui/` 与已使用的 Radix 组件 |
+| CodeMirror、窗口拖拽、分栏、hidden/inert 等结构 | `client/base.styles.ts`、`client/editor.styles.ts` 与现有布局组件 |
 | 活体组件示例 | `src/design-system/gallery.tsx` |
 | 浏览器契约 | `fixtures/design-system.tsx`、根目录 `e2e/ui-design.mjs` |
 
-不要把视觉规则追加到旧 `src/styles.ts` 的末尾，或给每个页面再建一套覆盖层。替换规则时删除被替换的重复项，但不要顺手改写无关结构。
+不要给每个页面再建一套覆盖层；视觉规则写进所属区域的 sheet。替换规则时删除被替换的重复项，但不要顺手改写无关结构。
 
 ## 必须保持
 

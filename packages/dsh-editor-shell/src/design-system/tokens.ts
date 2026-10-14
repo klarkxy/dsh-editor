@@ -120,34 +120,11 @@ export const TOKEN_SCOPE = `html[data-dsh-ui="${DESIGN_SYSTEM_ID}"]`
 export const SCOPE = `${TOKEN_SCOPE} :is(.radix-themes, [data-dsh-theme])`
 export const SCOPE_DARK = `${TOKEN_SCOPE} :is(.radix-themes.dark, [data-dsh-theme="dark"])`
 
-/* §2.4：迁移期 Radix 灰阶映射到原稿中性色；gray-6..9 在 sunken 与 muted
-   之间等分插值，gray-a 沿用旧 alpha 阶梯、基色换成正文色。 */
-const LIGHT_GRAY = `
-  --gray-1: #FFFFFF; --gray-2: #F7F8F4; --gray-3: #EEF1EC;
-  --gray-4: #E8EBE6; --gray-5: #E1E5DF; --gray-6: #C6CBC5;
-  --gray-7: #ACB2AB; --gray-8: #919892; --gray-9: #777F78;
-  --gray-10: #5C655E; --gray-11: #5C655E; --gray-12: #1E2420;
-  --gray-a1: rgba(30, 36, 32, 0.02); --gray-a2: rgba(30, 36, 32, 0.03); --gray-a3: rgba(30, 36, 32, 0.05);
-  --gray-a4: rgba(30, 36, 32, 0.08); --gray-a5: rgba(30, 36, 32, 0.1); --gray-a6: rgba(30, 36, 32, 0.12);
-  --gray-a7: rgba(30, 36, 32, 0.16); --gray-a8: rgba(30, 36, 32, 0.28);
-  --gray-a9: rgba(30, 36, 32, 0.48); --gray-a10: rgba(30, 36, 32, 0.58);
-  --gray-a11: rgba(30, 36, 32, 0.68); --gray-a12: rgba(30, 36, 32, 0.9);`
-const DARK_GRAY = `
-  --gray-1: #252A26; --gray-2: #1C201D; --gray-3: #202521;
-  --gray-4: #151816; --gray-5: #121513; --gray-6: #2D312D;
-  --gray-7: #474D47; --gray-8: #626862; --gray-9: #7C847C;
-  --gray-10: #97A096; --gray-11: #97A096; --gray-12: #DADFD6;
-  --gray-a1: rgba(218, 223, 214, 0.03); --gray-a2: rgba(218, 223, 214, 0.05); --gray-a3: rgba(218, 223, 214, 0.08);
-  --gray-a4: rgba(218, 223, 214, 0.14); --gray-a5: rgba(218, 223, 214, 0.12); --gray-a6: rgba(218, 223, 214, 0.16);
-  --gray-a7: rgba(218, 223, 214, 0.2); --gray-a8: rgba(218, 223, 214, 0.32);
-  --gray-a9: rgba(218, 223, 214, 0.52); --gray-a10: rgba(218, 223, 214, 0.62);
-  --gray-a11: rgba(218, 223, 214, 0.72); --gray-a12: rgba(218, 223, 214, 0.92);`
-
 const RADIX_ALIASES = `
   --default-font-family: var(--dsh-ui-font-ui);
   --code-font-family: var(--dsh-ui-font-mono);
-  /* 字号/行高/间距沿用旧 Radix 梯级的像素值（scaling 固定 100%），
-     与原稿字阶一致的走 --dsh-ui-*，无对应档的保留字面量直到 6a-3。 */
+  /* 字号/行高/间距沿用旧梯级的像素值（scaling 固定 100%），manuscript
+     挂件样式仍在读；与新字阶一致的直接走 --dsh-ui-*。 */
   --font-size-1: var(--dsh-ui-text-xs);
   --font-size-2: var(--dsh-ui-text-base);
   --font-size-3: 16px; --font-size-4: 18px; --font-size-5: var(--dsh-ui-text-xl);
@@ -163,24 +140,6 @@ const RADIX_ALIASES = `
   --space-3: var(--dsh-ui-space-3); --space-4: var(--dsh-ui-space-4);
   --space-5: var(--dsh-ui-space-6); --space-6: var(--dsh-ui-space-8);
   --space-7: 40px; --space-8: 48px; --space-9: 64px;
-  /* 作用域内仍读旧色名的插件/挂件桥到原稿语义，而不是旧 indigo。 */
-  --accent-8: var(--dsh-ui-accent-border); --accent-9: var(--dsh-ui-accent);
-  --accent-10: var(--dsh-ui-accent-hover); --accent-11: var(--dsh-ui-accent);
-  --accent-a3: var(--dsh-ui-accent-soft); --accent-a4: var(--dsh-ui-accent-soft);
-  --accent-a8: var(--dsh-ui-accent-border); --accent-contrast: var(--dsh-ui-on-accent);
-  --red-9: var(--dsh-ui-danger); --red-11: var(--dsh-ui-danger);
-  --red-a3: var(--dsh-ui-danger-soft); --red-a5: var(--dsh-ui-danger-soft);
-  --red-a6: var(--dsh-ui-danger-soft);
-  --green-9: var(--dsh-ui-success); --green-11: var(--dsh-ui-success);
-  --green-a3: var(--dsh-ui-success-soft);
-  --amber-9: var(--dsh-ui-warning); --amber-a4: var(--dsh-ui-warning-soft);
-  --amber-a6: var(--dsh-ui-warning-soft); --amber-a8: var(--dsh-ui-warning-soft);
-  --color-background: var(--dsh-ui-bg);
-  --color-overlay: var(--dsh-ui-scrim);
-  --backdrop-filter-panel: none;
-  --color-panel-solid: var(--dsh-ui-raised);
-  --color-panel-translucent: var(--dsh-ui-raised);
-  --color-surface: var(--dsh-ui-raised);
   --paper-fill: var(--dsh-ui-paper);
   --radius-1: var(--dsh-ui-radius-xs); --radius-2: var(--dsh-ui-radius-sm);
   --radius-3: var(--dsh-ui-radius-md); --radius-4: var(--dsh-ui-radius-lg);
@@ -195,12 +154,12 @@ export const tokenStyles = `
 ${SCOPE} {
 ${cssVariables(FOUNDATION_TOKENS)}
 ${cssVariables(LIGHT_TOKENS)}
-  color-scheme: light;${LIGHT_GRAY}${RADIX_ALIASES}
+  color-scheme: light;${RADIX_ALIASES}
 ${dsw}
 }
 ${SCOPE_DARK} {
 ${cssVariables(DARK_TOKENS)}
-  color-scheme: dark;${DARK_GRAY}${RADIX_ALIASES}
+  color-scheme: dark;${RADIX_ALIASES}
 ${dsw}
 }
 `

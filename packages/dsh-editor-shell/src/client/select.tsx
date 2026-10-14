@@ -3,6 +3,7 @@ import { t } from '../i18n/index.ts'
 import { Select as InternalSelect } from '../ui/index.ts'
 
 import type { SelectOption } from '../model/select.ts'
+import './select.styles.ts'
 
 /*
  * Radix Select.Item 不接受空字符串 value,而模型设置里的"未选择"协议项

@@ -7,11 +7,11 @@ import { findings } from './check-ui-drift.mjs'
 import * as tokenModule from '../packages/dsh-editor-shell/src/design-system/tokens.ts'
 import {
   LIGHT_TOKENS, DARK_TOKENS, DESIGN_SOURCE, DESIGN_SYSTEM_ID,
-  FOUNDATION_TOKENS, SCOPE, SCOPE_DARK,
+  FOUNDATION_TOKENS, SCOPE, SCOPE_DARK, tokenStyles,
 } from '../packages/dsh-editor-shell/src/design-system/tokens.ts'
-import { componentStyles, designSystemStyles, uiRule } from '../packages/dsh-editor-shell/src/design-system/styles.ts'
+import { uiRule } from '../packages/dsh-editor-shell/src/design-system/styles.ts'
 import { mountDesignScope } from '../packages/dsh-editor-shell/src/design-system/scope.ts'
-import { collectStyles, LAYER_ORDER_STATEMENT, STYLE_LAYERS } from '../packages/dsh-editor-shell/src/design-system/layers.ts'
+import { collectStyles, defineStyles, LAYER_ORDER_STATEMENT, STYLE_LAYERS } from '../packages/dsh-editor-shell/src/design-system/layers.ts'
 import { DSW_VARS } from '../packages/dsh-editor-shell/src/design-system/dsw-vars.ts'
 import { DSW_MAP, DSW_PENDING } from '../packages/dsh-editor-shell/src/design-system/compat.ts'
 
@@ -34,6 +34,21 @@ function contrast(a, b) {
   const x = luminance(a), y = luminance(b)
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
 }
+
+/* 6a-3 之后不再有单一组件样式串：断言跑在 collectStyles() 上。这里手动注册
+   所有 sheet（定义即注册的 *.styles.ts 与 tokenStyles），与
+   client/root.tsx 的注入次序一致。 */
+const SHELL_SRC = fileURLToPath(new URL('../packages/dsh-editor-shell/src/', import.meta.url))
+for (const dir of [
+  'ui', 'client', 'client/ui', 'design-system',
+  'app/shell', 'app/home', 'app/assistant', 'app/settings', 'app/files',
+]) {
+  for (const entry of readdirSync(join(SHELL_SRC, dir))) {
+    if (entry.endsWith('.styles.ts')) await import(new URL(`../packages/dsh-editor-shell/src/${dir}/${entry}`, import.meta.url).href)
+  }
+}
+defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
+const collected = collectStyles()
 /** Composite an rgba() over a solid hex background. */
 function blend(value, background) {
   const rgba = value.match(/rgba?\(([^)]+)\)/)
@@ -80,8 +95,8 @@ check('no accent system remains', () => {
   }
   // Radix's own data-accent-color attr stays for explicit component colours;
   // the saved-accent override rules and the picker swatch are gone.
-  assert(!designSystemStyles.includes('--dsh-ui-accent: var(--accent-9'))
-  assert(!designSystemStyles.includes('accent-swatch'))
+  assert(!collected.includes('--dsh-ui-accent: var(--accent-9'))
+  assert(!collected.includes('accent-swatch'))
 })
 check('tokens carry no gradients or blur', () => {
   for (const source of [LIGHT_TOKENS, DARK_TOKENS, FOUNDATION_TOKENS, DSW_MAP]) {
@@ -89,8 +104,8 @@ check('tokens carry no gradients or blur', () => {
   }
 })
 check('all referenced design tokens are defined', () => {
-  const defined = new Set([...designSystemStyles.matchAll(/(--dsh-ui-[\w-]+)\s*:/g)].map(m => m[1]))
-  for (const match of designSystemStyles.matchAll(/var\((--dsh-ui-[\w-]+)/g)) assert(defined.has(match[1]), match[1])
+  const defined = new Set([...collected.matchAll(/(--dsh-ui-[\w-]+)\s*:/g)].map(m => m[1]))
+  for (const match of collected.matchAll(/var\((--dsh-ui-[\w-]+)/g)) assert(defined.has(match[1]), match[1])
 })
 check('spec contrast pairs clear 4.5:1 in both modes', () => {
   for (const tokens of [LIGHT_TOKENS, DARK_TOKENS]) {
@@ -136,10 +151,9 @@ check('cleanup never overwrites another host change', () => {
   assert.equal(root.getAttribute('data-dsh-ui'), 'another-host')
 })
 check('layer order is declared once at the head of the collected sheet', () => {
-  const collected = collectStyles()
   assert(collected.startsWith(LAYER_ORDER_STATEMENT))
-  assert.equal(LAYER_ORDER_STATEMENT, '@layer legacy, dsh.reset, dsh.tokens, dsh.components, dsh.surfaces, dsh.state;')
-  assert(!/@layer\s+(?!legacy\b|dsh\.)/.test(collected.replace(LAYER_ORDER_STATEMENT, '')))
+  assert.equal(LAYER_ORDER_STATEMENT, '@layer dsh.reset, dsh.tokens, dsh.components, dsh.surfaces, dsh.state;')
+  assert(!/@layer\s+(?!dsh\.)/.test(collected.replace(LAYER_ORDER_STATEMENT, '')))
   let position = -1
   for (const layer of STYLE_LAYERS) {
     const at = collected.indexOf(`@layer ${layer} {`)
@@ -160,25 +174,22 @@ check('official plugin --dsw-* inventory is current', () => {
   execFileSync(process.execPath, [script, '--check'], { stdio: 'pipe' })
 })
 check('motion, forced-color and circle fallbacks are present', () => {
-  assert(designSystemStyles.includes('prefers-reduced-motion: reduce'))
-  assert(designSystemStyles.includes('forced-colors: active'))
-  const supportsAt = componentStyles.indexOf('@supports (corner-shape: superellipse(1.5))')
+  assert(collected.includes('prefers-reduced-motion: reduce'))
+  assert(collected.includes('forced-colors: active'))
+  const supportsAt = collected.indexOf('@supports (corner-shape: superellipse(1.5))')
   assert(supportsAt >= 0)
-  const supportsBlock = componentStyles.slice(supportsAt)
+  const supportsBlock = collected.slice(supportsAt)
   const superAt = supportsBlock.indexOf('corner-shape: superellipse(1.5)')
   const roundAt = supportsBlock.indexOf('corner-shape: round')
   assert(superAt >= 0 && roundAt > superAt)
-  const superellipseTarget = ':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *)):not(:where([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))'
+  const superellipseTarget = 'html[data-dsh-ui="dsh-yuangao"] :is(.radix-themes, [data-dsh-theme]) :where(*):not(:where([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))'
   assert(supportsBlock.includes(superellipseTarget))
   assert(supportsBlock.includes(`${superellipseTarget}::before`))
   assert(supportsBlock.includes(`${superellipseTarget}::after`))
   const roundRule = supportsBlock.slice(superAt, roundAt)
   for (const selector of [
-    '.composer-actions .send', '.composer-actions .chat-stop', 'button.send', 'button.chat-stop',
-    '::-webkit-scrollbar-thumb',
-    '.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback',
-    '.models-credential-dot', '.preset-badge', '.cards-badge',
-    '.activity-dots i', '.panel-activity-dots i',
+    '.models-credential-dot',
+    '.activity-dots i',
     '.activity-shimmer:not(:where(', '.activity-shimmer i',
     '.history-commit-dot', '.image-preview-close',
     '.chat-step-status', '.chat-step-error-dot',
@@ -187,23 +198,32 @@ check('motion, forced-color and circle fallbacks are present', () => {
   assert(!roundRule.includes('.accent-swatch'))
 })
 check('menus are solid and no surface uses blur', () => {
-  assert(!/(?:linear|radial)-gradient|https?:\/\/|!important/.test(componentStyles))
-  assert(!/blur\(/.test(componentStyles))
-  assert(/menu-fill/.test(componentStyles))
+  assert(!/https?:\/\/|!important/.test(collected))
+  assert(!/blur\(/.test(collected))
+  /* 遮罩声明只允许 none（旧 .rt-BaseDialogOverlay 约定的延续）。 */
+  for (const m of collected.matchAll(/backdrop-filter:\s*([^;]+)/g)) assert.equal(m[1].trim(), 'none')
+  /* 唯一的渐变是骨架屏扫光（装饰动画）；菜单/对话框等表面不许渐变。 */
+  const gradients = collected.match(/[^{}]*\{[^}]*gradient[^}]*\}/g) ?? []
+  assert.equal(gradients.length, 1)
+  assert(gradients[0].includes('activity-skeleton__line'))
+  assert(/menu-fill/.test(collected))
   assert.equal(LIGHT_TOKENS['menu-blur'], 'none')
   assert.equal(DARK_TOKENS['menu-blur'], 'none')
-  const overlayBlock = componentStyles.split(/}\n/).find(block => /\.rt-BaseDialogOverlay/.test(block) && /backdrop-filter/.test(block))
-  assert(overlayBlock && /backdrop-filter:\s*none/.test(overlayBlock))
 })
 check('accent location selection and unchanged editor typography contract', () => {
-  assert(componentStyles.includes('background: var(--dsh-ui-selected)'))
-  assert(!/\.cm-content[^}]*?(?:font-size|font-family|line-height|max-width)/s.test(componentStyles))
-  const implicit = 'button.rt-BaseButton.rt-variant-solid:is(:not([data-accent-color]), [data-accent-color=""]):not(.send):not(.chat-stop)'
-  assert(componentStyles.includes(implicit + ':not(:disabled):not([data-disabled])'))
-  assert(componentStyles.includes(implicit + ':disabled'))
-  assert(componentStyles.includes(implicit + '[data-disabled]'))
-  assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not([data-accent-color])'))
-  assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not(.send)'))
+  assert(collected.includes('background: var(--dsh-ui-selected)'))
+  /* .cm-content 的排版只能来自作者设置（--paper-* 变量），不允许 sheet
+     写死字号/字体/行高/行宽。 */
+  for (const block of collected.matchAll(/\.cm-content\s*\{([^}]*)\}/g)) {
+    for (const m of block[1].matchAll(/(font-size|font-family|line-height|max-width)\s*:\s*([^;]+)/g)) {
+      assert(m[2].trim().startsWith('var(--paper-'), `.cm-content ${m[1]} must stay author-driven, got ${m[2].trim()}`)
+    }
+  }
+  /* 内部 Button 的 primary 是唯一实色主题填充；disabled 走 hover 底 + muted 文，
+     不再按 data-accent-color 分支。 */
+  assert(collected.includes(".dsh-button[data-variant='primary'] { background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand); }"))
+  assert(collected.includes('.dsh-button:disabled { background: var(--dsh-ui-hover); color: var(--dsh-ui-muted);'))
+  assert(!collected.includes('rt-BaseButton'))
 })
 /* 产品源码边界：shell、manuscript 与私有面板。官方插件包和 seats/proofread
    的 standalone 兜底声明文件不在此列 —— 它们给没有本编辑器主题作用域的宿主
@@ -238,15 +258,13 @@ function collectProductSources() {
 }
 
 check('no Radix palette variables remain in product sources', () => {
-  /* 6a-2：旧 Radix 调色板变量在产品源码里退役为 --dsh-ui-* 语义 token。
-     design-system/tokens.ts 的 RADIX_ALIASES 迁移桥是唯一例外 —— 它是
-     作用域内的定义侧，随 6a-3 的 legacy 层折叠一并删除。seats/proofread
-     的 standalone 兜底链不在扫描范围（见 PRODUCT_STYLE_DIRS）。 */
+  /* 6a-2：旧 Radix 调色板变量在产品源码里退役为 --dsh-ui-* 语义 token；
+     6a-3 已把 tokens.ts 里的颜色桥也删掉（字号/间距度量别名仍保留，因为
+     manuscript 挂件样式还在读）。seats/proofread 的 standalone 兜底链不在
+     扫描范围（见 PRODUCT_STYLE_DIRS）。 */
   const palette = /--(?:accent|gray|red|green|amber|blue|iris|indigo|violet|teal|cyan|purple|plum|pink|crimson|tomato|ruby|orange|yellow|lime|mint|grass|sky|jade|brown|bronze|gold|slate|mauve|olive|sage|sand|color)-/
-  const migrationBridge = 'packages/dsh-editor-shell/src/design-system/tokens.ts'
   for (const absolute of collectProductSources()) {
     const relative = absolute.slice(REPO_ROOT.length).split(sep).join('/')
-    if (relative === migrationBridge) continue
     const hit = readFileSync(absolute, 'utf8').match(palette)
     assert(!hit, `${relative} still references Radix variable ${hit?.[0]}`)
   }
@@ -278,11 +296,9 @@ check('no !important in product style sources beyond the listed exceptions', () 
      drift 扫描只管改动文件，这里做全量兜底。下面列出的既有出现是唯一例外，
      只允许减少，不允许新增 —— 新增文件或新增条目都会失败。
      注释里的 !important 不计算（与 drift 扫描同一套注释剔除逻辑）。 */
-  const exceptions = new Map([
-    ['packages/dsh-editor-shell/src/styles.ts', { max: 12, reason: 'legacy 层旧样式表的既有声明，随界面迁移逐条删除' }],
-    ['packages/dsh-manuscript/src/client/editor-core/styles.ts', { max: 24, reason: '未分层插件样式表，压过 editor-core 挂件的内联默认样式（ghost 提示、提案、冲突条、页脚内边距）' }],
-    ['packages/dsh-manuscript/src/client/overlay-styles.ts', { max: 3, reason: '未分层插件样式表，prefers-reduced-motion 覆盖 portal 出去的抽屉' }],
-  ])
+  /* 6a-3 之后 shell 与 manuscript 的既有例外已全部归零，异常表留空 ——
+     任何新增 !important 都会失败。 */
+  const exceptions = new Map()
   for (const absolute of collectProductSources()) {
     const relative = absolute.slice(REPO_ROOT.length).split(sep).join('/')
     const found = findings(readFileSync(absolute, 'utf8')).filter(f => f.rule === 'cascade-override').length

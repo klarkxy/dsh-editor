@@ -445,6 +445,14 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
               notice: 'manuscript-paper-notice',
               footer: 'manuscript-paper-footer',
             }}
+            slotStyle={{
+              /* 这些值与 .manuscript-paper-* 样式表一致；经 inline 兜底生效，
+                 样式表不再依赖 !important 压过 editor-core 的默认内联。 */
+              ghostTip: { padding: '4px 20px', fontSize: 'var(--font-size-1)', color: 'var(--s-muted)', opacity: 1 },
+              conflict: { padding: '6px 10px', borderTop: '1px solid var(--s-danger)', fontSize: 'var(--font-size-1)', color: 'var(--s-danger)', background: 'var(--s-bg)' },
+              notice: { padding: '4px 10px', fontSize: 'var(--font-size-1)', color: 'var(--s-muted)', background: 'var(--s-bg)' },
+              footer: { padding: '0 20px' },
+            }}
             draft={draft}
             completionPreference="pause"
             completionEnabled={capability.kind === 'ready' && capability.completion}

@@ -24,10 +24,18 @@ import { documentDirectory, exportDirectoryOf, isManuscriptChapterPath, normaliz
 import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.tsx'
-import { redesignedStyles } from '../styles.ts'
-import { componentStyles, officialResourceStyles, responsiveStyles } from '../design-system/styles.ts'
 import { tokenStyles } from '../design-system/tokens.ts'
 import { collectStyles, defineStyles } from '../design-system/layers.ts'
+/* 副作用注册：所属 sheet 自挂 dsh.* 层（design-system-spec §4），
+   这里显式引入保证注册先于首次注入，与组件引用关系无关。 */
+import './base.styles.ts'
+import './editor.styles.ts'
+import './chat.styles.ts'
+import './palette.styles.ts'
+import './dialogs.styles.ts'
+import './select.styles.ts'
+import './pinned-pane.styles.ts'
+import './ui/activity.styles.ts'
 import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { ShellErrorBoundary, useObservable } from './components.tsx'
@@ -935,12 +943,8 @@ export function ExtensionsDock(props: { rootProps: unknown }) {
    去重标记保证 effect 重跑不会重复插入。 */
 function injectShellStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
-  /* design-system-spec §4：旧样式整体进 legacy 层（保持原有先后次序），
+  /* design-system-spec §4：全部产品规则由所属 sheet 自注册进 dsh.* 层；
      token 定义进 dsh.tokens 层，层序声明由 collectStyles 统一输出。 */
-  defineStyles('legacy', 'shell-legacy', redesignedStyles)
-  defineStyles('legacy', 'yuangao-components', componentStyles)
-  defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
-  defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
   defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
   /* 插件样式不进层，永远压过分层规则；宿主需要压过插件 normal 声明的
      唯一例外放在 collectStyles() 之后、不进任何层（design-system-spec §4）。 */

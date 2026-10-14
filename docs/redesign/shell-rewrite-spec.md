@@ -6,7 +6,7 @@
 
 - **重写的对象**：所有渲染的 JSX 和样式都换成 `src/ui/` 组件，加上 `defineStyles('dsh.surfaces', …)` 注册的界面样式。新界面放在 `packages/dsh-editor-shell/src/app/<区域>/`。
 - **复用不重写的部分**：`root-workspaces.tsx`、`root-documents.ts`、`root-file-actions.ts`、`root-desktop.ts`、`capabilities.ts` 这几个 hook 只返回状态和动作，与界面形态无关，而且背后有大量已验证的流程（打开作品、重定位、新建、导入、保存门、快照）。它们原样复用，只在调用方式上做必要调整，返回值的语义不变。`useRootLayout` 承载的是旧的信息架构，由第 2 节的新布局模型替换。
-- **每完成一个子项**：删除被替换的旧组件；删除它在 `src/styles.ts`、`design-system/styles.ts`、`chat-message-styles.ts`、`history-styles.ts` 里的规则，包括影响它的 `!important`；更新 `e2e/helpers/selectors.mjs`；中英文案同步增删。新界面一律带 `data-testid` 钩子，命名为 `dsh-<区域>-<部件>`。
+- **每完成一个子项**：删除被替换的旧组件；删除它在所属 sheet（`app/**/*.styles.ts`、`client/*.styles.ts`、`src/ui/*.styles.ts`）里的旧规则，包括影响它的 `!important`；更新 `e2e/helpers/selectors.mjs`；中英文案同步增删。新界面一律带 `data-testid` 钩子，命名为 `dsh-<区域>-<部件>`。
 - **不变的接缝**：所有 DSH 接缝（`client.ts`、`root-registration.ts`、`official-layout.ts`、`official-surfaces.tsx`、`native-plugin-manager-seat.ts`、`ui-workspace.ts`、`official-shortcuts.ts`）的语义不变。旧的 `client/` 下仍在使用的接缝文件，在第 6 阶段统一移到 `app/host/`。
 - **插槽**：所有插槽的名字、参数和 `[data-dsh-plugin-surface]` 包裹方式不变。插槽内容放在哪里，按第 2 节和第 4 节的规定。
 - **提交与门禁**：每个子项单独提交，单独过门禁（见第 10 节）。

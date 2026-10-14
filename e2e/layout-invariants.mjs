@@ -944,7 +944,7 @@ try {
           }
           return best
         }
-        for (const el of card.querySelectorAll('.settings-link-button, .rt-variant-ghost, [data-variant="ghost"]')) {
+        for (const el of card.querySelectorAll('.settings-link-button, [data-variant="ghost"]')) {
           if (!(el instanceof HTMLElement) || el.offsetParent === null) continue
           const er = el.getBoundingClientRect()
           if (Math.abs(er.left - contentLeft) > 2) continue

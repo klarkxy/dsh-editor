@@ -3,8 +3,25 @@ import { createRoot } from 'react-dom/client'
 import { SettingsModelsSection } from '../src/client/settings-models.tsx'
 import { ModelPicker } from '../src/client/chat-model-picker.tsx'
 import { ShellTheme } from '../src/client/ui/theme-root.tsx'
-import { redesignedStyles } from '../src/styles.ts'
+import { tokenStyles } from '../src/design-system/tokens.ts'
+import { collectStyles, defineStyles } from '../src/design-system/layers.ts'
+import '../src/client/base.styles.ts'
+import '../src/client/editor.styles.ts'
+import '../src/client/chat.styles.ts'
+import '../src/client/palette.styles.ts'
+import '../src/client/dialogs.styles.ts'
+import '../src/client/select.styles.ts'
+import '../src/client/pinned-pane.styles.ts'
+import '../src/client/ui/activity.styles.ts'
+import '../src/app/shell/shell.styles.ts'
+import '../src/app/home/home.styles.ts'
+import '../src/app/assistant/assistant.styles.ts'
+import '../src/app/settings/settings.styles.ts'
+import '../src/app/files/files-rail.styles.ts'
 import type { ShellContext } from '../src/client/shared.ts'
+
+defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
+const shellCss = collectStyles()
 
 const listeners = new Map<string, Set<() => void>>()
 const profile = { displayName: 'Fixture provider', baseURL: 'https://example.invalid', apiKeyEnv: 'FIXTURE_API_KEY', models: [{ id: 'fixture-model' }] }
@@ -44,7 +61,7 @@ Object.assign(window, { shellRepairs: controls })
 function Fixture() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   return <ShellTheme appearance={theme}>
-    <style>{redesignedStyles}</style>
+    <style>{shellCss}</style>
     <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>Toggle fixture theme</button>
     <SettingsModelsSection ctx={ctx} writingScope={{} as never} showWritingRoutes={false} />
     <ModelPicker ctx={ctx} session={session as never} onConfigure={() => {}} />

@@ -116,12 +116,18 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 
 /* 启动按钮：稿纸右下角。 */
 /* bottom 让开稿纸页脚：--paper-footer-h 由 editor.tsx 量出（无文档时为 0）。 */
-.dsh-launcher { position: absolute; right: var(--dsh-ui-space-4); bottom: calc(var(--paper-footer-h, 0px) + var(--dsh-ui-space-3)); z-index: var(--dsh-ui-z-sticky); }
+.dsh-launcher { position: absolute; right: var(--dsh-ui-space-4); bottom: calc(var(--paper-footer-h, 0px) + var(--dsh-ui-space-3)); z-index: var(--dsh-ui-z-sticky); background: var(--dsh-ui-raised); border: 0; box-shadow: var(--dsh-ui-elevation-panel); }
 .dsh-launcher-note { position: absolute; right: var(--dsh-ui-space-4); bottom: calc(var(--paper-footer-h, 0px) + var(--dsh-ui-space-3)); z-index: var(--dsh-ui-z-sticky); max-width: 22rem; }
 
 /* 窄窗抽屉里的栏内容铺满。 */
 .dsh-drawer__body .dsh-pane { height: 100%; }
 .dsh-drawer .sidebar, .dsh-drawer .chat { height: 100%; min-height: 0; }
+
+/* 工具槽：插件 seat 容器。动画规则命中的元素本身带 data-dsh-plugin-surface，
+   必须保持原始选择器（不走 uiRule 的插件排除）——与下方 pluginBoundaryStyles
+   同一类边界例外，但它仍是分层规则，slot 内插件自有样式可覆盖它。 */
+:is(.shell, .dsh-drawer) .sidebar-tools { min-width: 0; gap: var(--dsh-ui-space-2); }
+:is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* 窄窗（≤760px）：快捷键提示先让位；作品菜单截断但保留真实命中区。 */
 @media (max-width: 760px) {

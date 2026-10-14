@@ -127,7 +127,6 @@
     "@radix-ui/react-toggle-group": "1.1.19",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@radix-ui/react-visually-hidden": "1.2.11",
-    "@radix-ui/themes": "^3.3.0",
     "cmdk": "^1.1.1",
     "docx": "^9.7.1",
     "echarts": "^6.1.0",

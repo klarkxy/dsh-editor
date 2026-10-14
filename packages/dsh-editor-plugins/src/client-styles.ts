@@ -35,8 +35,7 @@ ${surfaceTokenAliases}
   box-shadow: none;
   width: max-content;
 }
-.dsh-plugins-tabs button,
-.dsh-plugins-tabs .rt-BaseButton {
+.dsh-plugins-tabs button {
   min-height: var(--s-control-sm);
   height: var(--s-control-sm);
   min-width: 0;
@@ -49,8 +48,7 @@ ${surfaceTokenAliases}
   cursor: pointer;
   font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--s-font);
 }
-.dsh-plugins-tabs button[aria-selected="true"],
-.dsh-plugins-tabs .rt-BaseButton[aria-selected="true"] {
+.dsh-plugins-tabs button[aria-selected="true"] {
   background: var(--s-raised);
   color: var(--s-text);
   box-shadow: none;
@@ -88,24 +86,20 @@ ${surfaceTokenAliases}
   flex: none;
 }
 .dsh-plugins-primary,
-.dsh-plugins-ghost,
-.rt-BaseButton.rt-Button.dsh-plugins-primary,
-.rt-BaseButton.rt-Button.dsh-plugins-ghost {
+.dsh-plugins-ghost {
   min-height: var(--s-control);
   padding: 0 var(--space-3);
   border-radius: var(--s-radius-md);
   cursor: pointer;
   font: var(--font-weight-medium) var(--font-size-2)/1 var(--s-font);
 }
-.dsh-plugins-primary,
-.rt-BaseButton.rt-variant-solid.dsh-plugins-primary {
+.dsh-plugins-primary {
   border: 0;
   background: var(--s-brand);
   color: var(--s-on-brand);
   box-shadow: none;
 }
-.dsh-plugins-primary:hover:not(:disabled),
-.rt-BaseButton.rt-variant-solid.dsh-plugins-primary:hover:not(:disabled) { background: var(--s-brand-hover); }
+.dsh-plugins-primary:hover:not(:disabled) { background: var(--s-brand-hover); }
 .dsh-plugins-primary:disabled, .dsh-plugins-ghost:disabled {
   opacity: .55;
   cursor: not-allowed;

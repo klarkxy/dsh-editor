@@ -300,8 +300,8 @@ const paperSearchMatchTheme = EditorView.baseTheme({
   },
 })
 
-export const PAPER_SEARCH_INPUT_CLASS = 'rt-reset rt-TextFieldRoot rt-r-size-1'
-export const PAPER_SEARCH_BUTTON_CLASS = 'rt-reset rt-BaseButton rt-r-size-1 rt-variant-soft'
+export const PAPER_SEARCH_INPUT_CLASS = 'cm-paper-search-input'
+export const PAPER_SEARCH_BUTTON_CLASS = 'cm-paper-search-button'
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,

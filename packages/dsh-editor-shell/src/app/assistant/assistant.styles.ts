@@ -55,7 +55,7 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 /* 气泡正文与搭档散文同一档：chat-markdown 正文 = text-base / relaxed。
    气泡里的 Radix Text 自带 size 阶梯，显式覆盖正文行（detail/状态行
    保持 size-1 小号）。 */
-.chat-row.user > .dsh-partner__bubble > .rt-Text:first-child {
+.chat-row.user > .dsh-partner__bubble > .dsh-text:first-child {
   font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);
 }
 
@@ -85,8 +85,8 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .chat-process-stack .dsh-disclosure__summary { min-height: var(--dsh-ui-space-8); color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium); }
 .chat-process-stack .dsh-disclosure__content { display: flex; flex-direction: column; gap: 2px; }
 
-/* 空状态居中：历史列撑满视口高度，empty 用 margin auto 垂直居中。 */
-.chat-history .rt-ScrollAreaViewport > div { display: flex; flex-direction: column; min-height: 100%; }
+/* 空状态居中：历史列撑满视口高度，empty 用 margin auto 垂直居中
+   （.dsh-scroll-area > .dsh-flex 的 min-height/gap/padding 在 client/chat.styles.ts）。 */
 
 /* ── Composer：ui TextArea 去描边，焦点环留给整个 composer 表面 ── */
 .composer .dsh-textarea {
@@ -103,7 +103,7 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .composer-model { flex: 0 1 auto; min-width: 0; }
 .composer-model .select { min-width: 0; flex: 0 1 auto; display: flex; }
 .composer-model .select-trigger { min-width: 0; max-width: 100%; }
-.composer-model .select-trigger .rt-SelectTriggerInner {
+.composer-model .select-trigger > span:not(.dsh-select__icon) {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .composer-model .model-effort .select-trigger { flex: none; min-width: max-content; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }

@@ -8,7 +8,7 @@ defineStyles('dsh.components', 'dsh-progress', `
 }
 .dsh-progress__fill {
   height: 100%; border-radius: inherit; background: var(--dsh-ui-accent);
-  transition: width 200ms var(--dsh-ui-ease, ease);
+  transition: width 200ms var(--dsh-ui-ease-out);
 }
 .dsh-progress[data-state='indeterminate'] .dsh-progress__fill {
   width: 40%; animation: dsh-progress-slide 1.2s ease-in-out infinite;

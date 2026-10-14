@@ -16,9 +16,11 @@ import { radixFallbackTokens, surfaceTokenAliases } from 'dsh-editor-seats/token
  * class names that the plugin passes via `slotClassName`, and on the
  * `data-testid` attributes editor-core already emits.
  *
- * `!important` is used sparingly, only where editor-core's inline default
- * styles would otherwise win (the paper surface typography and ghost
- * opacity). Everything else relies on class-name specificity.
+ * Hosts that need values different from editor-core's inline defaults pass
+ * them through `slotStyle` (the manuscript overlay does for ghostTip /
+ * conflict / notice / footer padding); the proposal slot drops its inline
+ * defaults whenever a slot class is present so these rules own the card.
+ * No `!important` — everything relies on class-name specificity.
  *
  * Writing settings drive `--paper-font-size`, `--paper-line-height`,
  * `--paper-font-family`, `--paper-paragraph-spacing`, `--paper-max-width`.
@@ -151,8 +153,9 @@ ${surfaceTokenAliases}
   line-height: var(--paper-line-height);
   font-family: var(--paper-font-family);
 }
+/* CodeMirror's base theme already sets .cm-scroller { align-items: flex-start
+   !important }; only justify/font-family need declaring here. */
 .manuscript-paper-textarea .cm-editor .cm-scroller {
-  align-items: flex-start !important;
   justify-content: flex-start;
   font-family: inherit;
 }
@@ -222,22 +225,22 @@ ${surfaceTokenAliases}
 
 /* Ghost tip, proposal patch, conflict guard, status note. */
 .manuscript-paper-ghost-tip {
-  padding: 4px 20px !important;
-  font-size: var(--font-size-1) !important;
-  color: var(--s-muted) !important;
-  opacity: 1 !important;
+  padding: 4px 20px;
+  font-size: var(--font-size-1);
+  color: var(--s-muted);
+  opacity: 1;
   background: var(--s-bg);
 }
 .manuscript-paper-proposal {
   margin: 14px 0 8px 2em;
-  padding: 12px 14px 10px !important;
-  background: var(--s-raised) !important;
-  box-shadow: none !important;
-  border: 0.5px solid var(--s-line-strong) !important;
-  border-radius: var(--s-radius-xl) !important;
+  padding: 12px 14px 10px;
+  background: var(--s-raised);
+  box-shadow: none;
+  border: 0.5px solid var(--s-line-strong);
+  border-radius: var(--s-radius-xl);
   display: grid;
   gap: 8px;
-  color: var(--s-text) !important;
+  color: var(--s-text);
   font-family: var(--paper-serif);
 }
 .manuscript-paper-proposal > strong {
@@ -312,20 +315,20 @@ ${surfaceTokenAliases}
 }
 
 .manuscript-paper-conflict {
-  padding: 6px 10px !important;
-  border-top: 1px solid var(--s-danger) !important;
+  padding: 6px 10px;
+  border-top: 1px solid var(--s-danger);
   border-inline-start: 2px solid var(--s-danger);
-  font-size: var(--font-size-1) !important;
+  font-size: var(--font-size-1);
   font-weight: var(--font-weight-medium);
-  color: var(--s-danger) !important;
-  background: var(--s-bg) !important;
+  color: var(--s-danger);
+  background: var(--s-bg);
   font-family: var(--s-font);
 }
 .manuscript-paper-notice {
-  padding: 4px 10px !important;
-  font-size: var(--font-size-1) !important;
-  color: var(--s-muted) !important;
-  background: var(--s-bg) !important;
+  padding: 4px 10px;
+  font-size: var(--font-size-1);
+  color: var(--s-muted);
+  background: var(--s-bg);
   font-family: var(--s-font);
 }
 
@@ -335,7 +338,7 @@ ${surfaceTokenAliases}
   align-items: center;
   gap: var(--space-2);
   min-height: 36px;
-  padding: 0 20px !important;
+  padding: 0 20px;
   border-top: 0.5px solid var(--s-line);
   background: var(--s-bg);
   color: var(--s-muted);
@@ -410,6 +413,9 @@ ${surfaceTokenAliases}
 
 /* Reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .manuscript-paper * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+  .manuscript-paper * { scroll-behavior: auto; transition: none; animation: none; }
+  /* header 补全/改写键的 transition 声明在 (0,2,0)，通用选择器压不住，点名覆盖。 */
+  .manuscript-paper .manuscript-paper-header [data-testid$="-fim"],
+  .manuscript-paper .manuscript-paper-header [data-testid$="-rewrite"] { transition: none; }
 }
 `

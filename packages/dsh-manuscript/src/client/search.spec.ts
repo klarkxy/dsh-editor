@@ -47,9 +47,9 @@ describe('paper search shortcuts', () => {
     expect(searchShortcut({ key: 's', ctrlKey: true, shiftKey: false })).toBeNull()
   })
 
-  it('uses Radix Themes class names on the CodeMirror search controls', () => {
-    expect(PAPER_SEARCH_INPUT_CLASS).toBe('rt-reset rt-TextFieldRoot rt-r-size-1')
-    expect(PAPER_SEARCH_BUTTON_CLASS).toBe('rt-reset rt-BaseButton rt-r-size-1 rt-variant-soft')
+  it('uses neutral class names on the CodeMirror search controls', () => {
+    expect(PAPER_SEARCH_INPUT_CLASS).toBe('cm-paper-search-input')
+    expect(PAPER_SEARCH_BUTTON_CLASS).toBe('cm-paper-search-button')
   })
 
   it('binds Mod-f / Mod-h to the matching panel mode', () => {

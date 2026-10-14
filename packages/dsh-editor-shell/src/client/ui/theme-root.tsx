@@ -4,13 +4,11 @@ import { mountDesignScope } from '../../design-system/scope.ts'
 import { DesignSystemGallery } from '../../design-system/gallery.tsx'
 import { UiRoot } from '../../ui/root.tsx'
 
-export const SHELL_GRAY_COLOR = 'gray'
-
 /*
- * ShellTheme 输出旧 Radix <Theme> 的 DOM（.radix-themes + data-*）作为
- * 主题作用域：tokens.ts 的 TOKEN_SCOPE 与 legacy 层里尚未折叠的
- * `.radix-themes` 选择器仍以它为根，直到 6a-3 的层折叠完成。
- * 样式统一由 registerShellRoot 的 injectShellStyles 注入 head。
+ * ShellTheme 输出主题作用域根：`.radix-themes`（样式表的主题作用域类，
+ * tokens.ts 的 SCOPE 以此与 [data-dsh-theme] 为根；名字沿用自迁移前的
+ * Radix Themes 根，与依赖无关）+ light/dark。样式统一由
+ * registerShellRoot 的 injectShellStyles 注入 head。
  */
 export function ShellTheme(props: {
   appearance: ThemeValue
@@ -20,16 +18,7 @@ export function ShellTheme(props: {
   // It never keys/remounts the editor or changes the host's theme preference.
   useLayoutEffect(() => mountDesignScope(document.documentElement), [])
   return (
-    <div
-      className={`shell-theme radix-themes ${props.appearance === 'dark' ? 'dark' : 'light'}`}
-      data-is-root-theme="true"
-      data-accent-color="indigo"
-      data-gray-color={SHELL_GRAY_COLOR}
-      data-has-background="true"
-      data-panel-background="solid"
-      data-radius="medium"
-      data-scaling="100%"
-    >
+    <div className={`shell-theme radix-themes ${props.appearance === 'dark' ? 'dark' : 'light'}`}>
       <UiRoot theme={props.appearance === 'dark' ? 'dark' : 'light'}>
         {props.children}
         {/* gallery 在 UiRoot 内：其 Dialog/IconButton 依赖 portal 容器与 TooltipProvider。 */}

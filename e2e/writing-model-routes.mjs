@@ -19,9 +19,16 @@ export async function runModelRoutes({ editorModels = false } = {}) {
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ${editorModels ? 'EditorModelSettings' : 'WritingModelRoutes'} as Routes } from './packages/dsh-editor-shell/src/client/writing-model-routes.tsx'
-import { ShellTheme, radixThemesStyles } from './packages/dsh-editor-shell/src/client/ui/theme-root.tsx'
-import { redesignedStyles } from './packages/dsh-editor-shell/src/styles.ts'
+import { ShellTheme } from './packages/dsh-editor-shell/src/client/ui/theme-root.tsx'
+import { tokenStyles } from './packages/dsh-editor-shell/src/design-system/tokens.ts'
+import { collectStyles, defineStyles } from './packages/dsh-editor-shell/src/design-system/layers.ts'
+import './packages/dsh-editor-shell/src/client/base.styles.ts'
+import './packages/dsh-editor-shell/src/client/dialogs.styles.ts'
+import './packages/dsh-editor-shell/src/client/select.styles.ts'
+import './packages/dsh-editor-shell/src/app/settings/settings.styles.ts'
 import { S } from './helpers/selectors.mjs'
+defineStyles('dsh.tokens','fixture-tokens',tokenStyles)
+const shellCss=collectStyles()
 const catalog=[{provider:'fixture',model:'alpha',label:'Fixture · Alpha',efforts:[{id:'off',name:'Off'},{id:'high',name:'High'}]},{provider:'fixture',model:'beta',label:'Fixture · Beta',efforts:[{id:'off',name:'Off'},{id:'low',name:'Low'}]}]
 const clone=x=>structuredClone(x), calls=[], held=new Set(), pending=[]
 const records=Object.fromEntries(['a','b'].map(id=>[id,{completionModel:{provider:'fixture',model:id==='a'?'alpha':'beta',...(id==='a'?{reasoningEffort:'high'}:{})},chatModel:{provider:'',model:''},rewriteModel:{provider:'',model:''},authorPreferences:'保留作者偏好',fontSize:20}]))
@@ -38,7 +45,7 @@ const scopes=Object.fromEntries(['a','b'].map(id=>{
 }))
 let renderState
 window.routeFixture={calls,records,hold:id=>held.add(id),release:(id,error)=>{held.delete(id);const index=pending.findIndex(item=>item.id===id);if(index<0)throw Error('No pending '+id);pending.splice(index,1)[0].settle(error)},pending:()=>pending.map(x=>x.id),switch:id=>renderState(x=>({...x,id})),mount:mounted=>renderState(x=>({...x,mounted})),theme:appearance=>renderState(x=>({...x,appearance})),external:(id,patch)=>scopes[id].external(patch),capture:id=>scopes[id].capture(),readback:(id,old)=>scopes[id].readback(old)}
-function App(){const[state,setState]=useState({id:'a',mounted:true,appearance:'light'});renderState=setState;return <ShellTheme appearance={state.appearance}><style>{radixThemesStyles}{redesignedStyles}</style><main className="settings-content is-active" style={{padding:24,maxWidth:800}}>{state.mounted?<Routes scope={scopes[state.id].scope} catalog={catalog} writable={true}/>:null}</main></ShellTheme>}
+function App(){const[state,setState]=useState({id:'a',mounted:true,appearance:'light'});renderState=setState;return <ShellTheme appearance={state.appearance}><style>{shellCss}</style><main className="settings-content is-active" style={{padding:24,maxWidth:800}}>{state.mounted?<Routes scope={scopes[state.id].scope} catalog={catalog} writable={true}/>:null}</main></ShellTheme>}
 createRoot(document.getElementById('root')).render(<App/>)
 `
  const bundle = await build({ stdin: { contents: fixture, loader: 'tsx', resolveDir: root }, bundle: true, write: false,

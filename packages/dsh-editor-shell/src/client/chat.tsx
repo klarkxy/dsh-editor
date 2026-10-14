@@ -57,6 +57,7 @@ import {
   type ShellContext,
 } from './shared.ts'
 import { CrossIcon, SendIcon, StopIcon } from '../ui/icons.tsx'
+import './chat.styles.ts'
 import {
   bindOfficialConversation,
   conversationChatSource,

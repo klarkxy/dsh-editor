@@ -38,6 +38,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import type { ThemeValue } from '../model/theme.ts'
 import { resolveThemePortalContainer, resolveThemePortalFromAnchor, type CommandPaletteProps, type RegistryCommandItem } from '../model/command-palette.ts'
 import { t, useLocale } from '../i18n/index.ts'
+import './palette.styles.ts'
 import {
   ExportIcon,
   HistoryIcon,

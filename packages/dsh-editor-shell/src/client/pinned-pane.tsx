@@ -7,6 +7,7 @@ import { FileIcon, PinIcon } from './icons.tsx'
 import { Markdown } from './markdown.tsx'
 import { ActivitySkeleton } from './ui/index.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
+import './pinned-pane.styles.ts'
 
 /* 首个 ATX 标题的纯文本(去掉行内标记),用于与文档标题去重。 */
 function firstHeadingPlainText(body: string): string {

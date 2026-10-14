@@ -6,6 +6,43 @@ import { defineStyles } from '../../design-system/layers.ts'
    排）。390 宽时点线让位：第一行允许折行，信息落到自己的一行。
  */
 defineStyles('dsh.surfaces', 'dsh-home', `
+/* 首页顶栏（原 legacy .chrome 块）：占满首行、可拖拽、控件不下沉到拖拽区。 */
+.shell > .chrome {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--dsh-ui-space-3);
+  height: var(--topbar-h);
+  min-width: 0;
+  padding-left: var(--dsh-ui-space-3);
+  padding-right: 0;
+  border-bottom: 1px solid var(--dsh-ui-line);
+  background: var(--dsh-ui-bg);
+  -webkit-app-region: drag;
+}
+.shell > .chrome :is(button, summary, input, a, .select) { -webkit-app-region: no-drag; }
+.shell .chrome .shell-extensions-dock { -webkit-app-region: drag; }
+.shell .chrome-main, .shell .topbar-actions { display: flex; align-items: center; }
+.shell .chrome-main { flex: 1 1 auto; min-width: 0; height: 100%; gap: var(--dsh-ui-space-3); }
+.shell .topbar-actions { flex-shrink: 0; height: 100%; gap: var(--dsh-ui-space-2); padding-right: var(--dsh-ui-space-3); }
+.shell .topbar-actions:has(+ .window-controls) { padding-right: var(--dsh-ui-space-1); }
+.shell > .chrome .palette-trigger {
+  display: inline-flex; align-items: center; box-sizing: border-box;
+  height: var(--control-h); min-height: var(--control-h); margin: 0; gap: var(--dsh-ui-space-1);
+}
+.shell > .chrome .dsh-icon-button,
+.shell > .chrome .window-controls button {
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; width: var(--control-h); height: var(--control-h);
+  min-width: var(--control-h); min-height: var(--control-h);
+  padding: 0; margin: 0; line-height: 0;
+}
+.shell > .chrome .dsh-icon-button svg,
+.shell > .chrome .palette-trigger-icon,
+.shell > .chrome .palette-trigger-icon svg,
+.shell > .chrome .settings-trigger-icon,
+.shell > .chrome .settings-trigger-icon svg { display: block; flex-shrink: 0; }
+
 /* 首页自有 chrome：左侧品牌锁链（小标志），右侧命令/插件/设置。 */
 .brand-lockup { display: flex; align-items: center; gap: var(--dsh-ui-space-2); flex: none; }
 .brand-lockup__name { font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text); }
@@ -115,5 +152,11 @@ defineStyles('dsh.surfaces', 'dsh-home', `
   .dsh-home-row__line1 { flex-wrap: wrap; }
   .dsh-home-row__leader { display: none; }
   .dsh-home-row__info { flex-basis: 100%; max-width: 100%; }
+}
+
+/* 窄窗：首页顶栏快捷键提示让出宽度（工作台顶栏规则在 shell.styles.ts）。 */
+@media (max-width: 760px) {
+  .shell > .chrome .palette-trigger-kbd { display: none; }
+  .shell > .chrome .palette-trigger { padding-inline: var(--dsh-ui-space-2); min-width: var(--control-h); }
 }
 `)

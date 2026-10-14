@@ -201,7 +201,7 @@ export function EditorChrome({
         ref={proposalRef}
         className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
         aria-label="选段修改建议"
-        style={{ ...PROPOSAL_STYLE, ...sty('proposal') }}>
+        style={{ ...(cls('proposal') ? undefined : PROPOSAL_STYLE), ...sty('proposal') }}>
         <strong>
           选段修改建议
         </strong>

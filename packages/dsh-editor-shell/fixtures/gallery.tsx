@@ -1,10 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ShellTheme } from '../src/client/ui/theme-root.tsx'
-import { redesignedStyles } from '../src/styles.ts'
-import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
 import { tokenStyles } from '../src/design-system/tokens.ts'
 import { collectStyles, defineStyles } from '../src/design-system/layers.ts'
+import '../src/client/base.styles.ts'
+import '../src/client/editor.styles.ts'
+import '../src/client/chat.styles.ts'
+import '../src/client/palette.styles.ts'
+import '../src/client/dialogs.styles.ts'
+import '../src/client/select.styles.ts'
+import '../src/client/pinned-pane.styles.ts'
+import '../src/client/ui/activity.styles.ts'
+import '../src/app/shell/shell.styles.ts'
+import '../src/app/home/home.styles.ts'
+import '../src/app/assistant/assistant.styles.ts'
+import '../src/app/settings/settings.styles.ts'
+import '../src/app/files/files-rail.styles.ts'
 import {
   GalleryColumn,
   GalleryRow,
@@ -54,10 +65,6 @@ import { DshPortalContext } from '../src/ui/shared.ts'
 
 /* 与 design-system.tsx fixture 相同的注册次序；组件样式经各自 .styles.ts
    的 defineStyles 进入同一张 collectStyles() 输出。 */
-defineStyles('legacy', 'shell-legacy', redesignedStyles)
-defineStyles('legacy', 'yuangao-components', componentStyles)
-defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
-defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
 defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
 const shellCss = collectStyles()
 

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
    装饰元素一律 aria-hidden,reduced-motion 由全局媒体查询停掉循环。 */
 
 import type { ActivityCue } from '../../model/activity.ts'
+import './activity.styles.ts'
 
 /** 三点指示:pulse=呼吸明灭(忙碌/等待),typing=起伏跳动(回复/思考中)。 */
 export function ActivityDots(props: { variant?: 'pulse' | 'typing'; className?: string }) {

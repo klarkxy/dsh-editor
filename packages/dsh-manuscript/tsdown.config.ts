@@ -30,8 +30,6 @@ const browserAlwaysBundle = [
   '@lezer/markdown',
   '@lezer/highlight',
   'dsh-editor-seats/tokens',
-  '@radix-ui/themes',
-  '@radix-ui/themes/styles.css',
 ]
 
 export default defineConfig([

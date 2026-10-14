@@ -267,6 +267,10 @@ button.manuscript-toggle:focus-visible,
    so the editor-core block does not cover them. */
 @media (prefers-reduced-motion: reduce) {
   [data-testid="manuscript-overlay"],
-  [data-testid="manuscript-overlay"] * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+  [data-testid="manuscript-overlay"] * { scroll-behavior: auto; transition: none; animation: none; }
+  /* button.manuscript-toggle 与 .manuscript-panel-actions > button 的 transition
+     声明是 (0,1,1)，通用选择器压不住，点名覆盖。 */
+  [data-testid="manuscript-overlay"] button.manuscript-toggle,
+  [data-testid="manuscript-overlay"] .manuscript-panel-actions > button { transition: none; }
 }
 `

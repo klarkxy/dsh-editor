@@ -55,6 +55,7 @@ import {
   EditorOverflowMenu,
 } from './editor-menu.tsx'
 import type { EditorMenuAction, EditorMenuModel } from '../model/editor-menu.ts'
+import './editor.styles.ts'
 
 const PAPER_PROJECTION: EditorCorePaperProjection = {
   project: worldbookPaperProjection,

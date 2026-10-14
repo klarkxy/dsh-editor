@@ -39,9 +39,7 @@ export const S = Object.freeze({
   dialog: '[role="dialog"]',
   listbox: '[role="listbox"]',
   selectOpen: '.select.open',
-  dialogOverlay: '.rt-DialogOverlay',
-  baseDialogOverlay: '.rt-BaseDialogOverlay',
-  dropdownMenuContent: '.rt-DropdownMenuContent',
+  dialogOverlay: '.dsh-overlay',
   radixThemes: 'html[data-dsh-ui] .radix-themes',
   dshUiHtml: 'html[data-dsh-ui="dsh-yuangao"]',
 

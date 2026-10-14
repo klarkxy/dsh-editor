@@ -11,6 +11,7 @@ import { buildDocxBlob } from '../export-docx.ts'
 import { buildEpubBlob } from '../export-epub.ts'
 import { t } from '../i18n/index.ts'
 import { downloadBlob, downloadExport, previewExport } from '../model/export-dialog.ts'
+import './dialogs.styles.ts'
 import {
   defaultExportSelection,
   dirSelectionState,

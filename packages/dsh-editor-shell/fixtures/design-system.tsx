@@ -1,10 +1,21 @@
 import { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ShellTheme } from '../src/client/ui/theme-root.tsx'
-import { redesignedStyles } from '../src/styles.ts'
-import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
 import { tokenStyles } from '../src/design-system/tokens.ts'
 import { collectStyles, defineStyles } from '../src/design-system/layers.ts'
+import '../src/client/base.styles.ts'
+import '../src/client/editor.styles.ts'
+import '../src/client/chat.styles.ts'
+import '../src/client/palette.styles.ts'
+import '../src/client/dialogs.styles.ts'
+import '../src/client/select.styles.ts'
+import '../src/client/pinned-pane.styles.ts'
+import '../src/client/ui/activity.styles.ts'
+import '../src/app/shell/shell.styles.ts'
+import '../src/app/home/home.styles.ts'
+import '../src/app/assistant/assistant.styles.ts'
+import '../src/app/settings/settings.styles.ts'
+import '../src/app/files/files-rail.styles.ts'
 import { Markdown } from '../src/client/markdown.tsx'
 import {
   Badge,
@@ -24,12 +35,8 @@ import {
   TextArea,
 } from '../src/ui/index.ts'
 
-/* 与 client/root.tsx injectShellStyles 相同的注册次序；fixture 直接注入
-   collectStyles() 输出，层序声明也一并覆盖。 */
-defineStyles('legacy', 'shell-legacy', redesignedStyles)
-defineStyles('legacy', 'yuangao-components', componentStyles)
-defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
-defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
+/* 与 client/root.tsx injectShellStyles 相同的注册次序：各 sheet 自注册进
+   dsh.* 层，fixture 直接注入 collectStyles() 输出，层序声明也一并覆盖。 */
 defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
 const shellCss = collectStyles()
 

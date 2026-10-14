@@ -3,6 +3,7 @@ import { Flex, Heading, IconButton, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
+import './dialogs.styles.ts'
 
 export function ConfirmDialog(props: {
   id: string

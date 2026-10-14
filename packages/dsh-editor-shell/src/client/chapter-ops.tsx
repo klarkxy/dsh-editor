@@ -25,6 +25,7 @@ import { ActivityDots, Button, Dialog, Input } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
+import './dialogs.styles.ts'
 import {
   initialSplitAnchor,
   type ChapterOpsRequest,
