@@ -45,7 +45,8 @@ function typeValue(input: ReactElement<Record<string, unknown>>, value: string) 
   (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } })
 }
 function click(tree: ReactNode, label: string) {
-  const button = nodes(tree, node => node.props['aria-label'] === label)[0]!
+  /* 内部 IconButton 的可访问名走 label prop（渲染成 aria-label），两种都要认。 */
+  const button = nodes(tree, node => node.props['aria-label'] === label || node.props['label'] === label)[0]!
   ;(button.props.onClick as () => void)()
 }
 

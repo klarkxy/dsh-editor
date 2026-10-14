@@ -11,12 +11,12 @@ import { AuxRail, ReferencePanel, RightbarSlotSurface } from '../app/shell/aux-r
 import { pluginBoundaryStyles } from '../app/shell/shell.styles.ts'
 import { FilesRail } from '../app/files/files-rail.tsx'
 import { useSurface } from './plugin-surfaces.tsx'
-import { Button as DshButton, Notice } from '../ui/index.ts'
+import { Button as DshButton, IconButton as DshIconButton, Notice } from '../ui/index.ts'
 import { ChatIcon } from '../ui/icons.tsx'
 
 import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 import { OfficialSurfaceProvider, OfficialOverlays, type OfficialRootProps } from './official-surfaces.tsx'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope, SessionFace, SessionId } from '../dsh-compat.ts'
 import { normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
@@ -40,7 +40,7 @@ import { SettingsWorkspace } from '../app/settings/settings-page.tsx'
 import { isPluginsSection, normalizeSettingsSection, readStoredTab, type SettingsTab } from '../model/settings.ts'
 import { useTheme } from './theme.tsx'
 import { WindowControls } from './window-controls.tsx'
-import type { HostThemeSync } from '../model/theme.ts'
+import { writeHostThemePreference, type HostThemePreference, type HostThemeSync } from '../model/theme.ts'
 import type { EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
@@ -52,7 +52,6 @@ import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
 import { ActivityDots, Button as HostButton, Dialog as HostDialog, Input as HostInput, TextArea as HostTextArea, ShellUiProvider, radixThemesStyles, useChromeMotion } from './ui/index.ts'
-import { Button as ThemesButton, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
 import { windowBridge } from '../model/window-controls.ts'
 import { replaceOutcomeForIdentity, searchIdentity, type ReplaceOutcome, type SearchReplaceReport, type SearchScope } from '../model/search-panel.ts'
 import { PinnedPane } from './pinned-pane.tsx'
@@ -217,6 +216,20 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   useTransientSuccessNote(workbenchNote, expireWorkbenchNote)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
+  /* 命令面板的「跟随系统」写宿主 ui-theme 偏好；写完后宿主 echo 经
+     hostThemeSync 回到 useTheme,不需要本地再存一份 system 态。 */
+  const uiThemeScope = useMemo(() => ctx.configForms.get<{ preference: HostThemePreference }>('ui-theme'), [ctx])
+  const uiThemeSnapshot = useSyncExternalStore(
+    uiThemeScope.subscribe.bind(uiThemeScope),
+    uiThemeScope.getSnapshot.bind(uiThemeScope),
+    uiThemeScope.getSnapshot.bind(uiThemeScope),
+  )
+  const uiThemePreference = uiThemeSnapshot.status === 'ready' ? uiThemeSnapshot.value?.preference : undefined
+  const onPaletteThemeChange = useCallback((next: 'light' | 'dark' | 'system') => {
+    /* scope 未就绪时裸 set 会被静默丢弃，走带订阅重试的写入口。 */
+    if (next === 'system') void writeHostThemePreference(uiThemeScope, 'system').catch(() => { /* 宿主拒绝时快照回弹 */ })
+    else setTheme(next)
+  }, [uiThemeScope, setTheme])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -522,11 +535,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       if (fileSessionIdRef.current === requestSessionId) setExporting(false)
     }
   }
-  const confirmExport = (format: ExportFormat) => {
-    if (!exportChapters?.length) return
+  const confirmExport = (format: ExportFormat, paths: readonly string[]) => {
+    if (!exportChapters?.length || !paths.length) return
+    /* §8 预检：prepareExport 只收勾选的文档。 */
+    const chosen = exportChapters.filter((chapter) => paths.includes(chapter.path))
+    if (!chosen.length) return
     const title = currentWorkspace?.title || t('workspace.untitled')
     try {
-      const prepared = prepareExport(exportChapters, title, format)
+      const prepared = prepareExport(chosen, title, format)
       downloadExport(prepared.filename, prepared.content, prepared.format)
       setExportNote(t('note.exportGenerated', { filename: prepared.filename }))
       setExportChapters(null)
@@ -543,7 +559,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     hotkeysEnabled={false}
     onOpenChange={setPaletteOpen}
     theme={theme}
-    onThemeChange={setTheme}
+    systemTheme={uiThemePreference === 'system'}
+    onThemeChange={onPaletteThemeChange}
     onOpenWorkspace={() => { if (fileSession) { void openAnotherWorkspace() } else { void startWorkspaceFromPicker() } }}
     onNewProject={() => { void startNewProject() }}
     onOpenSettings={() => openSettings()}
@@ -858,31 +875,28 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           returnFocusRef={workspaceMenuTrigger}>
           {pathFallbackForm}
         </HostDialog>
-        {startupUpdate && !settingsPageOpen ? <Callout.Root className="update-toast" role="status">
-          <Flex align="center" gap="3">
-            <Text className="update-toast-text" size="2">
-              {t('about.toast', { version: startupUpdate.version })}
-            </Text>
-            <ThemesButton
-              size="1"
-              variant="solid"
-              type="button"
-              className="update-toast-action"
-              onClick={() => { setStartupUpdate(null); openSettings('about') }}>
-              {t('about.viewDetails')}
-            </ThemesButton>
-            <IconButton
-              size="1"
-              variant="ghost"
-              color="gray"
-              type="button"
-              className="icon-button update-toast-close"
-              aria-label={t('about.dismissToast')}
-              onClick={() => setStartupUpdate(null)}>
-              <CrossIcon size={14} />
-            </IconButton>
-          </Flex>
-        </Callout.Root> : null}
+        {startupUpdate && !settingsPageOpen ? <div className="update-toast" data-testid="update-toast">
+          <Notice
+            tone="info"
+            role="status"
+            action={<>
+              <DshButton
+                size="sm"
+                className="update-toast-action"
+                onClick={() => { setStartupUpdate(null); openSettings('about') }}>
+                {t('about.viewDetails')}
+              </DshButton>
+              <DshIconButton
+                size="sm"
+                label={t('about.dismissToast')}
+                className="update-toast-close"
+                onClick={() => setStartupUpdate(null)}>
+                <CrossIcon size={14} />
+              </DshIconButton>
+            </>}>
+            {t('about.toast', { version: startupUpdate.version })}
+          </Notice>
+        </div> : null}
       </main>
     </SettingsWorkspace>
       </ShellUiProvider>

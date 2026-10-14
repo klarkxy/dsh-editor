@@ -168,7 +168,21 @@ export const S = Object.freeze({
   paletteInput: '.palette-input',
   paletteInputField: 'input.palette-input',
   paletteItem: '.palette-item',
+  paletteList: '.palette-list',
+  paletteGroup: '.palette-group',
   cmdkRoot: '[cmdk-root]',
+
+  // ---- §8 global overlays --------------------------------------------------
+  dshOverlay: '.dsh-overlay',
+  fileDialog: '.dsh-dialog.file-dialog',
+  exportPrecheck: '[data-testid="dsh-export-precheck"]',
+  exportGroup: '[data-testid="dsh-export-group"]',
+  exportGroupDir: '.export-group__dir .dsh-checkbox',
+  exportDocs: '[data-testid="dsh-export-docs"]',
+  exportDoc: '[data-testid="dsh-export-docs"] .dsh-checkbox',
+  exportFormat: '.export-preview-dialog .dsh-segmented',
+  exportSubmit: '.export-preview-dialog .primary-action',
+  updateToast: '[data-testid="update-toast"]',
 
   // ---- settings page (§7 全页设置；旧的 .settings-dialog 随 C36 退役) ---------
   settingsDialog: '.dsh-settings-page',

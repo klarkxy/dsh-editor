@@ -22,6 +22,9 @@ export type RegistryCommandItem = {
   run(): void
 }
 
+/** 面板可下达的主题目标；'system' 表示跟随系统（写宿主的 ui-theme 偏好）。 */
+export type PaletteThemeTarget = ThemeValue | 'system'
+
 export type CommandPaletteProps = {
   open: boolean
   hotkeysEnabled?: boolean
@@ -30,7 +33,9 @@ export type CommandPaletteProps = {
      内部 hook 暴露给 props 之外的调用方;根组件把 setTheme 当作回调传进来
      即可)。 */
   theme: ThemeValue
-  onThemeChange(next: ThemeValue): void
+  /* 宿主的 ui-theme 偏好已是「跟随系统」时为真,用来隐藏「跟随系统」命令。 */
+  systemTheme?: boolean
+  onThemeChange(next: PaletteThemeTarget): void
   /* 动作闭包。palette 只关心"按下时调一下",不关心是不是同步。 */
   onOpenWorkspace(): void
   onNewProject(): void

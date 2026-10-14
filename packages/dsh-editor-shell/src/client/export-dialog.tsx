@@ -1,14 +1,23 @@
 import { Fragment, useRef, useState, type RefObject } from 'react';
 import { Callout, Card, Flex, Heading, ScrollArea, Text } from '@radix-ui/themes'
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
+import { Checkbox } from '../ui/checkbox.tsx'
+import { SegmentedControl } from '../ui/segmented-control.tsx'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
-import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
+import { sanitizeExportTitle, type ChapterExport, type ExportFormat } from '../export.ts'
 import { isAuthorFacingDocumentPath, isHiddenProjectPath, normalizeProjectDirectory, sortDocumentPaths } from '../project-files.ts'
 import { buildBook } from '../export-book.ts'
 import { buildDocxBlob } from '../export-docx.ts'
 import { buildEpubBlob } from '../export-epub.ts'
 import { t } from '../i18n/index.ts'
 import { downloadBlob, downloadExport, previewExport } from '../model/export-dialog.ts'
+import {
+  defaultExportSelection,
+  dirSelectionState,
+  groupExportDocuments,
+  setDirSelection,
+  setDocSelection,
+} from '../model/export-selection.ts'
 
 export async function collectDocuments(ctx: ShellContext, sessionId: string, directory: string): Promise<ChapterExport[]> {
   const root = normalizeProjectDirectory(directory)
@@ -38,6 +47,16 @@ export async function collectDocuments(ctx: ShellContext, sessionId: string, dir
 }
 
 
+type PackFormat = 'docx' | 'epub'
+type PrecheckFormat = ExportFormat | PackFormat
+
+const FORMAT_OPTIONS: { value: PrecheckFormat; label: string }[] = [
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'text', label: 'TXT' },
+  { value: 'docx', label: 'DOCX' },
+  { value: 'epub', label: 'EPUB' },
+]
+
 function ExportPreviewDialog(props: {
   open?: boolean
   chapters: readonly ChapterExport[]
@@ -45,33 +64,41 @@ function ExportPreviewDialog(props: {
   busy: boolean
   note?: string
   onCancel(): void
-  onExport(format: ExportFormat): void
+  onExport(format: ExportFormat, paths: readonly string[]): void
   returnFocusRef?: RefObject<HTMLElement | null>
 }) {
   const open = props.open ?? true
   const cancel = useRef<HTMLButtonElement | null>(null)
   const shown = useRef({ chapters: props.chapters, title: props.title })
   if (open) shown.current = { chapters: props.chapters, title: props.title }
-  const [packing, setPacking] = useState<'docx' | 'epub' | null>(null)
+  const [packing, setPacking] = useState<PackFormat | null>(null)
   const [packNote, setPackNote] = useState<string>()
-  const preview = shown.current.chapters.length ? previewExport(shown.current.chapters, shown.current.title) : { chapters: [], totalChars: 0 }
+  const [format, setFormat] = useState<PrecheckFormat>('markdown')
+  /* §8 预检：文档按目录分组,目录行是三态复选(部分选中 → indeterminate),
+     默认只勾「正文」组、没有正文组时全勾。 */
+  const groups = groupExportDocuments(shown.current.chapters.map((chapter) => chapter.path))
+  const groupsKey = groups.map((group) => `${group.dir}=${group.paths.join(',')}`).join('|')
+  const [selection, setSelection] = useState<{ key: string; paths: Set<string> }>({ key: '', paths: new Set() })
+  const selected = selection.key === groupsKey ? selection.paths : defaultExportSelection(groups)
+  const selectedChapters = shown.current.chapters.filter((chapter) => selected.has(chapter.path))
+  const preview = selectedChapters.length ? previewExport(selectedChapters, shown.current.title) : { chapters: [], totalChars: 0 }
   const empty = preview.chapters.filter((item) => item.empty)
   const busy = props.busy || packing !== null
   /* 章节收集是既有的不可取消异步操作:此时还没有章节,展示紧凑加载块,
      不渲染 0 摘要或可点的格式按钮;busy 结束后回到原预览/错误态。
      收集期间只用本次的 props.note:packNote 属于上一轮打包的完成/失败留言,
      弹窗常驻重用,不能盖住新一轮收集的 exportPreparing。 */
-  const collecting = props.busy && preview.chapters.length === 0
+  const collecting = props.busy && shown.current.chapters.length === 0
   /* 打包一开始就清空 packNote,此刻 props.note 往往还是上一轮的"已生成/已就绪"
      完成留言:在途期间用它顶替,圆点也只配给这条真正的在途文案。 */
   const packingNote = packing ? t('workspace.exporting') : undefined
   const note = collecting ? props.note : packingNote ?? packNote ?? props.note
-  const exportPacked = async (kind: 'docx' | 'epub') => {
-    if (busy || !preview.chapters.length) return
+  const exportPacked = async (kind: PackFormat) => {
+    if (busy || !selectedChapters.length) return
     setPacking(kind)
     setPackNote(undefined)
     try {
-      const book = buildBook(props.chapters, props.title)
+      const book = buildBook(selectedChapters, props.title)
       const blob = kind === 'docx' ? await buildDocxBlob(book) : await buildEpubBlob(book)
       const filename = `${sanitizeExportTitle(props.title)}.${kind}`
       downloadBlob(filename, blob)
@@ -82,7 +109,13 @@ function ExportPreviewDialog(props: {
       setPacking(null)
     }
   }
+  const submit = () => {
+    if (!selectedChapters.length) return
+    if (format === 'docx' || format === 'epub') void exportPacked(format)
+    else props.onExport(format, selectedChapters.map((chapter) => chapter.path))
+  }
   const noteFailed = Boolean(note && /无法|失败|为空|empty|failed|cannot/i.test(note))
+  const noneSelected = !selectedChapters.length
   return (
     <Dialog
       open={open}
@@ -90,6 +123,7 @@ function ExportPreviewDialog(props: {
       title={t('export.fullText')}
       className="file-dialog export-preview-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
+      testid="dsh-export-precheck"
       dismissible={!busy}
       initialFocusRef={cancel}
       returnFocusRef={props.returnFocusRef}>
@@ -144,54 +178,56 @@ function ExportPreviewDialog(props: {
         </Callout.Root> : null}
         {collecting ? null : <Card>
           <ScrollArea className="export-chapters" type="auto" scrollbars="vertical">
-            <Flex direction="column" gap="2" asChild>
-              <ol>
-                {preview.chapters.map((chapter, index) => <li key={chapter.path}>
-                  <Flex justify="between" gap="2">
-                    <Text size="2">
-                      {`${index + 1}. ${chapter.path}`}
-                    </Text>
-                    <Text size="1" color="gray">
-                      {`${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`}
-                    </Text>
-                  </Flex>
-                </li>)}
-              </ol>
+            <Flex direction="column" gap="2">
+              {groups.map((group) => (
+                <div key={group.dir || '.'} className="export-group" data-testid="dsh-export-group" data-dir={group.dir}>
+                  <Checkbox
+                    className="export-group__dir"
+                    checked={dirSelectionState(group, selected)}
+                    disabled={busy}
+                    label={group.dir || t('export.rootGroup')}
+                    onCheckedChange={(checked) => setSelection({ key: groupsKey, paths: setDirSelection(group, selected, checked === true) })} />
+                  <div className="export-group__docs" data-testid="dsh-export-docs">
+                    {group.paths.map((path) => {
+                      const chapter = shown.current.chapters.find((item) => item.path === path)
+                      return <Checkbox
+                        key={path}
+                        className="export-doc"
+                        checked={selected.has(path)}
+                        disabled={busy}
+                        label={group.dir ? path.slice(group.dir.length + 1) : path}
+                        description={chapter ? `${t('export.chapterMeta', { chars: chapter.text.length })}${chapter.text.trim() ? '' : t('export.chapterEmpty')}` : undefined}
+                        onCheckedChange={(checked) => setSelection({ key: groupsKey, paths: setDocSelection(selected, path, checked === true) })} />
+                    })}
+                  </div>
+                </div>
+              ))}
             </Flex>
           </ScrollArea>
         </Card>}
-        {collecting ? null : <Flex justify="end" gap="2" wrap="wrap">
-          <Button ref={cancel} disabled={busy} onClick={props.onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            className="primary-action"
-            disabled={busy || !preview.chapters.length}
-            onClick={() => props.onExport('markdown')}>
-            {t('export.markdown')}
-          </Button>
-          <Button
-            disabled={busy || !preview.chapters.length}
-            onClick={() => props.onExport('text')}>
-            {t('export.txt')}
-          </Button>
-          <Button
-            disabled={busy || !preview.chapters.length}
-            onClick={() => { void exportPacked('docx') }}>
-            {packing === 'docx' ? <Fragment>
-              <ActivityDots />
-              {t('workspace.exporting')}
-            </Fragment> : t('export.docx')}
-          </Button>
-          <Button
-            disabled={busy || !preview.chapters.length}
-            onClick={() => { void exportPacked('epub') }}>
-            {packing === 'epub' ? <Fragment>
-              <ActivityDots />
-              {t('workspace.exporting')}
-            </Fragment> : t('export.epub')}
-          </Button>
+        {collecting ? null : <Flex direction="column" gap="3">
+          <SegmentedControl
+            aria-label={t('export.format')}
+            value={format}
+            disabled={busy}
+            onValueChange={(next) => setFormat(next as PrecheckFormat)}
+            options={FORMAT_OPTIONS} />
+          <Flex justify="end" gap="2" wrap="wrap">
+            <Button ref={cancel} disabled={busy} onClick={props.onCancel}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              className="primary-action"
+              disabled={busy || noneSelected}
+              title={noneSelected ? t('export.noSelection') : undefined}
+              onClick={submit}>
+              {packing ? <Fragment>
+                <ActivityDots />
+                {t('workspace.exporting')}
+              </Fragment> : t('export.submit')}
+            </Button>
+          </Flex>
         </Flex>}
       </Flex>
     </Dialog>

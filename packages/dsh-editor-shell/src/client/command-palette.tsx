@@ -32,7 +32,8 @@ import {
   Content as RadixDialogContent,
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
-import { Button, Flex, Kbd } from '@radix-ui/themes'
+import { Button } from '@radix-ui/themes'
+import { Kbd } from '../ui/index.ts'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from '../model/theme.ts'
 import { resolveThemePortalContainer, resolveThemePortalFromAnchor, type CommandPaletteProps, type RegistryCommandItem } from '../model/command-palette.ts'
@@ -99,22 +100,23 @@ type CommandGroup = {
 }
 
 
-export function appendRegistryCommands(groups: CommandGroup[], extras: readonly RegistryCommandItem[]): CommandGroup[] {
-  if (!extras.length) return groups
-  return groups.map((group) => {
-    const added = extras
-      .filter((item) => item.group === group.id)
-      .map((item) => ({
-        id: item.id,
-        label: item.label,
-        hint: item.hint,
-        keywords: item.keywords,
-        icon: <RegistryCommandIcon />,
-        disabled: item.disabled,
-        run: () => item.run(),
-      }))
-    return added.length ? { ...group, items: [...group.items, ...added] } : group
-  });
+/* 插件注册的命令统一进「插件命令」分组（spec §8：写作→视图→作品→插件命令→
+   文件跳转）。注册项自带的 group 语义仍保留在注册表里，面板按来源分组。 */
+export function registryCommandGroup(extras: readonly RegistryCommandItem[]): CommandGroup | null {
+  if (!extras.length) return null
+  return {
+    id: 'plugins',
+    heading: t('command.pluginsGroup'),
+    items: extras.map((item) => ({
+      id: item.id,
+      label: item.label,
+      hint: item.hint,
+      keywords: item.keywords,
+      icon: <RegistryCommandIcon />,
+      disabled: item.disabled,
+      run: () => item.run(),
+    })),
+  }
 }
 
 
@@ -157,7 +159,25 @@ export function CommandPalette(props: CommandPaletteProps) {
     return () => globalThis.removeEventListener('keydown', onKey)
   }, [props.open, props.onOpenChange, props.hotkeysEnabled])
 
-  const themeNext: ThemeValue = props.theme === 'light' ? 'dark' : 'light'
+  const themeNow = props.systemTheme
+    ? t('command.themeNowSystem')
+    : props.theme === 'light' ? t('command.themeNowLight') : t('command.themeNowDark')
+  /* 主题命令每种模式一条（spec §8），当前生效的那条不出现。 */
+  const themeCommands: CommandAction[] = ([
+    { id: 'cmd.theme-light', target: 'light' as const, label: t('command.themeLight'), keywords: ['theme', 'light', t('command.theme'), t('command.switch')] },
+    { id: 'cmd.theme-dark', target: 'dark' as const, label: t('command.themeDark'), keywords: ['theme', 'dark', t('command.theme'), t('command.switch')] },
+    { id: 'cmd.theme-system', target: 'system' as const, label: t('command.themeSystem'), keywords: ['theme', 'system', t('command.theme'), t('command.followSystem')] },
+  ]).filter((entry) => entry.target === 'system'
+    ? !props.systemTheme
+    : props.systemTheme ? true : entry.target !== props.theme)
+    .map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      hint: themeNow,
+      keywords: entry.keywords,
+      icon: <ThemeInkIcon />,
+      run: () => props.onThemeChange(entry.target),
+    }))
   const workspaceGroup: CommandGroup = {
     id: 'workspace',
     heading: t('command.workspace'),
@@ -254,14 +274,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     id: 'view',
     heading: t('command.view'),
     items: [
-      {
-        id: 'cmd.toggle-theme',
-        label: themeNext === 'dark' ? t('command.themeDark') : t('command.themeLight'),
-        hint: props.theme === 'light' ? t('command.themeNowLight') : t('command.themeNowDark'),
-        keywords: ['theme', t('command.theme'), t('command.switch'), 'dark', 'light'],
-        icon: <ThemeInkIcon />,
-        run: () => props.onThemeChange(themeNext),
-      },
+      ...themeCommands,
       {
         id: 'cmd.toggle-focus',
         label: props.focusMode ? t('command.exitFocus') : t('command.enterFocus'),
@@ -331,12 +344,15 @@ export function CommandPalette(props: CommandPaletteProps) {
       }
     : null
 
-  const groups: CommandGroup[] = appendRegistryCommands(
-    fileGroup
-      ? [workspaceGroup, writingGroup, viewGroup, fileGroup]
-      : [workspaceGroup, writingGroup, viewGroup],
-    props.registryCommands ?? [],
-  )
+  /* spec §8 顺序：当前文档（写作）→ 视图 → 作品 → 插件命令 → 文件跳转。 */
+  const pluginGroup = registryCommandGroup(props.registryCommands ?? [])
+  const groups: CommandGroup[] = [
+    writingGroup,
+    viewGroup,
+    workspaceGroup,
+    ...(pluginGroup ? [pluginGroup] : []),
+    ...(fileGroup ? [fileGroup] : []),
+  ]
 
   /* 关闭时彻底卸载,避免列表里残留旧文件路径。每次重新打开时 reset 到 ''。 */
   const [search, setSearch] = useState('')
@@ -371,7 +387,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               一条视觉隐藏的描述(复用现有本地化串),消除 a11y 警告。 */}
           <RadixDialogDescription style={visuallyHidden}>{t('command.searchTitle')}</RadixDialogDescription>
           <Command className="palette-command" label={t('command.searchCommands')} loop shouldFilter>
-            <Flex className="palette-search" align="center" gap="3">
+            <div className="palette-search">
               <span className="palette-search-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="6.5" />
@@ -386,8 +402,8 @@ export function CommandPalette(props: CommandPaletteProps) {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <Kbd className="palette-kbd" aria-hidden="true">ESC</Kbd>
-            </Flex>
+              <Kbd className="palette-kbd">ESC</Kbd>
+            </div>
             <Command.List className="palette-list">
               <Command.Empty className="palette-empty">{t('command.empty')}</Command.Empty>
               {groups.map((group) => (
@@ -416,11 +432,11 @@ export function CommandPalette(props: CommandPaletteProps) {
                 </Command.Group>
               ))}
             </Command.List>
-            <Flex className="palette-footer" align="center" gap="3" aria-hidden="true">
+            <div className="palette-footer" aria-hidden="true">
               <span><Kbd className="palette-kbd">↑</Kbd><Kbd className="palette-kbd">↓</Kbd></span>
               <span><Kbd className="palette-kbd">↵</Kbd></span>
               <span><Kbd className="palette-kbd">ESC</Kbd></span>
-            </Flex>
+            </div>
           </Command>
         </RadixDialogContent>
       </RadixDialogPortal> : null}

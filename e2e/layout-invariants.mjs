@@ -118,11 +118,18 @@ function makePng() {
 }
 
 function seedWorkspace() {
+  /* 多写几章：命令面板的「跳转到文档」要有足够长的列表才能验证
+     末项不被裁切（§8 lastItemClipped），导出预检也有分组可看。 */
+  const chapters = ['第一章', '第二章', '第三章', '第九章', '第十章', '第十一章', '第十二章', '第二十章']
   return Promise.all([
     mkdir(resolve(targetWorkspace, '正文'), { recursive: true }),
     mkdir(resolve(targetWorkspace, '资料'), { recursive: true }),
+    mkdir(resolve(targetWorkspace, '番外'), { recursive: true }),
     writeFile(resolve(targetWorkspace, '正文', '第一章.md'),
       '# 第一章 青石镇的雨\n\n' + '雨落了一整夜。\n'.repeat(200), 'utf8'),
+    ...chapters.slice(1).map((name) => writeFile(resolve(targetWorkspace, '正文', `${name}.md`),
+      `# ${name}\n\n正文内容。\n`, 'utf8')),
+    writeFile(resolve(targetWorkspace, '番外', '番外一.md'), '# 番外一\n\n番外内容。\n', 'utf8'),
     writeFile(resolve(targetWorkspace, '资料', 'map.png'), makePng()),
     writeFile(resolve(targetWorkspace, '大纲.md'), '# 全书大纲\n\n- 第一章：雨日归家\n', 'utf8'),
   ])
@@ -811,6 +818,73 @@ try {
       failures.push(`drawer/${width}: partner drawer did not open`)
     }
   }
+
+  // ---- §8 command palette: long list scrolled to the end must not clip the
+  // last item, at 1440 and 390. Opens via the real topbar trigger. ----
+  const paletteClipProbe = async (label) => {
+    await page.locator(S.paletteTriggerButton).first().click()
+    await page.locator(S.paletteContent).waitFor({ state: 'visible', timeout: 8_000 })
+    await page.waitForTimeout(400)
+    const probe = await page.evaluate(() => {
+      const list = document.querySelector('.palette-list')
+      const items = [...document.querySelectorAll('.palette-item')]
+      if (!list || !items.length) return { items: items.length }
+      list.scrollTop = list.scrollHeight
+      const lr = list.getBoundingClientRect()
+      const last = items[items.length - 1].getBoundingClientRect()
+      return {
+        items: items.length,
+        scrollable: list.scrollHeight > list.clientHeight + 1,
+        lastBottom: +last.bottom.toFixed(1),
+        listBottom: +lr.bottom.toFixed(1),
+        lastItemClipped: last.bottom > lr.bottom + 1,
+      }
+    })
+    report.palette = { ...(report.palette ?? {}), [label]: probe }
+    if (!probe.items) failures.push(`palette/${label}: no palette items rendered`)
+    else {
+      if (probe.scrollable !== true) failures.push(`palette/${label}: list not scrollable — last-item clip check needs a long list`)
+      if (probe.lastItemClipped) failures.push(`palette/${label}: lastItemClipped=true (item bottom ${probe.lastBottom} > list bottom ${probe.listBottom}, ${probe.items} items)`)
+    }
+    await page.keyboard.press('Escape')
+    await page.locator(S.paletteContent).waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(600)
+  await paletteClipProbe('1440')
+  /* 主题命令:当前模式的条目不出现,其余两条在「视图」组里。 */
+  {
+    await page.locator(S.paletteTriggerButton).first().click()
+    await page.locator(S.paletteContent).waitFor({ state: 'visible', timeout: 8_000 })
+    const themeItems = await page.evaluate(() =>
+      [...document.querySelectorAll('.palette-item')]
+        .map((el) => el.textContent?.trim() ?? '')
+        .filter((text) => /浅色|深色|系统/.test(text)))
+    if (themeItems.length !== 2) failures.push(`palette/theme: expected 2 theme commands (current mode hidden), got ${JSON.stringify(themeItems)}`)
+    await page.keyboard.press('Escape')
+    await page.locator(S.paletteContent).waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
+  }
+  // ---- §8 dialog focus return: the migrated export precheck dialog must
+  // Escape-close and return focus to the 作品菜单 invoker. ----
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '导出稿件' }).click()
+  const exportDialog = page.getByRole('dialog', { name: '导出稿件' })
+  await exportDialog.waitFor({ state: 'visible', timeout: 15_000 })
+  /* 收集完成后预检才出现勾选与格式控件;busy 期间 Escape 是屏蔽的。 */
+  await exportDialog.locator('.dsh-segmented').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.keyboard.press('Escape')
+  await exportDialog.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
+  if (await exportDialog.isVisible().catch(() => false)) failures.push('export-dialog: Escape did not close the precheck')
+  const exportFocus = await page.evaluate(() => {
+    const el = document.activeElement
+    return el ? `${el.getAttribute('aria-label') ?? ''}|${el.textContent?.trim() ?? ''}` : 'none'
+  })
+  if (!exportFocus.includes('作品菜单')) failures.push(`export-dialog: focus did not return to 作品菜单 (active: ${exportFocus.slice(0, 80)})`)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(800)
+  await paletteClipProbe('390')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(600)
 
   // ---- Settings full page: no horizontal overflow at the 4 widths, and
   // Escape closes the page returning focus to the invoker. ----

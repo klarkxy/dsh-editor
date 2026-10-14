@@ -235,10 +235,28 @@ export const componentStyles = [
   withThemeSelf(['.rt-BaseDialogOverlay', '.rt-BaseDialogOverlay::before', '.palette-overlay', '.file-dialog-overlay'], 'backdrop-filter: none; -webkit-backdrop-filter: none;'),
   withThemeSelf(['.rt-BaseDialogOverlay::before', '.palette-overlay', '.file-dialog-overlay'], 'background: var(--dsh-ui-scrim);'),
   r(['.rt-DialogContent', '.rt-AlertDialogContent', '.file-dialog'], 'background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-prominent);'),
+  /* 图片预览保持透明底——对话框 chrome 已由 .dsh-dialog 提供,这里把
+     .file-dialog 的实底盖掉,阴影仍落在 <img> 自身。 */
+  r(['.file-dialog.image-preview-dialog'], 'background: transparent; box-shadow: none; width: max-content;'),
+  r(['.image-preview-dialog .dsh-dialog__body'], 'padding: 0; overflow: visible;'),
+  /* 更新提示 toast：Notice 承载语义,角落浮层自带 panel 投影。 */
+  r(['.update-toast .dsh-notice'], 'box-shadow: var(--dsh-ui-elevation-panel);'),
+  r(['.update-toast .dsh-notice__action'], 'display: inline-flex; align-items: center; gap: var(--dsh-ui-space-2);'),
   r(['.palette-content'], 'border: 0; border-radius: var(--dsh-ui-radius-panel); background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-prominent);'),
-  r(['.palette-item', '[cmdk-item]'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['.palette-search'], 'border-bottom: 0.5px solid var(--dsh-ui-line);'),
+  r(['.palette-search:focus-within'], 'border-bottom-color: var(--dsh-ui-accent);'),
+  r(['.palette-search-icon'], 'color: var(--dsh-ui-muted);'),
+  r(['.palette-input', 'input[cmdk-input]'], 'color: var(--dsh-ui-text);'),
+  r(['.palette-input::placeholder', 'input[cmdk-input]::placeholder'], 'color: var(--dsh-ui-muted);'),
+  r(['.palette-empty'], 'color: var(--dsh-ui-muted);'),
+  r(['.palette-group + .palette-group'], `border-top: ${hairline};`),
+  r(['.palette-group [cmdk-group-heading]', '[cmdk-group-heading]'], 'font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-medium); letter-spacing: .08em; color: var(--dsh-ui-faint);'),
+  r(['.palette-item', '[cmdk-item]'], 'border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-muted);'),
   r(['.palette-item[data-selected="true"]', '[cmdk-item][data-selected="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.palette-item-icon', '.palette-item[data-selected="true"] .palette-item-icon'], 'background: transparent; color: var(--dsh-ui-muted);'),
+  r(['.palette-item[data-selected="true"] .palette-item-icon'], 'color: var(--dsh-ui-accent);'),
+  r(['.palette-item-label'], 'color: var(--dsh-ui-text);'),
+  r(['.palette-item-hint'], 'color: var(--dsh-ui-muted);'),
   r(['.palette-footer'], `background: var(--dsh-ui-surface); border-top: ${hairline}; color: var(--dsh-ui-muted);`),
   // The palette field is the whole point of the surface, so it is sized like a
   // control rather than like a bare text line.

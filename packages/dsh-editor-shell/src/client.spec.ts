@@ -47,7 +47,7 @@ import {
 import { isObservableSource } from './model/components.ts'
 import { firstOpenDocumentPath, isVisibleTextPath } from './project-files.ts'
 import { partialApplyDetails } from './client/shared.ts'
-import { appendRegistryCommands } from './client/command-palette.tsx'
+import { registryCommandGroup } from './client/command-palette.tsx'
 import { createCommandRegistry, matchRegistryShortcut, registryPaletteItems, type ShellToolSeatContext } from './seats.ts'
 
 
@@ -383,14 +383,12 @@ describe('shell manuscript RPC safety', () => {
       ProposalCard: () => null,
     } satisfies ShellToolSeatContext
     const items = registryPaletteItems(registry.list(), 'zh', context, true)
-    const groups = appendRegistryCommands([
-      { id: 'workspace', heading: '作品', items: [] },
-      { id: 'writing', heading: '写作', items: [{ id: 'cmd.search', label: '全文搜索', icon: null, run: () => {} }] },
-      { id: 'view', heading: '视图', items: [] },
-    ], items)
-    expect(groups.find((group) => group.id === 'writing')?.items.map((item) => item.id)).toEqual(['cmd.search', 'proofread-document'])
-    expect(groups.find((group) => group.id === 'writing')?.items.at(-1)?.label).toBe('校对当前文档')
-    groups.find((group) => group.id === 'writing')?.items.at(-1)?.run()
+    /* §8：插件命令进独立分组,不再按注册 group 并入写作组。 */
+    const group = registryCommandGroup(items)
+    expect(group?.id).toBe('plugins')
+    expect(group?.items.map((item) => item.id)).toEqual(['proofread-document'])
+    expect(group?.items.at(-1)?.label).toBe('校对当前文档')
+    group?.items.at(-1)?.run()
     expect(run).toHaveBeenCalledWith(context)
     expect(context.revealSidebar).toHaveBeenCalled()
   })
