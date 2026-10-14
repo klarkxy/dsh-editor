@@ -27,8 +27,14 @@ defineStyles('dsh.surfaces', 'dsh-home', `
 .shell .topbar-actions { flex-shrink: 0; height: 100%; gap: var(--dsh-ui-space-2); padding-right: var(--dsh-ui-space-3); }
 .shell .topbar-actions:has(+ .window-controls) { padding-right: var(--dsh-ui-space-1); }
 .shell > .chrome .palette-trigger {
-  display: inline-flex; align-items: center; box-sizing: border-box;
+  display: inline-flex; align-items: center; box-sizing: border-box; flex: none;
   height: var(--control-h); min-height: var(--control-h); margin: 0; gap: var(--dsh-ui-space-1);
+  white-space: nowrap;
+}
+/* Button 把 children 包进 .dsh-button__label（内联 span）；图标在 chrome 里
+   是 block，会把标签/键位挤到第二行——让 label 容器成行内 flex。 */
+.shell > .chrome .palette-trigger .dsh-button__label {
+  display: inline-flex; align-items: center; gap: var(--dsh-ui-space-1);
 }
 .shell > .chrome .dsh-icon-button,
 .shell > .chrome .window-controls button {

@@ -300,9 +300,13 @@ ${surfaceTokenAliases}
 .dsh-plugins-dots i:nth-child(2) { animation-delay: .2s; }
 .dsh-plugins-dots i:nth-child(3) { animation-delay: .4s; }
 .dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: dsh-plugins-activity-pulse 1.4s ease infinite; }
+/* 减弱动效：html 前缀把特异性抬到目标规则之上（同 sheet 内后来的同权规则
+   也胜出），不用 !important。 */
 @media (prefers-reduced-motion: reduce) {
-  .dsh-plugins, .dsh-plugins *, .dsh-plugins *::before, .dsh-plugins *::after {
-    animation: none !important; transition: none !important;
+  html .dsh-plugins .dsh-plugins-switch-thumb,
+  html .dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb,
+  html .dsh-plugins-dots i {
+    animation: none; transition: none;
   }
 }
 `

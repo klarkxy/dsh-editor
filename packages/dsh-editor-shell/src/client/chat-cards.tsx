@@ -32,6 +32,7 @@ import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { Disclosure } from '../ui/disclosure.tsx'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
+import { displayTreeFileName } from '../project-files.ts'
 import type { ShellContext } from './shared.ts'
 
 import {
@@ -440,8 +441,8 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
           <ul>
             {receipt.sources.map((item) => <li key={item.path}>
               <Text size="1" color="gray">
-                <code>
-                  {item.path}
+                <code title={item.path}>
+                  {displayTreeFileName(item.path)}
                 </code>
                 {` · ${item.status === 'included'
                   ? item.includedChars > 0 ? t('chat.includedChars', { count: item.includedChars }) : item.truncated ? t('chat.notIncludedCap') : t('chat.emptyFile')

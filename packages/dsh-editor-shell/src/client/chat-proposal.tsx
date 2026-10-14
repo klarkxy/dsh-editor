@@ -18,6 +18,7 @@ import {
 } from './shared.ts'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { Disclosure } from '../ui/disclosure.tsx'
+import { displayTreeFileName } from '../project-files.ts'
 import {
   buildExpectedVersions,
   proposalBasisItems,
@@ -250,7 +251,8 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   const settled = state === 'applied' || state === 'ignored' || state === 'deferred' || state === 'undone'
   const headerPathLabel = props.proposal.kind === 'renames'
     ? t('chat.fileCount', { count: props.proposal.renames.length })
-    : props.proposal.path
+    : displayTreeFileName(props.proposal.path)
+  const headerPathTitle = props.proposal.kind === 'renames' ? undefined : props.proposal.path
 
   /* 类型徽标:大纲/下的 create/edit 是作品大纲提案;其它 create 标明新文件;章纲与章末小结按类型标明。 */
   const kindBadge = props.proposal.kind === 'chapter_plan' ? t('chat.chapterPlanBadge')
@@ -281,7 +283,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
             className="proposal-path-line"
             title={item.path}
             aria-label={t('chat.proposalTargetPath', { path: item.path })}>
-            {item.path}
+            {displayTreeFileName(item.path)}
           </Text>)}
         </section>
       </Box>
@@ -308,7 +310,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
                 title={item.path}
                 aria-label={proposalBasisLine(item)}>
                 {label ? `${label} · ` : null}
-                {item.path}
+                {displayTreeFileName(item.path)}
               </Text>
             );
           })}
@@ -442,8 +444,8 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
               <Text size="1" color="gray">
                 {t('chat.toNewFile')}
               </Text>
-              <code>
-                {props.proposal.newPath}
+              <code title={props.proposal.newPath}>
+                {displayTreeFileName(props.proposal.newPath)}
               </code>
               {splitPrepared
                 ? <Text size="1" color="gray">
@@ -461,12 +463,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         <Box asChild>
           <section className="proposal-merge-summary">
             <Text as="p" size="2">
-              <code>
-                {props.proposal.sourcePath}
+              <code title={props.proposal.sourcePath}>
+                {displayTreeFileName(props.proposal.sourcePath)}
               </code>
               {' → '}
-              <code>
-                {props.proposal.path}
+              <code title={props.proposal.path}>
+                {displayTreeFileName(props.proposal.path)}
               </code>
             </Text>
             {mergePrepared
@@ -488,12 +490,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           <ul>
             {props.proposal.renames.map((rename) => <li key={`${rename.from}->${rename.to}`}>
               <Text size="1" color="gray">
-                <code>
-                  {rename.from}
+                <code title={rename.from}>
+                  {displayTreeFileName(rename.from)}
                 </code>
                 {' → '}
-                <code>
-                  {rename.to}
+                <code title={rename.to}>
+                  {displayTreeFileName(rename.to)}
                 </code>
               </Text>
             </li>)}
@@ -556,7 +558,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     {kindBadge ? <Badge className="proposal-kind" tone="neutral">
       {kindBadge}
     </Badge> : null}
-    <Text size="1" color="gray" className="proposal-path">
+    <Text size="1" color="gray" className="proposal-path" title={headerPathTitle}>
       {headerPathLabel}
     </Text>
   </Flex>

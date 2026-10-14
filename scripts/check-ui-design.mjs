@@ -239,7 +239,15 @@ const PRODUCT_STYLE_DIRS = [
   'packages/dsh-editor-novel-kernel/src',
 ]
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
-function collectProductSources() {
+/* !important 的扫描范围比 PRODUCT_STYLE_DIRS 宽：官方插件与 proofread 的
+   standalone 样式允许调色板字面量回退（见上面的边界注释），但 !important
+   对它们同样是绝对禁令。 */
+const IMPORTANT_STYLE_DIRS = [
+  ...PRODUCT_STYLE_DIRS,
+  'packages/dsh-editor-plugins/src',
+  'packages/dsh-proofread/src',
+]
+function collectProductSources(dirs = PRODUCT_STYLE_DIRS) {
   const sources = []
   const walk = dir => {
     for (const entry of readdirSync(dir)) {
@@ -253,7 +261,7 @@ function collectProductSources() {
       sources.push(absolute)
     }
   }
-  for (const dir of PRODUCT_STYLE_DIRS) walk(join(REPO_ROOT, dir))
+  for (const dir of dirs) walk(join(REPO_ROOT, dir))
   return sources
 }
 
@@ -299,7 +307,7 @@ check('no !important in product style sources beyond the listed exceptions', () 
   /* 6a-3 之后 shell 与 manuscript 的既有例外已全部归零，异常表留空 ——
      任何新增 !important 都会失败。 */
   const exceptions = new Map()
-  for (const absolute of collectProductSources()) {
+  for (const absolute of collectProductSources(IMPORTANT_STYLE_DIRS)) {
     const relative = absolute.slice(REPO_ROOT.length).split(sep).join('/')
     const found = findings(readFileSync(absolute, 'utf8')).filter(f => f.rule === 'cascade-override').length
     if (!found) continue

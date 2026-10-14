@@ -386,11 +386,9 @@ button.dsh-proofread-locate:hover {
 .dsh-proofread-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; corner-shape: round; background: currentColor; animation: dsh-proofread-activity-pulse 1.4s ease infinite; }
 .dsh-proofread-dots i:nth-child(2) { animation-delay: .2s; }
 .dsh-proofread-dots i:nth-child(3) { animation-delay: .4s; }
+/* 减弱动效：html 前缀把特异性抬到目标规则之上，不用 !important。 */
 @media (prefers-reduced-motion: reduce) {
-  .dsh-proofread-dock, .dsh-proofread-dock *, .dsh-proofread-panel, .dsh-proofread-panel * {
-    animation: none !important; transition: none !important;
-  }
-  .dsh-proofread-dots i { animation: none; }
+  html .dsh-proofread-dots i { animation: none; }
 }
 /* Local tokens when this overlay is not under .radix-themes. Host Theme
    and --dsh-ext-* rail overrides still win inside the Theme tree. Dark

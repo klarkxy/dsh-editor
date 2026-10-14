@@ -343,15 +343,27 @@ try {
       const stage = document.querySelectorAll(sel.homeStage).length
       const recent = document.querySelectorAll(sel.homeRecent).length
       const scroller = document.scrollingElement
+      const trigger = document.querySelector('.shell > .chrome .palette-trigger')
+      const parts = trigger
+        ? [...trigger.querySelectorAll('.palette-trigger-icon, .palette-trigger-label, .palette-trigger-kbd')]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.width > 0 && r.height > 0)
+        : []
       return {
         stage, recent,
         docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
         bodyOverflow: scroller ? scroller.scrollWidth > window.innerWidth + 1 : false,
+        trigger: Boolean(trigger),
+        triggerRowSpread: parts.length > 1
+          ? +(Math.max(...parts.map((r) => r.top)) - Math.min(...parts.map((r) => r.top))).toFixed(1)
+          : 0,
       }
     }, { homeStage: S.homeStage, homeRecent: S.homeRecent })
-    if (probe.stage !== 1) fail(`${label}: .home-stage matched ${probe.stage} elements (hook must be unique)`)
-    if (probe.recent !== 1) fail(`${label}: .home-recent matched ${probe.recent} elements`)
-    if (probe.docOverflow || probe.bodyOverflow) fail(`${label}: home overflows horizontally`)
+    if (probe.stage !== 1) failures.push(`${label}: .home-stage matched ${probe.stage} elements (hook must be unique)`)
+    if (probe.recent !== 1) failures.push(`${label}: .home-recent matched ${probe.recent} elements`)
+    if (probe.docOverflow || probe.bodyOverflow) failures.push(`${label}: home overflows horizontally`)
+    if (!probe.trigger) failures.push(`${label}: home topbar palette trigger missing`)
+    if (probe.triggerRowSpread > 2) failures.push(`${label}: palette trigger wraps to a second line (child tops spread ${probe.triggerRowSpread}px)`)
     report.viewports.push({ label, metrics: { home: probe } })
   }
   await page.setViewportSize({ width: 1440, height: 900 })
