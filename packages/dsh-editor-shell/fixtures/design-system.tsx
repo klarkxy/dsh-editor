@@ -116,7 +116,7 @@ function Preview() {
         </main></div>
         <aside className="chat">
           <div className="chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
-            <span>写作搭档</span><span className="preset-badge">预设</span><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge>小说创作</Badge>
+            <span>写作搭档</span><Badge>预设</Badge><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge>小说创作</Badge>
           </div>
           <div className="chat-history"><ScrollArea style={{height:'100%'}}><div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
             <div className="chat-row user"><Card>保留悬念，让人物说话更自然一点。</Card></div>

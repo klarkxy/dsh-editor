@@ -10,7 +10,9 @@ defineStyles('dsh.surfaces', 'dsh-dialogs', `
 .radix-themes .file-dialog-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--dsh-ui-scrim); }
 
 .radix-themes .file-dialog { max-width: min(520px, calc(100vw - 32px)); background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-prominent); }
-.radix-themes .file-dialog.confirm-dialog { z-index: 56; }
+/* 确认框叠在已打开的对话框之上：遮罩与内容各占一层，内容始终高于自身遮罩。 */
+.radix-themes .confirm-overlay { z-index: calc(var(--dsh-ui-z-dialog) + 1); }
+.radix-themes .file-dialog.confirm-dialog { z-index: calc(var(--dsh-ui-z-dialog) + 2); }
 .radix-themes .file-dialog.chapter-ops-dialog { max-width: min(680px, calc(100vw - 32px)); }
 .radix-themes .file-dialog.export-preview-dialog { max-width: min(640px, calc(100vw - 32px)); }
 .radix-themes .chapter-ops-card { min-width: 0; }

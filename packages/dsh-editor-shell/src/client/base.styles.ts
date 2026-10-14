@@ -8,11 +8,21 @@ const ROUND_SHAPES = [
   'button.send', 'button.chat-stop',
   '.shell ::-webkit-scrollbar-thumb',
   '.models-credential-dot',
-  '.activity-dots i',
+  '.activity-dots i', '.panel-activity-dots i',
   '.activity-shimmer', '.activity-shimmer i',
   '.history-commit-dot',
   '.image-preview-close',
   '.chat-step-status', '.chat-step-error-dot',
+  /* ui 基元的圆/胶囊：:where(*) 超椭圆是作用域规则（(0,2,1)），裸类选择器压不过
+     它，所有 radius-full 元素必须经本名单取回 round。 */
+  '.dsh-badge',
+  '.dsh-radio', '.dsh-radio__indicator',
+  '.dsh-search-field__clear',
+  '.dsh-slider__track', '.dsh-slider__thumb',
+  '.dsh-spinner', '.dsh-activity-dots i',
+  '.dsh-switch', '.dsh-switch__thumb',
+  '.dsh-tabs__tab[data-state="active"]::after',
+  '.dsh-files-rail .tree-row[aria-current="page"] .tree-marker:empty::before',
 ]
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'

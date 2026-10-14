@@ -19,9 +19,20 @@ await writeFile(fixture, `
 import { createRoot } from ${JSON.stringify(shellRequire.resolve('react-dom/client').replaceAll('\\', '/'))}
 import { ProposalCard } from ${source('packages/dsh-editor-shell/src/client/chat-proposal.tsx')}
 import { ShellTheme } from ${source('packages/dsh-editor-shell/src/client/ui/theme-root.tsx')}
-import { redesignedStyles } from ${source('packages/dsh-editor-shell/src/styles.ts')}
-import { componentStyles } from ${source('packages/dsh-editor-shell/src/design-system/styles.ts')}
 import { tokenStyles } from ${source('packages/dsh-editor-shell/src/design-system/tokens.ts')}
+import { collectStyles, defineStyles } from ${source('packages/dsh-editor-shell/src/design-system/layers.ts')}
+import ${source('packages/dsh-editor-shell/src/client/base.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/editor.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/chat.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/palette.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/dialogs.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/select.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/pinned-pane.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/client/ui/activity.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/app/shell/shell.styles.ts')}
+import ${source('packages/dsh-editor-shell/src/app/assistant/assistant.styles.ts')}
+defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
+const shellCss = collectStyles()
 const params = new URLSearchParams(location.search)
 const mode = params.get('mode') || 'partial'
 const appearance = params.get('theme') === 'dark' ? 'dark' : 'light'
@@ -54,9 +65,11 @@ const ctx = { connection: { rpc: { async call(_channel, endpoint, body) {
 } } } }
 createRoot(document.getElementById('root')).render(
   <ShellTheme appearance={appearance}>
-    <style>{tokenStyles}{componentStyles}{redesignedStyles}</style>
-    <ProposalCard ctx={ctx} sessionId="fixture-session" proposal={proposal} receiptId="fixture-result"
-      onApplied={path => refreshedPaths.push(path)} />
+    <style>{shellCss}</style>
+    <div className="shell"><div className="chat">
+      <ProposalCard ctx={ctx} sessionId="fixture-session" proposal={proposal} receiptId="fixture-result"
+        onApplied={path => refreshedPaths.push(path)} />
+    </div></div>
   </ShellTheme>
 )
 `, 'utf8')
