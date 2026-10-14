@@ -127,6 +127,10 @@ ${surfaceTokenAliases}
 }
 .dsh-panel-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-space-1); }
 .dsh-panel-row { min-width: 0; min-height: var(--s-control-sm); }
+/* 行内宿主按钮是整行内容容器：标记与内容靠左、占满剩余宽度；
+   normal 在 grid 下等于 stretch（撑开 auto 轨），在 flex 下等于 flex-start。 */
+.dsh-panel-row > button { width: 100%; justify-content: normal; justify-items: stretch; text-align: start; }
+.dsh-panel-row > button > * { min-width: 0; }
 .dsh-panel-notice { margin: 0; font-size: var(--s-text-sm); }
 .dsh-panel-notice[data-tone='muted'] { color: var(--s-muted); }
 .dsh-panel-notice[data-tone='danger'] {

@@ -45,7 +45,8 @@ export type RpcCaller = {
 export type ProofreadSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
 
 import { SeatButton } from 'dsh-editor-seats/seat-button'
-import { PanelEmpty, PanelHeader, PanelList, PanelNotice, PanelSection } from 'dsh-editor-panel-base/chrome'
+import { displayTreeFileName } from 'dsh-editor-panel-base'
+import { PanelEmpty, PanelHeader, PanelList, PanelNotice, PanelRow, PanelSection } from 'dsh-editor-panel-base/chrome'
 /* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
    Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
    关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
@@ -352,11 +353,11 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
       {grouped.length ? <PanelList ordered className="proofread-results">
         {grouped.map((group) => <li key={group.path} className="proofread-file">
           <strong className="proofread-file-title" title={group.path}>
-            {group.path}
+            {displayTreeFileName(group.path)}
             <span>{t('proofread.fileHits', { count: group.findings.length })}</span>
           </strong>
           <ul>
-            {group.findings.map((item, index) => <li
+            {group.findings.map((item, index) => <PanelRow
               key={`${item.path}:${item.start}:${item.kind}:${index}`}
               className="proofread-row">
               <SeatButton
@@ -395,7 +396,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
                   {t('proofread.ignoreSensitive')}
                 </SeatButton> : null}
               </div>
-            </li>)}
+            </PanelRow>)}
           </ul>
         </li>)}
       </PanelList> : null}
