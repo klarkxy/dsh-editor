@@ -347,7 +347,11 @@ try {
   await page.keyboard.insertText('核心闭环保存验证。')
   await page.keyboard.press('Control+s')
   await page.locator(S.paperSaveState).filter({ hasText: '已保存' }).waitFor()
-  const savedChapter = await readFile(resolve(targetWorkspace, '正文', '001.md'), 'utf8')
+  // The label can linger from the create-time save; assert on the disk write
+  // itself instead of trusting the indicator timing.
+  const chapterPath = resolve(targetWorkspace, '正文', '001.md')
+  await waitFor(async () => (await readFile(chapterPath, 'utf8').catch(() => '')).includes('核心闭环保存验证。'), 'chapter save on disk', 15_000)
+  const savedChapter = await readFile(chapterPath, 'utf8')
   if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
   // Three-panel validation: overview (文档概览), proofread (文稿校对), memory (记忆).
@@ -515,8 +519,17 @@ try {
   // workspace is still on disk and openable (it has a .md file from the
   // author-created 正文/001.md above) the shell may re-enter the workbench
   // directly. Either way, the tree must be in scope; handle both landings.
-  if (await page.locator(S.homeStage).isVisible().catch(() => false)) {
-    await page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  // The home stage can appear transiently while the shell is still deciding to
+  // auto-reopen the last workspace; waiting on either landing avoids clicking a
+  // recent entry that unmounts mid-navigation.
+  const recentButton = page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first()
+  const landed = await Promise.race([
+    page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'workbench', () => null),
+    recentButton.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'home', () => null),
+  ])
+  if (landed === 'home') {
+    // If the auto-reopen wins mid-click the button unmounts — the tree wait below still lands.
+    await recentButton.click({ timeout: 10_000 }).catch(() => undefined)
   }
   await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 
