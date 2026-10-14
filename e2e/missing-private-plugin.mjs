@@ -53,8 +53,8 @@ function assertProtected(packageName) {
   if (!existsSync(join(workspacePackageDir(packageName), 'package.json'))) {
     throw new Error(`probe deleted source package ${packageName}`)
   }
-  if (!existsSync(join(runtime, 'node_modules', packageName))) {
-    throw new Error(`probe deleted shared runtime package ${packageName}`)
+  if (!existsSync(join(template, 'bundled-packages', 'node_modules', packageName, 'package.json'))) {
+    throw new Error(`probe deleted shared bundled package ${packageName}`)
   }
 }
 
@@ -68,11 +68,12 @@ function dshEnv(home) {
 }
 
 async function copyTreeOmitting(source, target, omit) {
+  const omitted = new Set((Array.isArray(omit) ? omit : [omit]).filter(Boolean).map((path) => resolve(path)))
   await mkdir(target, { recursive: true })
   for (const name of await readdir(source)) {
     const from = join(source, name)
     const to = join(target, name)
-    if (omit && resolve(from) === omit) continue
+    if (omitted.has(resolve(from))) continue
     const info = await lstat(from)
     if (info.isSymbolicLink()) {
       const real = await realpath(from)
@@ -240,9 +241,13 @@ async function probeMissing(packageName) {
     const damagedTemplate = resolve(sandbox, 'template')
     const isolatedRuntime = resolve(sandbox, 'runtime')
     const home = resolve(sandbox, 'home')
-    await copyTreeOmitting(template, damagedTemplate, resolve(template, 'node_modules', packageName))
+    await copyTreeOmitting(template, damagedTemplate, [
+      resolve(template, 'node_modules', packageName),
+      resolve(template, 'bundled-packages', 'node_modules', packageName),
+    ])
     await cloneRuntimeOmitting(runtime, isolatedRuntime, packageName)
-    if (existsSync(join(damagedTemplate, 'node_modules', packageName))) {
+    if (existsSync(join(damagedTemplate, 'node_modules', packageName))
+      || existsSync(join(damagedTemplate, 'bundled-packages', 'node_modules', packageName))) {
       throw new Error(`${packageName}: damaged template still contains the package`)
     }
     if (existsSync(join(isolatedRuntime, 'node_modules', packageName))) {

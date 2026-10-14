@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { S } from './helpers/selectors.mjs'
 
 export async function runModelRoutes({ editorModels = false } = {}) {
  const root = resolve(import.meta.dirname, '..')

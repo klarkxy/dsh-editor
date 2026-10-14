@@ -307,6 +307,7 @@ try {
  const editor=page.locator(S.editorCm);await editor.waitFor({timeout:30000});
  if(await page.locator(S.manuscriptAreaLegacy).count())throw new Error('manuscript paper still uses 正文编辑区');
  await page.locator(S.editorArea).waitFor({state:'visible',timeout:10000});
+ await page.waitForFunction(()=>{const el=document.querySelector('[data-testid="paper-editor"] .cm-content');return Boolean(el&&el.getAttribute('contenteditable')==='true');},undefined,{timeout:20000});
  await editor.focus();await page.keyboard.insertText('我们以经做好准备。组合保存验证。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState,{hasText:'已保存'}).waitFor();
  let saved='';for(let attempt=0;attempt<50;attempt++){saved=await readFile(resolve(targetWorkspace,'正文','001.md'),'utf8');if(saved.includes('组合保存验证'))break;await new Promise(done=>setTimeout(done,100));}if(!saved.includes('组合保存验证'))throw new Error('disk save missing');evidence.checks.push('create project/document and save through UI');
  const notesBox=await tree.boundingBox();if(!notesBox)throw new Error('tree missing after first file');
@@ -318,8 +319,9 @@ try {
  const createTxt=page.getByRole('dialog',{name:'新建文件'});await createTxt.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('笔记.txt');await createTxt.getByRole('button',{name:'创建',exact:true}).click();await createTxt.waitFor({state:'detached'});
  await page.locator(S.paperPath,{hasText:'资料/笔记.txt'}).waitFor({timeout:20000});
  await page.locator(S.editorArea).waitFor({state:'visible',timeout:10000});
+ await page.waitForFunction(()=>{const el=document.querySelector('[data-testid="paper-editor"] .cm-content');return Boolean(el&&el.getAttribute('contenteditable')==='true'&&!el.textContent.includes('组合保存验证'));},undefined,{timeout:20000});
  await editor.focus();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState,{hasText:'已保存'}).waitFor();
- const savedTxt=await readFile(resolve(targetWorkspace,'资料','笔记.txt'),'utf8');if(!savedTxt.includes('组合普通文本验证。'))throw new Error('plain txt save missing');
+ let savedTxt='';for(let attempt=0;attempt<50;attempt++){try{savedTxt=await readFile(resolve(targetWorkspace,'资料','笔记.txt'),'utf8')}catch{savedTxt=''}if(savedTxt.includes('组合普通文本验证。'))break;await new Promise(done=>setTimeout(done,100));}if(!savedTxt.includes('组合普通文本验证。'))throw new Error('plain txt save missing');
  // 4.2: row text hides the .md extension; data-tree-path keeps the full path.
  const chapterRow=page.locator(S.treePath('正文/001.md')).first();
  if(!(await chapterRow.count())){const bodyDir=page.locator(S.treeRow).filter({hasText:'正文'}).first();await bodyDir.click();}

@@ -75,7 +75,7 @@ function stageTarball(name) {
     const result = spawnSync(process.execPath, [npm, 'exec', 'npm', 'pack', name + '@0.1.10', '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120000 })
     if (result.status !== 0) throw new Error('optional Zhihu fixture download failed: ' + result.stderr)
     const archive = path.join(staging, 'klarkxy-dsh-zhihu-0.1.10.tgz')
-    const contents = spawnSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8', windowsHide: true })
+    const contents = spawnSync('tar', ['--force-local', '-xOf', archive.replaceAll('\\', '/'), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
     if (contents.status !== 0) throw new Error('cannot read optional fixture manifest')
     const pkg = JSON.parse(contents.stdout)
     if (pkg.name !== name || pkg.version !== '0.1.10') throw new Error('optional fixture identity mismatch')
@@ -477,6 +477,7 @@ async function readOverlayChrome(page, selectors) {
         borderTopWidth: style.borderTopWidth,
         borderTopStyle: style.borderTopStyle,
         borderTopColor: style.borderTopColor,
+        boxShadow: style.boxShadow,
       }
     }
     return {
@@ -522,8 +523,10 @@ function assertStandaloneOverlayChrome(chrome, label, expectDark) {
     throw new Error(`${label}: header padding ${chrome.header.paddingTop} ${chrome.header.paddingLeft}`)
   }
   const border = Number.parseFloat(chrome.panel.borderTopWidth)
-  if (!(border >= 1) || chrome.panel.borderTopStyle === 'none') {
-    throw new Error(`${label}: panel border ${chrome.panel.borderTopWidth} ${chrome.panel.borderTopStyle}`)
+  const shadow = String(chrome.panel.boxShadow || 'none')
+  // Floating panels need a visible edge: either a hairline border or the elevated shadow.
+  if (!((border >= 1 && chrome.panel.borderTopStyle !== 'none') || (shadow !== 'none' && shadow !== ''))) {
+    throw new Error(`${label}: panel edge missing (border ${chrome.panel.borderTopWidth} ${chrome.panel.borderTopStyle}, shadow ${shadow})`)
   }
   const inputBg = parseCssColor(chrome.input.backgroundColor)
   if (inputBg.a == null || inputBg.a === 0) {
