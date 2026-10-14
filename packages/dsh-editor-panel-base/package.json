@@ -1,11 +1,13 @@
 {
   "name": "dsh-editor-panel-base",
   "version": "0.1.0",
+  "description": "Common infrastructure for DSH Editor panel packages",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
-  "description": "Common infrastructure for DSH Editor panel packages",
   "exports": {
     ".": "./dist/index.mjs",
+    "./chrome": "./dist/chrome.mjs",
     "./rpc": "./dist/rpc/index.mjs",
     "./requests": "./dist/requests/index.mjs",
     "./messages": "./dist/messages/index.mjs"
@@ -20,9 +22,17 @@
   "dependencies": {
     "dsh-editor-seats": "workspace:*"
   },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
   "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "tsdown": "^0.22.14",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   },
   "publishConfig": {
     "access": "restricted"

@@ -7,6 +7,7 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import type { ShellToolSeatContext } from 'dsh-editor-seats'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
+import { PanelEmpty, PanelHeader, PanelList, PanelNotice, PanelRow } from 'dsh-editor-panel-base/chrome'
 import { errorMessage, LatestRequestGate, safeRpcCall, snapshotTimeLabel } from './rpc.ts'
 import { setMemoryLocale, t, type MessageKey } from './messages.ts'
 import { consumeMemoryRequest, pendingMemoryRequest, subscribeMemoryRequest, type MemoryRequest } from './requests.ts'
@@ -367,24 +368,15 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
 
   return (
     <section
-      className="memory-panel"
+      className="dsh-panel memory-panel"
       data-testid="memory-panel"
       aria-label={t('memory.title')}>
-      <header className="memory-panel-header">
-        <div>
-          <h2>
-            {t('memory.title')}
-          </h2>
-        </div>
-        <SeatButton
-          host={props.Button}
-          variant="icon"
-          className="icon-button"
-          aria-label={t('memory.close')}
-          onClick={props.onClose}>
-          ×
-        </SeatButton>
-      </header>
+      <PanelHeader
+        className="memory-panel-header"
+        title={t('memory.title')}
+        Button={props.Button}
+        closeLabel={t('memory.close')}
+        onClose={props.onClose} />
       <div className="memory-filters" role="group" aria-label={t('memory.filter')}>
         {STATUS_FILTERS.map((filter) => <SeatButton
           host={props.Button}
@@ -394,26 +386,26 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
           {t(filter.label)}
         </SeatButton>)}
       </div>
-      {note ? <p className="memory-status warning" role="alert">
+      {note ? <PanelNotice tone="danger" role="alert" className="memory-status">
         {note}
         {items === null ? <SeatButton host={props.Button} onClick={() => void load()}>
           {t('memory.retryList')}
         </SeatButton> : null}
-      </p> : null}
+      </PanelNotice> : null}
       {items === null && !note ? <div className="memory-status" role="status">
         {skeletonRows(['100%', '88%', '96%'])}
         <span className="sr-only">
           {t('memory.loading')}
         </span>
       </div> : null}
-      {items !== null && items.length === 0 ? <p className="memory-status">
+      {items !== null && items.length === 0 ? <PanelEmpty className="memory-status">
         {t('memory.empty')}
-      </p> : null}
-      {items !== null && items.length > 0 && visible.length === 0 ? <p className="memory-status">
+      </PanelEmpty> : null}
+      {items !== null && items.length > 0 && visible.length === 0 ? <PanelEmpty className="memory-status">
         {t('memory.noMatch')}
-      </p> : null}
-      {visible.length ? <ul className="memory-list">
-        {visible.map((item) => <li key={item.id}>
+      </PanelEmpty> : null}
+      {visible.length ? <PanelList className="memory-list">
+        {visible.map((item) => <PanelRow key={item.id}>
           <SeatButton
             host={props.Button}
             className="memory-row-main"
@@ -435,8 +427,8 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
             onRefresh={refreshWritten}
             onChanged={() => void load()}
             onBack={() => setOpenId(null)} /> : null}
-        </li>)}
-      </ul> : null}
+        </PanelRow>)}
+      </PanelList> : null}
     </section>
   );
 }

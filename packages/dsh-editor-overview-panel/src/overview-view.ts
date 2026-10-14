@@ -1,4 +1,5 @@
 import type { ChapterSummary, ProgressDay, ProgressWeek } from 'dsh-editor-workbench/contracts'
+import { compareDocumentPaths } from 'dsh-editor-panel-base'
 import { formatNumber, intlLocale, t } from './messages.ts'
 
 const CHAR_BUCKETS = [
@@ -21,6 +22,11 @@ export function localDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/** 概览章节按路径自然序展示（「第二章」在「第一章」后），不改动传入数组。 */
+export function sortChapters<T extends { path: string }>(chapters: readonly T[]): T[] {
+  return [...chapters].sort((left, right) => compareDocumentPaths(left.path, right.path))
 }
 
 export function filterChapters<T extends { title: string; path: string }>(chapters: readonly T[], text: string): T[] {

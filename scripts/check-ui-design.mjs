@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -151,6 +152,13 @@ check('DSW_MAP covers every scanned var or names it pending', () => {
   for (const name of DSW_VARS) assert(mapped.has(name) || pending.has(name), `unclassified dsw var ${name}`)
   for (const name of pending) assert(!mapped.has(name), `${name} is both mapped and pending`)
 })
+check('official plugin --dsw-* inventory is current', () => {
+  /* dsw-vars.ts 是 scan-dsw-vars.mjs 扫描官方插件发布产物生成的清单；
+     --check 模式对当前 node_modules 复扫并与提交文件逐字比对，
+     保证 DSW_MAP/DSW_PENDING 的分类断言始终基于最新使用面。 */
+  const script = fileURLToPath(new URL('./scan-dsw-vars.mjs', import.meta.url))
+  execFileSync(process.execPath, [script, '--check'], { stdio: 'pipe' })
+})
 check('motion, forced-color and circle fallbacks are present', () => {
   assert(designSystemStyles.includes('prefers-reduced-motion: reduce'))
   assert(designSystemStyles.includes('forced-colors: active'))
@@ -221,7 +229,16 @@ check('no !important in product style sources beyond the listed exceptions', () 
       sources.push(absolute)
     }
   }
-  for (const dir of ['packages/dsh-editor-shell/src', 'packages/dsh-manuscript/src']) walk(join(root, dir))
+  for (const dir of [
+    'packages/dsh-editor-shell/src',
+    'packages/dsh-manuscript/src',
+    'packages/dsh-editor-panel-base/src',
+    'packages/dsh-editor-memory-panel/src',
+    'packages/dsh-editor-overview-panel/src',
+    'packages/dsh-editor-proofread-panel/src',
+    'packages/dsh-editor-cards/src',
+    'packages/dsh-editor-novel-kernel/src',
+  ]) walk(join(root, dir))
   for (const absolute of sources) {
     const relative = absolute.slice(root.length).split(sep).join('/')
     const found = findings(readFileSync(absolute, 'utf8')).filter(f => f.rule === 'cascade-override').length

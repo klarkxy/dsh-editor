@@ -7,6 +7,7 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellToolSeatContext } from 'dsh-editor-seats'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
+import { PanelEmpty, PanelHeader, PanelList, PanelNotice, PanelRow, PanelSection } from 'dsh-editor-panel-base/chrome'
 import {
   barHeight,
   chapterCharBars,
@@ -17,6 +18,7 @@ import {
   formatSignedCount,
   formatModifiedAt,
   localDateKey,
+  sortChapters,
   weeklyCurveSeries,
 } from './overview-view.ts'
 import { errorMessage, LatestRequestGate, safeRpcCall } from './rpc.ts'
@@ -105,8 +107,9 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
     props.openDocument(path)
   }
 
-  const visibleChapters = overview ? filterChapters(overview.chapters, filter) : []
-  const charBars = overview ? chapterCharBars(overview.chapters) : []
+  const chapters = overview ? sortChapters(overview.chapters) : []
+  const visibleChapters = filterChapters(chapters, filter)
+  const charBars = chapterCharBars(chapters)
   const daily = history ? dailyCurveSeries(history.days, today, 30) : []
   const weekly = history ? weeklyCurveSeries(history.weeks, 12) : []
   const hasDailyActivity = daily.some((bar) => bar.delta !== 0)
@@ -116,25 +119,17 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
 
   return (
     <section
-      className="overview-panel"
+      className="dsh-panel overview-panel"
       {...{ [CENTER_OVERLAY_ATTRIBUTE]: "" }}
       data-testid="overview-panel"
       aria-label={t('overview.title')}>
-      <header className="overview-header">
-        <div>
-          <h2 id="overview-panel-title">
-            {t('overview.title')}
-          </h2>
-        </div>
-        <SeatButton
-          host={props.Button}
-          variant="icon"
-          className="icon-button"
-          aria-label={t('overview.close')}
-          onClick={props.onClose}>
-          ×
-        </SeatButton>
-      </header>
+      <PanelHeader
+        className="overview-header"
+        titleId="overview-panel-title"
+        title={t('overview.title')}
+        Button={props.Button}
+        closeLabel={t('overview.close')}
+        onClose={props.onClose} />
       {loading ? <div className="overview-loading" role="status">
         <span className="overview-loading-cards" aria-hidden="true">
           <i />
@@ -145,12 +140,12 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           {t('overview.loading')}
         </span>
       </div> : null}
-      {failed ? <p className="warning" role="alert">
+      {failed ? <PanelNotice tone="danger" role="alert">
         {note || t('overview.loadError')}
         <SeatButton host={props.Button} onClick={() => { void loadOverview(); void loadHistory() }}>
           {t('overview.retry')}
         </SeatButton>
-      </p> : null}
+      </PanelNotice> : null}
       {overview ? <div className="overview-body">
         <section className="overview-totals" aria-label={t('overview.totals')}>
           <article>
@@ -170,16 +165,13 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             </strong>
           </article>
         </section>
-        {overview.truncated ? <p className="warning" role="status">
+        {overview.truncated ? <PanelNotice tone="danger" role="status">
           {`${t('overview.truncated')}${overview.skipped ? `（${t('overview.skipped', { count: overview.skipped })}）` : ''}`}
-        </p> : null}
-        {note ? <p className="warning" role="alert">
+        </PanelNotice> : null}
+        {note ? <PanelNotice tone="danger" role="alert">
           {note}
-        </p> : null}
-        <section className="overview-chapters" aria-label={t('overview.chapterList')}>
-          <h3>
-            {t('overview.chapter')}
-          </h3>
+        </PanelNotice> : null}
+        <PanelSection className="overview-chapters" label={t('overview.chapter')} aria-label={t('overview.chapterList')}>
           {props.Input
             ? <props.Input
               className="overview-filter"
@@ -196,27 +188,18 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
               aria-label={t('overview.filter')}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setFilter(event.target.value)} />}
           {overview.chapters.length === 0
-            ? <p className="muted">
-            {t('overview.noChapters')}
-          </p>
+            ? <PanelEmpty>{t('overview.noChapters')}</PanelEmpty>
             : visibleChapters.length === 0
-              ? <p className="muted">
-            {t('overview.noMatch')}
-          </p>
-              : <ol className="overview-chapter-list">
+              ? <PanelEmpty>{t('overview.noMatch')}</PanelEmpty>
+              : <PanelList ordered className="overview-chapter-list">
             {visibleChapters.map((chapter) => <ChapterRow
             hostButton={props.Button} key={chapter.path} chapter={chapter} onOpen={openChapter} />)}
-          </ol>}
-        </section>
-        <section className="overview-chart" aria-label={t('overview.charDist')}>
-          <h3>
-            {t('overview.charDist')}
-          </h3>
+          </PanelList>}
+        </PanelSection>
+        <PanelSection className="overview-chart" label={t('overview.charDist')} aria-label={t('overview.charDist')}>
           {charBars.length === 0
-            ? <p className="muted">
-            {t('overview.noChart')}
-          </p>
-            : <ol className="overview-char-bars">
+            ? <PanelEmpty>{t('overview.noChart')}</PanelEmpty>
+            : <PanelList ordered className="overview-char-bars">
             {charBars.map((bar) => <li
               key={bar.path}
               className={`overview-char-col${bar.empty ? ' empty' : ''}`}
@@ -230,15 +213,12 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
               <span className="overview-char-meter" aria-hidden="true"><i style={{ width: `${bar.ratio * 100}%` }} /></span>
               <span className="overview-char-value">{bar.empty ? t('overview.empty') : t('overview.charsOnly', { chars: formatCount(bar.chars) })}</span>
             </li>)}
-          </ol>}
-        </section>
-        <section className="overview-chart" aria-label={t('overview.curve')}>
-          <h3>
-            {t('overview.curve')}
-          </h3>
-          {historyNote ? <p className="warning" role="status">
+          </PanelList>}
+        </PanelSection>
+        <PanelSection className="overview-chart" label={t('overview.curve')} aria-label={t('overview.curve')}>
+          {historyNote ? <PanelNotice tone="danger" role="status">
             {historyNote}
-          </p> : null}
+          </PanelNotice> : null}
           {history ? <>
           <h4>{t('overview.dailyTitle')}</h4>
           <p className="overview-chart-summary">{t('overview.dailySummary', { delta: formatSignedCount(daily.at(-1)?.delta ?? 0) })}</p>
@@ -254,9 +234,9 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
                 {bar.today ? t('overview.todayMark') : Number(bar.key.slice(-2)) % 5 === 0 ? bar.label.slice(3) : ''}
               </small>
             </div>)}
-          </div> : <p className="muted overview-chart-empty">
+          </div> : <PanelEmpty className="overview-chart-empty">
             {history?.days.length ? t('overview.noDailyChange') : t('overview.noDaily')}
-          </p>}
+          </PanelEmpty>}
           <h4>{t('overview.weeklyTitle')}</h4>
           {hasWeeklyActivity ? <div className="overview-curve weekly" aria-label={t('overview.last12w')}>
             {weekly.map((bar) => <div
@@ -270,28 +250,23 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
                 {bar.label.slice(3)}
               </small>
             </div>)}
-          </div> : <p className="muted overview-chart-empty">{t('overview.noWeeklyChange')}</p>}
-          </> : historyNote ? null : <p className="muted">{t('overview.historyLoading')}</p>}
-        </section>
-        <section className="overview-recent" aria-label={t('overview.recentEdits')}>
-          <h3>
-            {t('overview.recentEdits')}
-          </h3>
+          </div> : <PanelEmpty className="overview-chart-empty">{t('overview.noWeeklyChange')}</PanelEmpty>}
+          </> : historyNote ? null : <PanelEmpty>{t('overview.historyLoading')}</PanelEmpty>}
+        </PanelSection>
+        <PanelSection className="overview-recent" label={t('overview.recentEdits')} aria-label={t('overview.recentEdits')}>
           {!overview.recentChapters.length
-            ? <p className="muted">
-            {t('overview.noRecent')}
-          </p>
-            : <ul>
-            {overview.recentChapters.map((chapter) => <li key={chapter.path}>
+            ? <PanelEmpty>{t('overview.noRecent')}</PanelEmpty>
+            : <PanelList>
+            {overview.recentChapters.map((chapter) => <PanelRow key={chapter.path}>
               <SeatButton host={props.Button} onClick={() => openChapter(chapter.path)}>
                 {chapter.title}
               </SeatButton>
               <small>
                 {t('overview.chapterMeta', { chars: formatCount(chapter.chars), modified: formatModifiedAt(chapter.modifiedAt) })}
               </small>
-            </li>)}
-          </ul>}
-        </section>
+            </PanelRow>)}
+          </PanelList>}
+        </PanelSection>
       </div> : null}
     </section>
   );

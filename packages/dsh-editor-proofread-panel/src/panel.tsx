@@ -45,6 +45,7 @@ export type RpcCaller = {
 export type ProofreadSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
 
 import { SeatButton } from 'dsh-editor-seats/seat-button'
+import { PanelEmpty, PanelHeader, PanelList, PanelNotice, PanelSection } from 'dsh-editor-panel-base/chrome'
 /* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
    Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
    关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
@@ -256,24 +257,15 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
 
   return (
     <section
-      className="proofread-panel"
+      className="dsh-panel proofread-panel"
       data-testid="editor-proofread-panel"
       aria-label={t('proofread.title')}>
-      <header className="proofread-panel-header">
-        <div>
-          <h2>
-            {t('proofread.title')}
-          </h2>
-        </div>
-        <SeatButton
-          host={props.Button}
-          variant="icon"
-          className="icon-button"
-          aria-label={t('proofread.close')}
-          onClick={props.onClose}>
-          ×
-        </SeatButton>
-      </header>
+      <PanelHeader
+        className="proofread-panel-header"
+        title={t('proofread.title')}
+        Button={props.Button}
+        closeLabel={t('proofread.close')}
+        onClose={props.onClose} />
       <div className="proofread-toolbar">
         <div
           className="proofread-scopes"
@@ -325,21 +317,21 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
           {proofreadSkippedText(result.skipped)}
         </span> : null}
       </div> : null}
-      {stale ? <p className="warning" role="alert">
+      {stale ? <PanelNotice tone="danger" role="alert">
         {t('proofread.versionDiff')}
         <SeatButton host={props.Button} onClick={() => void scan(scope)}>
           {t('proofread.recheck')}
         </SeatButton>
-      </p> : null}
-      {props.editorDirty && visible.length ? <p className="warning" role="alert">
+      </PanelNotice> : null}
+      {props.editorDirty && visible.length ? <PanelNotice tone="danger" role="alert">
         {t('proofread.saveBeforeJump')}
-      </p> : null}
-      {note ? <p className="muted" role="status">
+      </PanelNotice> : null}
+      {note ? <PanelNotice role="status">
         {note}
-      </p> : null}
-      {ignoreGap ? <p className="warning" role="status">
+      </PanelNotice> : null}
+      {ignoreGap ? <PanelNotice tone="danger" role="status">
         {ignoreGap}
-      </p> : null}
+      </PanelNotice> : null}
       {punctuationFixes.length && canProposeProofreadPath(props.activePath) ? <SeatButton
         host={props.Button}
         className="proofread-batch"
@@ -356,8 +348,8 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
           {t('proofread.checking')}
         </span>
       </div> : null}
-      {result && result.findings.length > 0 && visible.length === 0 ? <p className="muted proofread-empty-filter">{t('proofread.noMatches')}</p> : null}
-      {grouped.length ? <ol className="proofread-results">
+      {result && result.findings.length > 0 && visible.length === 0 ? <PanelEmpty className="proofread-empty-filter">{t('proofread.noMatches')}</PanelEmpty> : null}
+      {grouped.length ? <PanelList ordered className="proofread-results">
         {grouped.map((group) => <li key={group.path} className="proofread-file">
           <strong className="proofread-file-title" title={group.path}>
             {group.path}
@@ -406,17 +398,14 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
             </li>)}
           </ul>
         </li>)}
-      </ol> : null}
-      {result?.habitStats.length ? <section className="proofread-habits" aria-label={t('proofread.habits')}>
-        <h3>
-          {t('proofread.habits')}
-        </h3>
-        {habitTerm ? <p className="muted">
+      </PanelList> : null}
+      {result?.habitStats.length ? <PanelSection className="proofread-habits" label={t('proofread.habits')} aria-label={t('proofread.habits')}>
+        {habitTerm ? <PanelNotice>
           {t('proofread.viewingHabit', { term: habitTerm })}
           <SeatButton host={props.Button} onClick={() => setHabitTerm(null)}>
             {t('common.clear')}
           </SeatButton>
-        </p> : null}
+        </PanelNotice> : null}
         <table>
           <thead>
             <tr>
@@ -453,7 +442,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
             </tr>)}
           </tbody>
         </table>
-      </section> : null}
+      </PanelSection> : null}
     </section>
   );
 }

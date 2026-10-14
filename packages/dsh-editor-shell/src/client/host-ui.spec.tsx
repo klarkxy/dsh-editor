@@ -45,7 +45,7 @@ describe('C04 host controls smoke', () => {
       <Button variant="danger" title="删除说明">删除</Button>
       <Button variant="icon" aria-label="关闭面板" data-testid="x-icon" />
       <Button variant="primary" disabled title="暂不可用">导出</Button>
-      <Button variant="default" role="switch" aria-checked="true" aria-pressed={true} tabIndex={0}>开关</Button>
+      <Button variant="default" role="switch" aria-checked={true} aria-pressed={true} tabIndex={0}>开关</Button>
     </>)
     for (const label of ['默认', '保存', '创建', '删除', '导出', '开关']) expect(out).toContain(label)
     expect(out).toContain('aria-label="关闭面板"')
