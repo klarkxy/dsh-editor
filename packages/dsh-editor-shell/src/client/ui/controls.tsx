@@ -1,8 +1,20 @@
-import { Button as ThemesButton, IconButton, TextArea as ThemesTextArea, TextField } from '@radix-ui/themes'
 import { forwardRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { isImeEvent } from './ime.ts'
+import { Button as InternalButton, IconButton as InternalIconButton, Input as InternalInput, TextArea as InternalTextArea } from '../../ui/index.ts'
 
 import type { ButtonVariant } from '../../model/controls.ts'
+
+/*
+ * C04：宿主控件改在内部原语（src/ui/）上实现，props 契约不变。
+ * 变体映射：default/未给 → secondary，primary → primary，danger → danger，
+ * icon → IconButton（ghost）。旧的 ui-button / primary-action / danger-action /
+ * icon-button 类名保留，面板与 e2e 选择器仍能命中。
+ */
+const INTERNAL_VARIANT = {
+  default: 'secondary',
+  primary: 'primary',
+  danger: 'danger',
+} as const
 
 export const Button = forwardRef<HTMLButtonElement, {
   type?: 'button' | 'submit'
@@ -25,11 +37,12 @@ export const Button = forwardRef<HTMLButtonElement, {
   tabIndex?: number
   children?: ReactNode
 }>(function Button(props, ref) {
-  const variantClass = props.variant === 'primary'
+  const variant = props.variant ?? 'default'
+  const variantClass = variant === 'primary'
     ? 'primary-action'
-    : props.variant === 'danger'
+    : variant === 'danger'
       ? 'danger-action'
-      : props.variant === 'icon'
+      : variant === 'icon'
         ? 'icon-button'
         : ''
   const className = ['ui-button', variantClass, props.className].filter(Boolean).join(' ')
@@ -37,10 +50,8 @@ export const Button = forwardRef<HTMLButtonElement, {
     ref,
     type: props.type ?? 'button',
     className,
-    size: '2' as const,
     disabled: props.disabled,
     title: props.title,
-    'aria-label': props['aria-label'],
     'aria-labelledby': props['aria-labelledby'],
     'aria-pressed': props['aria-pressed'],
     'aria-expanded': props['aria-expanded'],
@@ -54,16 +65,11 @@ export const Button = forwardRef<HTMLButtonElement, {
     tabIndex: props.tabIndex,
     onClick: props.onClick,
   }
-  if (props.variant === 'primary') {
-    return <ThemesButton {...shared} variant="solid">{props.children}</ThemesButton>
+  if (variant === 'icon') {
+    /* icon 变体沿用原 ghost IconButton 语义；label 同时是 aria-label 与 tooltip。 */
+    return <InternalIconButton {...shared} size="sm" label={props['aria-label'] ?? props.title ?? ''}>{props.children}</InternalIconButton>
   }
-  if (props.variant === 'danger') {
-    return <ThemesButton {...shared} variant="soft" color="red">{props.children}</ThemesButton>
-  }
-  if (props.variant === 'icon') {
-    return <IconButton {...shared} variant="ghost" color="gray">{props.children}</IconButton>
-  }
-  return <ThemesButton {...shared} variant="soft" color="gray">{props.children}</ThemesButton>
+  return <InternalButton {...shared} aria-label={props['aria-label']} size="sm" variant={INTERNAL_VARIANT[variant]}>{props.children}</InternalButton>
 })
 
 export const Input = forwardRef<HTMLInputElement, {
@@ -80,9 +86,9 @@ export const Input = forwardRef<HTMLInputElement, {
   onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
 }>(function Input(props, ref) {
   return (
-    <TextField.Root
+    <InternalInput
       ref={ref}
-      size="2"
+      size="sm"
       type={props.type ?? 'text'}
       className={['ui-input', props.className].filter(Boolean).join(' ')}
       value={props.value}
@@ -92,7 +98,7 @@ export const Input = forwardRef<HTMLInputElement, {
       disabled={props.disabled}
       autoFocus={props.autoFocus}
       data-testid={props['data-testid']}
-      onChange={(event) => props.onChange(event.target.value)}
+      onChange={props.onChange}
       onKeyDown={(event) => {
         if (event.key === 'Enter' && isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
           event.preventDefault()
@@ -118,19 +124,20 @@ export const TextArea = forwardRef<HTMLTextAreaElement, {
   onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
 }>(function TextArea(props, ref) {
   return (
-    <ThemesTextArea
+    <InternalTextArea
       ref={ref}
-      size="2"
       className={['ui-textarea', props.className].filter(Boolean).join(' ')}
       value={props.value}
       maxLength={props.maxLength}
       placeholder={props.placeholder}
-      rows={props.rows}
+      /* rows 给定即固定高度；未给时沿用默认 3 行起、到 8 行自动增高。 */
+      minRows={props.rows ?? 3}
+      maxRows={props.rows ?? 8}
       aria-label={props['aria-label']}
       disabled={props.disabled}
       autoFocus={props.autoFocus}
       data-testid={props['data-testid']}
-      onChange={(event) => props.onChange(event.target.value)}
+      onChange={props.onChange}
       onKeyDown={props.onKeyDown}
     />
   )

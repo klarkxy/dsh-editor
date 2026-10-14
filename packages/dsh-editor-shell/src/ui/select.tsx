@@ -1,5 +1,5 @@
 import * as SelectPrimitive from '@radix-ui/react-select'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { CheckIcon, ChevronDownIcon } from './icons.tsx'
 import { cx, useDshPortalContainer } from './shared.ts'
 import './select.styles.ts'
@@ -18,6 +18,12 @@ export const Select = forwardRef<HTMLButtonElement, {
   'aria-label'?: string
   disabled?: boolean
   className?: string
+  /** 宿主要求触发按钮带 title（tooltip 语义）。 */
+  title?: string
+  /** 弹层对齐，默认居中。 */
+  align?: 'start' | 'center' | 'end'
+  /** 覆盖触发处显示的选中文案（宿主 select 的 selectedLabel）。 */
+  selectedLabel?: ReactNode
 }>(function Select(props, ref) {
   const container = useDshPortalContainer()
   return (
@@ -34,13 +40,14 @@ export const Select = forwardRef<HTMLButtonElement, {
         className={cx('dsh-select', props.className)}
         data-size={props.size ?? 'md'}
         aria-label={props['aria-label']}
+        title={props.title}
       >
-        <SelectPrimitive.Value placeholder={props.placeholder} />
+        <SelectPrimitive.Value placeholder={props.placeholder}>{props.selectedLabel}</SelectPrimitive.Value>
         <SelectPrimitive.Icon className="dsh-select__icon"><ChevronDownIcon size="sm" /></SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       {(() => {
         const content = (
-          <SelectPrimitive.Content className="dsh-menu" position="popper" sideOffset={4}>
+          <SelectPrimitive.Content className="dsh-menu" position="popper" align={props.align ?? 'center'} sideOffset={4}>
             <SelectPrimitive.Viewport className="dsh-menu__viewport">
               {props.options.map((option) => (
                 <SelectPrimitive.Item
@@ -48,6 +55,8 @@ export const Select = forwardRef<HTMLButtonElement, {
                   value={option.value}
                   disabled={option.disabled}
                   className="dsh-menu__item"
+                  /* e2e 以 data-value 定位选项；空值已由调用方编码。 */
+                  data-value={option.value}
                 >
                   <SelectPrimitive.ItemIndicator className="dsh-menu__check"><CheckIcon size="sm" /></SelectPrimitive.ItemIndicator>
                   <span className="dsh-menu__item-body">

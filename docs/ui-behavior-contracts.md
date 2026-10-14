@@ -11,7 +11,7 @@
 | C01 | DSH 是会话、模型、审批、权限与对话历史的唯一来源；前端不复制这些状态 | `packages/dsh-editor-shell/src/client.ts`、`src/client/ui-workspace.ts` | 架构约束，无单一测试 | 重写时以代码审查保证 |
 | C02 | `client.ts` 的 `inject` 列表、`registerRoot` 声明的子插槽与 `layout` 服务形状不变 | `src/client.ts`、`src/root-registration.ts`、`src/client/official-layout.ts` | `src/root-registration.spec.ts`、`src/index.spec.ts` | 无 |
 | C03 | seats 公开 API（插槽常量、服务、`CENTER_OVERLAY_ATTRIBUTE`、`Shell*Props`、注册表工厂、`./tokens`、`./seat-button`）向后兼容 | `packages/dsh-editor-seats/src/index.ts` | `packages/dsh-editor-seats/src/index.spec.ts`、`tokens.spec.ts` | 无 |
-| C04 | 传给插件的 HOST_UI（Select、Dialog、Button、Input、TextArea）props 接口不变 | `src/client/root.tsx` 的 `HOST_UI_OWNER` | 类型约束 | 缺少运行时冒烟测试：用新控件渲染各 props 组合 |
+| C04 | 传给插件的 HOST_UI（Select、Dialog、Button、Input、TextArea）props 接口不变；控件由 `src/ui/` 原语实现 | `src/client/root.tsx` 的 `HOST_UI_OWNER`、`src/client/select.tsx`、`src/client/ui/controls.tsx`、`src/client/ui/dialog.tsx` | `src/client/host-ui.spec.tsx`（全 props 组合冒烟 + 可访问名）、类型约束、`src/ui/focus-return.spec.ts`、`e2e/layout-invariants.mjs` | 无 |
 | C05 | CSS 变量兼容面：`--dsh-ui-*` 名称保留，`--s-*` 别名链保留，外部与官方插件使用的 `--dsw-*` 全部有值 | `src/design-system/tokens.ts`、`packages/dsh-editor-seats/src/tokens.ts` | `scripts/check-ui-design.mjs`（部分） | 缺少 `--dsw-*` 使用清单与映射完整性断言 |
 | C06 | shell 的组件规则不进入 `[data-dsh-plugin-surface]`；插槽外层布局归宿主 | `src/client/root-columns.tsx`、`src/client/plugin-surfaces.tsx` | `src/client/plugin-surface-boundaries.spec.ts`、`plugin-surfaces.spec.ts`、`e2e/ui-design.mjs` | 无 |
 
