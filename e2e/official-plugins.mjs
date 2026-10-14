@@ -222,6 +222,17 @@ try {
   assert((await page.locator(S.body).innerText()).includes('新建窗口'))
   check('official shortcut dialog contains Editor commands')
   await page.getByRole('button', {name:'修改命令面板快捷键', exact:true}).click()
+  /* 录键控件要等 recording(true) 走 IPC 往返后才 focusWithoutRing 接管焦点；
+     未就绪的按键会被 document.activeElement 检查丢弃。等
+     data-dsh-automatic-focus 标记出现（nativeReady→focus 完成）再按键。 */
+  const recorderReady = await page.locator('[data-dsh-automatic-focus]').waitFor({ timeout: 10000 }).then(() => true).catch(() => false)
+  if (!recorderReady) {
+    report.errors.push(`recorder never took focus: ${JSON.stringify(await page.evaluate(() => ({
+      active: document.activeElement?.tagName + '.' + String(document.activeElement?.className).slice(0, 60),
+      nativeFailed: (document.body.innerText || '').includes('录键保护'),
+    })))}`)
+  }
+  assert.ok(recorderReady, 'shortcut recorder reached nativeReady and took focus')
   await page.keyboard.press('Control+Alt+K')
   await page.getByText('已修改', {exact:true}).waitFor()
   const saved = JSON.parse(await readFile(resolve(home, 'electron-user-data/keybindings.json'), 'utf8'))

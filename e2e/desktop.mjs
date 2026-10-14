@@ -314,14 +314,24 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.locator(S.settingsNavSection('appearance')).waitFor({ state: 'visible', timeout: 5_000 })
   await dialog.locator(S.settingsNavSection('models')).click()
+  await dialog.locator('section.models-page').waitFor({ state: 'visible', timeout: 10_000 })
+  // 冷启动时 llm.listConfigurableProviders 要经过刚部署的 profile + 运行时
+  // 插件初始化，15s 可能仍在读；先等供应商区块脱离「正在读取」再断言内容。
   try {
     await window.waitForFunction(
-      ({ DIALOG }) => (document.querySelector(DIALOG)?.textContent ?? '').includes('DeepSeek'),
+      ({ DIALOG }) => {
+        const text = document.querySelector(DIALOG)?.textContent ?? ''
+        return text.includes('DeepSeek') || !text.includes('正在读取')
+      },
       { DIALOG: S.settingsDialog },
-      { timeout: 15_000 },
+      { timeout: 60_000 },
     )
   } catch {
-    throw new Error(`settings models section did not list the DeepSeek provider: ${(await dialog.textContent())?.slice(0, 400)}`)
+    throw new Error(`settings models section did not finish loading: ${(await dialog.textContent())?.slice(0, 400)}`)
+  }
+  const modelsText = await dialog.textContent() ?? ''
+  if (!modelsText.includes('DeepSeek')) {
+    throw new Error(`settings models section did not list the DeepSeek provider: ${modelsText.slice(0, 400)}`)
   }
   await dialog.locator(S.settingsNavSection('writing')).click()
   await dialog.getByRole('radio').first().waitFor({ state: 'visible', timeout: 10_000 })
