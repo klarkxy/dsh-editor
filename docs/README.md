@@ -5,11 +5,11 @@
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。
 - [2026-10-06 重构留档](refactoring/refactoring-plan.md)：当时的阶段方案与验收记录，部分接口已退役；[文档总览](refactoring/README.md)、[实施报告](refactoring/implementation-report.md)、[Phase 0 报告](refactor-phase1-adjusted.md)；历史参考：[早期执行摘要](refactoring-executive-summary.md)、[进度跟踪](refactoring-progress.md)、[Phase 2 索引](phase2-index.md)、[路线图](REFACTORING_ROADMAP.md)、[完整方案](refactoring-proposal.md)、[精简版方案](refactoring-proposal-focused.md)、[架构对比](architecture-comparison.md)、[审查报告](ARCHITECTURE_REVIEW_REPORT.md)、[审查摘要](REVIEW_SUMMARY.md)、[完成报告](refactor-completion-report.md)、[合并指南](MERGE_GUIDE.md)、[合并后验证](phase1-post-merge-validation.md)。当前边界以[架构决策](architecture.md)及包文档为准。
-- [界面设计](ui-design.md)：官方 deepseek-harness Web 视觉适配、主题色归属、组件预览与验证范围（更早的 Kimi Web 适配保留为历史许可证归属）。
+- [界面设计](ui-design.md)：「原稿」设计系统契约——tokens、样式分层、`src/ui/` 组件、主题作用域与验证门禁（上游许可证归属保留）。
 - [UI/UX 实测记录](ui-ux-audit-2026-10.md)：真实前端里的测量结论、修复前后数字与仍未解决的问题。
 - [UI 施工约定](ui-agent-guide.md)：给 Agent 的组件用法、改动边界、防偏移检查与验收证据。
 - [界面行为契约](ui-behavior-contracts.md)：外观改动不得改变的行为、实现位置、现有测试覆盖与缺口。
-- [界面重写前的 UX 审计](redesign/ux-audit.md)：`redesign/ui-v2` 重写的问题清单、流程成本与门禁基线。
+- `redesign/` 重写过程文档（已完成，文首均有状态标注）：[UX 审计](redesign/ux-audit.md)、[视觉方案](redesign/visual-directions.md)、[G1 决策](redesign/decision.md)、[设计系统实施规格](redesign/design-system-spec.md)、[Shell 重写规格](redesign/shell-rewrite-spec.md)、[验收记录](redesign/acceptance.md)。
 - [DSH 0.1.7 升级审计](dsh-0.1.7-upgrade.md)（历史留档，已完成）：兼容性修复、能力重叠与验收范围。
 - [AI 插件](ai-plugins-implementation.md)：当前插件、原生模型设置、退役与历史验证边界。
 - [Fusion 协作实现](fusion-implementation.md)（历史留档，已移除）：旧的配对、任务与候选边界。

@@ -1,315 +1,99 @@
-# DSH Editor UI design
+# 界面设计契约：「原稿」设计系统
 
-## Reference and scope
+自 `redesign/ui-v2` 第 6 阶段起，本文是现行界面设计契约。第 3 阶段的[实施规格](redesign/design-system-spec.md)已完成使命、保留为历史留档；决策记录见 [G1 决策](redesign/decision.md)。
 
-The visual reference is the official **deepseek-ai/deepseek-harness** Web UI at tag
-`dsh-v0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
+## 来源与边界
 
-Reference files: `docs/web-styling.zh.md`, `docs/ui-radius.zh.md`, and
-`packages/client/ui-theme/src/styles/base.css`, `design-platform.css`, and
-`gradient-shadow-text.css`. Adapted upstream portions keep their MIT notice in
-`packages/dsh-editor-shell/resources/third-party/deepseek-harness-MIT.txt`.
-The earlier Kimi Web notice stays at
-`packages/dsh-editor-shell/resources/third-party/kimi-web-MIT.txt`.
-DSH's name, artwork and identity stay DSH's. No upstream font files are copied.
+视觉基准是本仓库自有的「原稿」设计系统（`DESIGN_SYSTEM_ID = 'dsh-yuangao'`），不再适配上游界面。数值的唯一来源是 `packages/dsh-editor-shell/src/design-system/tokens.ts`；本文不另抄一份色表。
 
-React, Electron, Radix, CodeMirror, DSH's connection/runtime services, the model
-router, conversation state, approval checks and file-write contracts are unchanged.
-This is a **visual adapter**, not a replacement frontend or an engine fork.
-UI chrome uses the system font stack. Author typography for manuscript text is unchanged.
+上游归属不变：内置 DSH 固定为 `0.2.0-rc.2`，官方插件制品按其自有界面运行，适配过的上游代码保留 MIT 声明于 `packages/dsh-editor-shell/resources/third-party/deepseek-harness-MIT.txt`；更早的 Kimi Web 声明在同目录 `kimi-web-MIT.txt`。DSH 的名称、美术与身份归 DSH 所有；不复制上游字体文件。
 
-## Appearance ownership
+不变边界：React / Electron / CodeMirror、DSH 的会话/模型/审批/权限权威、稿纸的作者排版（字体、字号、行距、纸宽）都不随本系统改变。本系统只是界面层，不是引擎替换或前端分叉。
 
-`src/design-system/tokens.ts` owns the namespaced semantic tokens.
+## Design tokens
 
-Light surfaces sit one step down from pure white: page `#fafaf9`, surface
-`#f0f0ef`, sunken `#e9e9e8`, sidebar `#f4f4f3`, raised `#ffffff`, text `#1f1f1f`
-and muted `#5f5f5f`. Pure white paper with near-black body text was the
-light-mode glare source, so raised surfaces stay the brightest layer and cards
-read as cards by depth rather than by a pure-white comparison. Dark surfaces run
-the other way: background `#1e1e1e`, surface `#242424`, raised `#2e2e2e`,
-sidebar `#262626`, sunken `#181818` below the surface, text `#dadada` and muted
-`#a3a3a3`. Links, business state and focus use `#4176e6` / `#7aaaff`. Small link
-text uses the darker official step `#4868b2` in light so it stays at or above
-4.5:1. An unset accent defaults to blue.
+`tokens.ts` 导出 `LIGHT_TOKENS` / `DARK_TOKENS`（键集合由检查器强制对称）与 `FOUNDATION_TOKENS`，公开名一律 `--dsh-ui-<key>`。
 
-The chrome surfaces share the sidebar fill: the topbar, the assistant rail and
-the chat header all paint `--dsh-ui-sidebar`, so the window frame reads as one
-neutral band around the paper. The sidebar title row, the editor/pinned header
-and the chat header drop their bottom hairlines so each header blends into its
-own surface. File-tree rows use the 28px compact control height with a 4px
-radius, 13px text, flat hover fill, and muted icons; the current file uses the
-`--dsh-ui-selected` fill (tinted by the saved accent) plus medium weight,
-without the 3px accent bar. Home recent-work rows keep their wrapping block,
-inset hover hairline and accent-bar location cue.
+- **颜色**（完整取值见 tokens.ts）：浅色外框/侧栏 `#E8EBE6`、稿纸 `#F7F8F4`、浮层 `#FFFFFF`、正文 `#1E2420`、次要 `#5C655E`；深色外框 `#151816`、稿纸 `#1C201D`、浮层 `#252A26`、正文 `#DADFD6`、次要 `#97A096`。分割线 `line` / `line-strong` 是低透明中性色。`success` / `warning` / `danger` 各配 `*-soft` 底。
+- **主色固定黛蓝**（G1 决策 3）：浅色 `accent`/`brand` `#2E4F7A` 配白字，深色 `#8FB0DE` 配 `#14181B`；链接、焦点、当前位置选中态（`selected`）用同一色相。自选主题色机制已删除，`localStorage` 旧键保留不读不删。朱色 `marker` / `margin-rule` 只用于当前章节圆点与版心竖线。
+- **阴影**：`elevation-soft` / `elevation-panel` / `elevation-prominent` / `elevation-focus`，每条都以 0.5px 描边开头；`shadow-xs` 恒为 `none`。平面分割线和静态卡片只有 0.5px 中性边、无阴影；菜单为实色（`menu-fill`），不使用模糊（`menu-blur: none`）；模态遮罩是 `scrim` 纯黑半透明，不模糊页面。
+- **基础尺度**：间距 `space-1`…`space-8`（4–32px）；圆角 `radius-xs` 4 … `radius-panel`/`radius-2xl` 20、`radius-full` 999；字号 `text-xs` 12 … `text-2xl` 24、`text-display` 22；字重 400/500/600；动效 `duration-fast` 120 / `base` 180 / `slow` 260ms，`ease-out`；控件高 `control-xs` 28（仅紧凑行）/ `sm` 32 / `md` 36 / `lg` 40 / `xl` 44；z 层级固定 `z-base`/`z-sticky`/`z-rail-overlay`/`z-dropdown`/`z-dialog`/`z-toast`/`z-tooltip`；`header-height` 48（栏内页头）、`content-max` 760、`tap-target` 44。
+- **图表分类色**：`chart-1`…`chart-8`，`chart-1` 即主色，供官方用量图等表面使用。
 
-**The saved accent owns the shell, not only the links.** The primary action,
-the send button, the current location in the sidebar and settings, the user
-bubble, links and focus all follow the saved accent, so a saved accent is
-recognisable from the main interface alone. The primary fill is not taken from
-Radix's accent scale: Radix pairs `accent-9` with `accent-contrast` and that
-pair does not clear 4.5:1 for every saved accent in light mode (teal is
-3.07:1, blue 3.26:1). `ACCENT_SOLIDS` therefore pins a fill, hover and label
-per accent and per mode, and `scripts/check-ui-design.mjs` verifies all fourteen
-pairs. A Radix `Theme` without an `accentColor` keeps the static blue values.
-The accent picker shows each choice as the exact fill that choice produces in
-the current mode, because a swatch that previews a different colour is worse
-than no swatch.
+### 主题作用域
 
-Radius follows the official roles: R4 details, R8 compact, R12 standard controls
-and menu items, R16 code, diff and menus, R20 settings cards and bubbles, R28
-composer, dialogs and main floating panels. Circles and pills set `corner-shape: round`.
-`superellipse(1.5)` applies only inside `@supports`. Planar dividers and resting
-cards use a 0.5px neutral border and no shadow: dividers take `--dsh-ui-line`
-(`rgba(0, 0, 0, 0.08)` light, `rgba(255, 255, 255, 0.08)` dark) and cards take
-the stronger `--dsh-ui-line-strong`, with `.rt-Card`, `.home-card` and
-`.home-entry-card` on one shared surface rule and Radix's `::before`/`::after`
-decoration layers stripped. Settings blocks are the deliberate exception: inside
-the settings dialog they drop the surface entirely — transparent, `border: 0`,
-no radius, no shadow — and a 0.5px `border-top` between consecutive blocks is the
-only thing separating them.
+token 声明输出到 `SCOPE` / `SCOPE_DARK`（tokens.ts）：`html[data-dsh-ui="dsh-yuangao"] :is(.radix-themes, [data-dsh-theme])`（深色加 `.dark` / `[data-dsh-theme="dark"]`）。`.radix-themes` 是 `ShellTheme` 仍在输出的作用域类名——名字沿用自迁移前的根，与依赖无关；官方制品的同名包装元素由此读到同一套变量。`design-system/scope.ts` 的引用计数、卸载恢复先前值、StrictMode 行为不变。
 
-Elevation is reserved for surfaces that float, and every elevation token starts
-with the 0.5px stroke as its first layer (`rgba(0, 0, 0, 0.16)` in light,
-`rgba(255, 255, 255, 0.16)`–`0.2` in dark):
+token 作用域内还带两组别名：
 
-- `elevation-panel` — menu content and the assistant launcher;
-- `elevation-prominent` — dialogs, the command palette and the narrow-window
-  overlay drawers;
-- `elevation-soft` — text fields, textareas, select triggers and the composer;
-- `elevation-focus` — what fields and the composer swap in on focus-within: a
-  0.5px accent stroke plus a 3px accent-soft ring. Other focusable controls use a
-  2px accent outline with a 4px soft ring instead.
+- `RADIX_ALIASES`：`--font-size-*`、`--line-height-*`、`--space-*`、`--radius-*`、`--shadow-*`、`--paper-fill` 等旧梯级名映射到 `--dsh-ui-*`（官方制品与 manuscript 挂件样式仍在读这些名字）。`--gray-*` 调色板变量已随第 6a 阶段删除，不再输出。
+- `compat.ts` 的 `--dsw-*` / `--ds-*` 兼容层：官方制品读到的变量按 `ALIAS_MAP` / `SPECIFIC_MAP` / 前缀规则映射到 `var(--dsh-ui-*)`。当前 **422** 个已扫描变量中 **144** 个映射、**278** 个留在 `DSW_PENDING` 不猜值。清单由 `node scripts/scan-dsw-vars.mjs --check` 保鲜，`check-ui-design` 会复核。
 
-Menus, dialogs and the composer therefore use `border: 0` and an elevation
-shadow rather than a hairline. The single exception to "flat cards stay flat" is
-the home card hover, which lifts 2px with `elevation-prominent` so the target
-under the pointer is unmistakable; every other interactive state is a fill
-change. The official resource rail stays flat too: a left hairline border and
-`box-shadow: none`.
+插件表面的 `--s-*` 别名链在 `packages/dsh-editor-seats/src/tokens.ts`：`--s-*` → `--dsh-ui-*` → 官方 `--dsw-*` → 上游兜底值，使插件在独立 DSH 宿主（没有 `--dsh-ui-*`）下仍完整可读。
 
-Menu content may use the official translucent fill and `blur(40px) saturate(150%)`.
-Modal masks are a black scrim (`rgba(0, 0, 0, 0.48)` light, `0.5` dark) and do
-not blur the page.
+## 样式分层
 
-`src/design-system/styles.ts` owns appearance over the existing Radix and shell
-DOM. `styles.ts` still provides structural contracts (CodeMirror, native titlebar,
-resizers, hidden/inert panels and plugin seats). Edit the relevant adapter rule
-when the appearance changes. Do not append a second skin to the old stylesheet.
+`design-system/layers.ts` 声明五层：`@layer dsh.reset, dsh.tokens, dsh.components, dsh.surfaces, dsh.state`。规则用 `defineStyles(layer, id, css)` 注册（同 id 只留一份），`collectStyles()` 按层序输出，`registerShellRoot` 的 `injectShellStyles`（`src/client/root.tsx`）把结果注入 head。
 
-The active shell installs a reference-counted `html[data-dsh-ui="dsh-official"]`
-scope before paint. This reaches Radix's body portals, whose theme wrappers do
-not necessarily retain `.shell-theme`. Each wrapper's own light/dark class is
-respected, including the two simultaneous themes in the component gallery.
-Unmount restores the prior host marker without undoing a later external change.
+规则归属：
 
-Namespaced spacing, radius, type and motion tokens coexist with Radix's own scales.
-Radix spacing and stacking values are not globally renumbered. Plugins inherit
-tokens, but component-selector rules stop at `[data-dsh-plugin-surface]`.
+- 页面/区域：`src/app/<区域>/*.styles.ts`（home、files、assistant、settings、shell），进 `dsh.surfaces`；
+- 共享 chrome：`src/client/*.styles.ts`（base、chat、dialogs、editor、palette、pinned-pane 等）；
+- 基础组件：`src/ui/*.styles.ts`，进 `dsh.components`；
+- 结构契约（CodeMirror、窗口拖拽、hidden/inert、网格骨架）在 `client/base.styles.ts` 与 `client/editor.styles.ts`。
 
-Official configuration components inherit DSH background, label, button, link
-and border aliases from their local Radix Theme, including portals. Plugin
-selectors remain with their owner. Small descriptions use the readable
-secondary color step. Standard controls use 13px or larger text; compact
-controls and peripheral descriptions may use the 12px scale. The shell's own
-control heights run 32 / 36 / 40 / 44px with a 28px compact step.
+`design-system/styles.ts` 的 `uiRule()` 仍用于需要「限定主题作用域并排除插件面（`[data-dsh-plugin-surface]` 及其后代）」的外观规则。插件样式（各自的 `injectStyles`）不进任何层——未分层声明天然优先于所有层，插件在自己作用域内不会被压过。
 
-Native status tags tint their foreground color into their background. The host
-maps their state aliases to readable colors on that composite surface, including
-small error text and plugin links. Success and error text retain their semantic
-colors in both themes; the business state follows the saved accent. No component
-selector crosses the plugin boundary.
+唯一允许未分层的宿主规则是 `app/shell/shell.styles.ts` 导出的 `pluginBoundaryStyles`：官方 rightbar 面板根是 `pointer-events:none` 的未分层声明，宿主用类+属性选择器（0,2,0）恢复其子树命中，不用 `!important`。它追加在 `collectStyles()` 之后注入；新增同类规则必须写进同一份导出并说明压过哪条插件声明。
 
-Three version-pinned pnpm patches in `patches/` raise the official rc.2 tag and
-plugin-manager text to these same minimum sizes. The plugin-manager patch also
-keeps package names and internal component rows inside an advanced disclosure;
-failed components and component metadata errors expand it, while configuration
-and management errors remain visible.
-The patches cover the plugin manager,
-the primitive source stylesheet, and the primitive tag CSS embedded in the
-prebundled Web frontend. They change the dependencies' own styles rather than
-adding host selectors for generated plugin class names.
-The patches apply during installation and are copied into development and
-packaged runtimes. Development preparation invalidates its cached runtime when
-the dependency lock changes. Review or remove these patches when upgrading DSH;
-do not carry them onto a different upstream version without checking its styles.
+产品样式中的 `!important` 总数为零（shell、manuscript、官方插件、proofread 与私有面板全部覆盖在 `check-ui-design` 的扫描内）。需要压过时用层序或特异性（如 `html ` 前缀），不用 `!important`。
 
-## Surfaces covered
+## 组件库 `src/ui/`
 
-The adapter covers home and recent work, shell chrome, neutral file navigation,
-search, buttons, inputs, selects, badges, manuscript surroundings, assistant prose
-and user bubbles, disclosure and process rows, one composer, send and stop,
-proposal and conflict cards, menus, dialogs, command palette, import and export,
-history, the plugin-page shell, scrollbars, narrow layouts, and reduced-motion
-and forced-colors fallbacks.
+每个组件一个 `.tsx`，同名 `.styles.ts` 进 `dsh.components`；类名 `dsh-<组件>` / `dsh-<组件>__<部件>`；变体用 `data-variant` / `data-size`，状态用 `data-state` / `data-disabled` / `aria-*`。可聚焦组件用 `forwardRef`；图标按钮必填可访问名称；禁用/加载有语义（`disabled`、`aria-disabled`、`aria-busy`）。焦点统一 `:focus-visible` + `outline: 2px solid var(--dsh-ui-accent)`；输入框与 composer 用 `elevation-focus`。
 
-The author's font, size, line-height, line-width and completion settings are not
-reset. Theme changes do not replace or key the editor. Process rows keep their
-real statuses. Proposal approval and stale-file checks are unchanged.
+现有组件（以目录为准）：`Button`、`IconButton`、`SplitButton`、`Input`、`TextArea`、`SearchField`、`Select`、`Switch`、`Checkbox`、`RadioGroup`、`SegmentedControl`、`Slider`、`Field`、`Dialog`、`ConfirmDialog`、`Drawer`、`Menu`/`ContextMenu` 系列、`Popover`、`Tooltip`、`Tabs`、`Disclosure`、`Notice`、`Badge`、`Kbd`、`Spinner`、`ActivityDots`、`EmptyState`、`ListRow`、`Card`、`DataList`、`Progress`、`ScrollArea`、`Typography`、`icons.tsx`；基础设施 `UiRoot`（含 `TooltipProvider` 与 motion `LazyMotion`）、`ime.ts`、`focus-return.ts`、`motion.ts`。接口要点与逐组件约定见[实施规格 §5](redesign/design-system-spec.md)（留档）与各源文件注释。
 
-## Layout and hit targets
+按 `Ctrl+Alt+Shift+D` 打开生产组件 gallery：浅深色并排，不写工作区；不抢占打开的模态、重复按键或 IME 组字，Escape 关闭并返回焦点。
 
-Controls are sized from the token scale, not from their label: the sidebar
-resizer keeps a 1px drawn rule inside a 12px hit strip, search fields are at
-least one control tall, and the palette field is sized like the control it is.
-The topbar shortcut hint is peripheral copy and never renders below the 12px
-scale, including the `Kbd` inside the palette trigger, which is its own element
-rather than the button.
+## 布局模型
 
-Below 760px the topbar gives up its least useful width first: the palette
-shortcut hint is hidden and the trigger keeps a full control width, while the
-work menu keeps a real hit target with a truncated title. An earlier rule forced
-`min-width: 0` on the work menu and left the author with an unreachable menu
-(measured: 3px) at 390px. Where a row is tight, the label yields and the
-controls do not: the sidebar title truncates before the create action and the
-overflow menu shrink.
+工作台外框是 flex 列：`.dsh-topbar` 高 **44px**（固定值，窗口拖动区在其上），其下三列网格。栏内页头（文件栏头、辅助栏页头、编辑器头、设置页头）用 `--dsh-ui-header-height`（48px）。首页 chrome 用 `--topbar-h`（= `header-height`）。
 
-An empty conversation keeps the composer anchored at the bottom like a
-non-empty one. Lifting the composer to the top of an empty rail left a screen
-of dead space under the input and moved the input the moment the first turn
-arrived.
+- 左栏「文件 / 搜索」两个页签；右辅助栏横向页签「搭档 / 资料 / 工具」，官方 rightbar 槽位常驻挂载。
+- 断点：窗口 ≤ **1040px** 时辅助栏让位为覆盖抽屉，≤ **760px** 时文件栏同样抽屉化，两抽屉互斥。判定是 `use-workbench-layout.ts` 的媒体查询，让位/恢复/作者优先的偏好归属规则见 `client/narrow-layout.ts` 与 `model/workbench-layout.ts`（契约 C30–C34）。
+- 稿纸铺满中栏，作者排版不被外观重置；C40 要求主题/字号/设置切换不重建编辑器实例。
 
-The settings dialog keeps one height on every page
-(`min(760px, 100dvh - margins)`): sizing it to each page's content made the
-window jump between tabs, which is worse than slack inside a short page.
+## 字体与排版
 
-The topbar layout toggles are neutral controls, not locations: pressed state is
-a sunken fill (hover fill in dark) with a hairline inset, never the accent
-block, and the sidebar/assistant toggles use the paired panel glyphs rather than
-the brand mark.
+界面文字用 `font-ui` 系统无衬线栈；代码用 `font-mono`；作品名、章节标题、首页作品名与分节符用 `font-display` 楷体栈（`"Kaiti SC", "STKaiti", "KaiTi", "楷体", serif`）。不加载远程字体。稿纸默认排版（系统无衬线、17px/1.9、段距 0.25em、76ch 居中）由 `writing-settings.tsx` 与 manuscript 的 `typography.ts` 共同声明，属作者偏好，不由本系统重置。
 
-## Paper defaults
+## 明暗、动效与可达性
 
-The manuscript surface is author-owned, so these are only the values an author
-gets before touching the writing settings: system sans
-(`"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
-"Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif`), 17px /
-1.9, paragraph spacing 0.4em, paper width `medium` (76ch, centred). The serif
-stack stays selectable; it was the previous default and fell back to SimSun on
-Windows, where Noto Serif CJK is rarely installed. Headings in live preview
-scale 1.6 / 1.35 / 1.15 / 1.05em at weight 600. The shell
-(`writing-settings.tsx`, `writing-config.ts`) and the standalone editor core
-(`dsh-manuscript` `typography.ts`, editor-core `styles.ts`) declare the same
-defaults and their specs assert them.
+明暗两套 token 键集合对称，状态色在两种模式下都配 `*-soft` 底。连续输入时两侧栏与顶栏按 `dim-opacity`（0.55）淡化，鼠标/快捷键/焦点移入即恢复；`prefers-reduced-motion` 下直接切换、无过渡，`forced-colors` 下焦点与选中态保留可见样式（顶栏描边等兜底规则散见各 sheet）。所有被检查的文字/表面组合在两种模式下对比度 ≥ 4.5:1，由 `check-ui-design` 强制。
 
-Plugin surfaces take their primary colour from `--s-brand`, which aliases
-`--dsh-ui-brand` (the saved accent) in `dsh-editor-seats/tokens`. It previously
-aliased the text colour, so every plugin primary button rendered black beside an
-accent-coloured shell.
-
-## Narrow windows and author preference
-
-A window that cannot fit both rails beside the paper is a size event, not a
-layout choice, so `src/client/narrow-layout.ts` settles each rail as a pure
-function over `{ open, yielded, crowded, authored }`:
-
-- `yielded` records the choice the window made on the author's behalf, so
-  widening restores the author's own layout instead of leaving the collapse as
-  the new default;
-- `authored` records that the author opened or closed the rail themselves in the
-  current size class, and the width rule stands down until the class changes.
-  Clearing only `yielded` is not enough: the follow-up settle closes the rail
-  the author just opened, which makes the explicit control a no-op;
-- **The saved layout preference belongs to the author, not to the current window.**
-  `dsh-editor.layout.sidebar-open` / `assistant-open` may only be written by an
-  author action. A width settle records its own choice in `yielded` instead, and
-  the single-manuscript auto-collapse leaves the stored key alone, so neither
-  one can become the author's new default;
-- **"Skip the next write" is the wrong shape for that rule.** A one-shot skip flag
-  is consumed by whichever persist effect runs first, and on mount the settle and
-  the persist effect run in the same commit: the flag was spent writing the value
-  that was already stored, and the yielded value landed in localStorage
-  afterwards. A narrow-window reload permanently rewrote the assistant
-  preference to `false`. The shell instead tracks whether the current `open`
-  value *is* an author choice, and only an author action clears it — no
-  consumption counting, so mount order cannot defeat it;
-- **Every author open/close claims ownership**, including the ones that only exist
-  in a narrow window: the topbar toggles, the official layout actions, the search
-  and reveal paths, the assistant launcher, Escape closing an overlay drawer, and
-  the overlay dismiss buttons. A path that changes a rail without claiming is a
-  bug, because the preference silently stops following the author;
-- switching workspaces reads the stored preference back and hands ownership to
-  the author with it; the manuscript census claims it only when the decision came
-  from the author's explicit single-manuscript choice, not from the auto-collapse.
-
-Below 1040px the assistant becomes an overlay; below 760px the sidebar does
-too, and the two overlays are mutually exclusive by a forced yield that ignores
-`authored`. Nothing here writes to the author's saved preference except an
-explicit toggle.
-
-**Pixel widths are re-asserted after a breakpoint, not trusted to the panel
-library.** react-resizable-panels keeps the assistant panel mounted at 0 width
-when it leaves the grid, and its ResizeObserver rebalances the group by
-percentage before the `collapse()` effect runs. On 1440 to 1024 the assistant's
-stale share pushed the editor below its minimum, which clamped the sidebar from
-260px to 200px, and `preserve-pixel-size` then kept 200px after widening. The
-sync effect in `root-layout.ts` therefore resizes each rail back to the
-author's stored pixel width whenever the grid membership or stored width
-changes (two animation frames, because the observer may run after the first),
-and wraps the imperative calls: a panel that has just remounted throws
-`Layout not found` until it has a layout slot, and an uncaught throw in that
-effect unmounted the whole tree when crossing 760px upward.
-
-A tool that reveals the sidebar (proofread, memory) widens it to at least 336px
-for the current window only; it does not write `sidebar-width`. An author drag
-still persists through `onLayoutChanged` with `isUserInteraction`.
-
-Built-in plugin panels, cards, overview, memory and proofread keep their own
-style owners. This shell pass does not restyle their interiors.
-
-## Live component reference
-
-Press **Ctrl + Alt + Shift + D** in the shell to open the live design-system
-gallery. It uses production Radix controls and production tokens, with light and
-dark examples together. Its controls are examples and never write to a workspace.
-The shortcut does not steal an open modal, repeat keydown or IME composition.
-Escape closes the dialog and returns focus. The gallery is a developer reference,
-not an additional everyday authoring toolbar.
-
-Before changing UI: identify the user action and hierarchy, reuse the existing
-primitive, use the finite token scales, and inspect both themes and keyboard
-states. Do not add a second glass surface. Menu blur stays on the existing menu
-rule. Color is not the only status cue.
-
-## Validation
-
-Dependency-free token, lifecycle and contrast checks:
+## 验证门禁
 
 ```sh
+# 设计契约（21 项，无依赖）：token 对称、对比度、分层顺序、DSW 映射覆盖、
+# 无 !important、无 Radix 调色板变量、无 @radix-ui/themes 引用等
 node --experimental-strip-types scripts/check-ui-design.mjs
-```
 
-Existing workspace build, typecheck and tests remain the integration gates:
+# 增量偏移：与基线提交比对字面量颜色、!important、内联外观、新层外规则
+node --test scripts/check-ui-drift.test.mjs
+node scripts/check-ui-drift.mjs --base <base-sha>
 
-```sh
-pnpm build
-pnpm typecheck
-pnpm test --maxWorkers=2
-```
+# 构建/类型/单元测试
+pnpm build && pnpm typecheck && pnpm test --maxWorkers=2
 
-Real Radix browser fixture (no model request or workspace write):
-
-```sh
+# 浏览器夹具（组件级契约：portal 主题、遮罩、焦点返回、输入节点稳定、
+# 插件隔离、四档宽度、reduced-motion、forced-colors）
 pnpm exec playwright install chromium
 node e2e/ui-design.mjs
+
+# 真实前端不变量（顶栏 44px、稿纸到底、栏/抽屉行为、编辑器身份 C40、
+# 命令面板末项不被裁剪、设置不横向溢出等）
+node e2e/layout-invariants.mjs
 ```
 
-The fixture bundles the production `ShellTheme`, production Radix stylesheet,
-existing structural shell CSS and the adapter through the existing tsdown stack.
-It checks portalled dialog theming, an unblurred modal mask, menu material,
-focus return, stable input nodes on theme changes, disabled send state, plugin
-isolation, viewport overflow and reduced motion. Screenshots are written to
-`.artifacts/ui-design/`. No new package or lockfile is needed.
-
-**The fixture is not the complete app.** It does not validate Electron window
-controls, model streaming or saving and conflict handling. Passing CSS checks
-or reviewing fixture screenshots is not a substitute for the running desktop.
-
-Input methods and display scaling use the existing operating system, Electron
-and CodeMirror capabilities. Preserve existing input guards and verify affected
-behavior when it changes or a problem is reported.
-
-The fixture cannot see a window resize, a saved preference or an overlay that
-replaces the layout. For those, drive the real editor in a real host: see
-[UI/UX 实测记录](ui-ux-audit-2026-10.md) for the harness and the current
-measurements.
+`e2e/ui-design.mjs` 的夹具不是完整应用：不验证 Electron 窗口控件、模型流式、保存与冲突；窗口缩放、保存偏好与覆盖层要用 `layout-invariants` 或桌面实测（见 [UI/UX 实测记录](ui-ux-audit-2026-10.md)）。输入法与显示缩放沿用操作系统、Electron 与 CodeMirror 的既有能力。

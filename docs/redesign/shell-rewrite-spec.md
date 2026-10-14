@@ -1,5 +1,7 @@
 # Shell 界面重写规格（第 4 阶段）
 
+> **状态（第 7 阶段验收时）**：历史留档。重写已完成：工作台外框、首页、文件栏、辅助栏、设置全页、命令面板与对话框、导出预检均按本文实施；HOST_UI 已切到 `src/ui/` 原语（C04）；私有面板迁入原稿系统；`@radix-ui/themes` 依赖与旧样式层已移除。落点细节以现行代码与 [界面设计](../ui-design.md)、[行为契约](../ui-behavior-contracts.md) 为准。
+
 本文是第 4 阶段的实施依据。依据有四份：[G1 决策](decision.md)、[视觉方案](visual-directions.md)「三套方案共用的信息架构」1 至 9 项、[设计系统规格](design-system-spec.md)、[行为契约](../ui-behavior-contracts.md)。B 方向的静态示意在本地 `.dev/redesign/proposals/b-yuangao/`，不入库，只作视觉参考；与本文冲突时以本文为准。
 
 ## 0. 总则

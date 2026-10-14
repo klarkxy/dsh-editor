@@ -1,5 +1,7 @@
 # G1 决策记录（2026-10-12）
 
+> **状态（第 7 阶段验收时）**：本页决定全部落地。B「原稿」已成唯一设计系统（`DESIGN_SYSTEM_ID = 'dsh-yuangao'`，tokens 在 `src/design-system/tokens.ts`）；信息架构 1–9 项全部实施；自选主题色已删（旧存储键保留不读）；连续输入淡化侧栏已生效（`dim-opacity`）。C 方向竖向导航未采用，未进入产品原则。现行契约见 [界面设计](../ui-design.md)。
+
 用户在 `redesign/ui-v2` 第 1 阶段对[视觉方案](visual-directions.md)做出以下决定，后续阶段按此实施。
 
 ## 视觉方向

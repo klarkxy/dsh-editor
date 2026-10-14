@@ -25,16 +25,16 @@
 | C13 | 自动保存与草稿同步只保留最新一次排程 | `editor-core/draft-sync.ts` | `draft-sync.spec.ts` | 无 |
 | C14 | 磁盘冲突提供重新载入与另存冲突副本 | `src/client/editor.tsx` | `e2e/core-loop.mjs`（部分） | 缺少不经界面的冲突处理测试 |
 | C15 | 模型设置写入使用原设置 revision，冲突时阻止旧草稿写入 | `src/client/settings-models-state.ts` | `settings-models-state.spec.ts` | 无 |
-| C16 | 搜索替换逐文件确认，跳过版本或匹配已变化的文件 | `src/search-replace.ts`、`src/client/search-panel.tsx` | `src/search-replace.spec.ts`、`src/client/search-panel.spec.ts` | 无 |
-| C17 | 搭档草稿未发送时，切换作品或会话须确认丢弃 | `src/client/root.tsx` 的 `canLeaveAssistantDraft` | 无 | 缺少测试 |
+| C16 | 搜索替换逐文件确认，跳过版本或匹配已变化的文件 | `src/search-replace.ts`、`src/client/search-panel.tsx` | `src/search-replace.spec.ts`、`src/model/search-panel.spec.ts` | 无 |
+| C17 | 搭档草稿未发送时，切换作品或会话须确认丢弃 | `src/client/root.tsx` 的 `canLeaveAssistantDraft` | `e2e/layout-invariants.mjs`（partner：取消「新对话」保留草稿） | 无 |
 
 ## 输入与焦点
 
 | ID | 契约 | 实现位置 | 覆盖 | 缺口 |
 | --- | --- | --- | --- | --- |
-| C20 | 输入法组字中（`isComposing` 或 `keyCode 229`）按 Enter 不发送、不提交搜索；`Shift+Enter` 换行 | `src/client/shared.ts` 的 `shouldSubmitComposer`、`src/client/ui/ime.ts` | `src/client.spec.ts`、`src/client/ui/ime.spec.ts` | 新 composer 与搜索框须接入同一判断 |
+| C20 | 输入法组字中（`isComposing` 或 `keyCode 229`）按 Enter 不发送、不提交搜索；`Shift+Enter` 换行 | `src/client/shared.ts` 的 `shouldSubmitComposer`、`src/ui/ime.ts`（`client/ui/ime.ts` 为 re-export） | `src/client.spec.ts`、`src/ui/ime.spec.ts` | 无 |
 | C21 | 发送前置条件：已连接、会话存在、无进行中的发送；失败可重试 | `src/client/shared.ts` 的 `canSubmitComposer` | `src/client.spec.ts` | 无 |
-| C22 | 弹窗保留焦点限制、Escape 关闭、关闭后焦点回到触发者或指定目标 | `src/client/ui/focus-return.ts`、`ui/dialog.tsx` | `src/client/ui/focus-return.spec.ts`、`e2e/ui-design.mjs` | 无 |
+| C22 | 弹窗保留焦点限制、Escape 关闭、关闭后焦点回到触发者或指定目标 | `src/ui/focus-return.ts`、`src/ui/dialog.tsx`、`src/client/ui/dialog.tsx`（薄封装） | `src/ui/focus-return.spec.ts`、`e2e/ui-design.mjs`、`e2e/layout-invariants.mjs`（导出对话框 Escape 焦点返回） | 无 |
 | C23 | 全局快捷键不抢占打开中的模态、重复按键与组字 | `src/client/official-shortcuts.ts`、`src/palette-shortcut.ts` | `official-shortcuts.spec.ts`、`src/palette-shortcut.spec.ts` | 无 |
 | C24 | 原生输入框选区按最新可见选区与原生 revision 绑定，只恢复自己的绑定 | `src/client/official-input-selection.ts` | `official-input-selection.spec.ts` | 无 |
 
@@ -42,12 +42,12 @@
 
 | ID | 契约 | 实现位置 | 覆盖 | 缺口 |
 | --- | --- | --- | --- | --- |
-| C30 | 窄窗让位：窗口放不下时收起辅助栏并记住作者原选择，变宽后恢复；作者在当前档位的显式开合优先，换档后规则重新接手；两条覆盖栏互斥 | `src/client/narrow-layout.ts` | `narrow-layout.spec.ts` | 无 |
-| C31 | `dsh-editor.layout.sidebar-open` / `assistant-open` 只能由作者操作写入；宽度结算与单稿件自动收起不写入；窄窗启动与重载不改写偏好 | `src/client/root.tsx`、`root-layout.ts` | 仅 `.dev/frontend-ux-20261007/rails.mjs`、`narrow-boot.mjs`（仓库外） | 缺少仓库内测试 |
-| C32 | 跨断点后两条栏恢复作者记下的像素宽度；面板刚挂回时 `Layout not found` 不击穿渲染树 | `src/client/root-layout.ts` | `root-layout.spec.ts`、`narrow-layout.spec.ts` | 无 |
-| C33 | 工具入口临时把承载工具的栏加宽到 336px，不写入宽度偏好；作者拖动后以新宽度为准。第 4 阶段起工具移到辅助栏「工具」页，本条改为作用于辅助栏 | `src/client/root-layout.ts`（第 4 阶段后为 `src/model/workbench-layout.ts`） | `root-layout.spec.ts`（第 4 阶段后为 `workbench-layout.spec.ts`） | 无 |
-| C34 | 单稿件作品自动收起文件栏，直到作者选择；按作品记住 | `src/client/sidebar-chrome.ts` | `sidebar-chrome.spec.ts` | 无 |
-| C35 | 空对话与非空对话的输入框都锚定在底部 | `src/client/chat.tsx` | 无 | 缺少测试 |
+| C30 | 窄窗让位：窗口放不下时收起辅助栏并记住作者原选择，变宽后恢复；作者在当前档位的显式开合优先，换档后规则重新接手；两条覆盖栏互斥 | `src/client/narrow-layout.ts`、`src/model/workbench-layout.ts` | `src/client/narrow-layout.spec.ts`、`src/model/workbench-layout.spec.ts` | 无 |
+| C31 | `dsh-editor.layout.sidebar-open` / `assistant-open` 只能由作者操作写入；宽度结算与单稿件自动收起不写入；窄窗启动与重载不改写偏好 | `src/model/workbench-layout.ts`、`src/app/shell/use-workbench-layout.ts`、`src/client/root.tsx` | `src/model/workbench-layout.spec.ts`（C31 组：让位不写偏好、作者开合写入、互斥、换档恢复、窄窗重载）、`src/client/narrow-layout.spec.ts` | 无 |
+| C32 | 跨断点后两条栏恢复作者记下的像素宽度；面板刚挂回时 `Layout not found` 不击穿渲染树 | `src/model/workbench-layout.ts`、`src/app/shell/use-workbench-layout.ts` | `src/model/workbench-layout.spec.ts`（C32 组）、`src/client/narrow-layout.spec.ts` | 无 |
+| C33 | 工具入口临时把辅助栏加宽到最小可见宽度 336px（`revealTools`），不写入宽度偏好；作者拖动后以新宽度为准 | `src/model/workbench-layout.ts` | `src/model/workbench-layout.spec.ts` | 无 |
+| C34 | 单稿件作品自动收起文件栏，直到作者选择；按作品记住 | `src/model/workbench-layout.ts`、`src/client/sidebar-chrome.ts` | `src/model/workbench-layout.spec.ts`（单稿件组）、`sidebar-chrome.spec.ts` | 无 |
+| C35 | 空对话与非空对话的输入框都锚定在底部 | `src/client/chat.tsx` | `e2e/layout-invariants.mjs`（composer 锚定容器底部 + 空对话建议填充） | 无 |
 | C36 | （已取消）设置窗口在各页保持同一高度。第 4 阶段起设置改为全页视图，本条随弹窗形态一并取消，见 [Shell 重写规格](redesign/shell-rewrite-spec.md) 第 7 节 | — | — | — |
 | C37 | 设置与插件共用同一全页视图：工作台原位保留但 inert+hidden，编辑器实例不重建；Escape 或「返回写作」关闭并把焦点还给触发者；`layout.selectPanel('plugins')` 打开插件分区、`selectPanel(null)` 关闭，`panelInfo` 发布语义不变 | `src/app/settings/settings-page.tsx` 的 `SettingsWorkspace`、`src/model/settings.ts`、`src/client/root.tsx` | `settings.spec.ts`、`e2e/layout-invariants.mjs`（编辑器身份 + Escape/焦点 + 溢出）、`e2e/settings-ui.mjs`、`e2e/plugins-page.mjs` | 无 |
 
@@ -55,10 +55,10 @@
 
 | ID | 契约 | 实现位置 | 覆盖 | 缺口 |
 | --- | --- | --- | --- | --- |
-| C40 | 切换主题或主题色不更换编辑器 key，不重置草稿、滚动、选区或排版偏好 | `src/client/editor.tsx`、`src/client/theme.tsx` | `e2e/ui-design.mjs`（输入节点稳定） | 缺少稿纸实例级测试 |
+| C40 | 切换主题、字体或打开设置不更换编辑器 key，不重置草稿、滚动、选区或排版偏好 | `src/client/editor.tsx`、`src/client/theme.tsx` | `e2e/ui-design.mjs`（输入节点稳定）、`e2e/layout-invariants.mjs`（identity：主题/设置/字号切换后 sameView+sameDom） | 无 |
 | C41 | 作者的稿纸字体、字号、行距、段距、纸宽与补全设置不被外观改动重置；shell 与 manuscript 默认值一致 | `src/writing-settings.tsx`、`src/writing-config.ts`、`packages/dsh-manuscript/src/client/editor-core/typography.ts` | `src/writing-settings.spec.ts`、`src/writing-config.spec.ts`、`packages/dsh-manuscript/src/client/typography.spec.ts` | 无 |
 | C42 | 主题偏好与宿主 `ui-theme` 双向同步；旧 paper/ink 值迁移 | `src/client/theme.tsx` | `src/theme.spec.ts` | 无 |
-| C43 | 主色填充与其文字、正文与次要文字与所在表面、链接与稿纸之间，在明暗两种模式下对比度都不低于 4.5:1。G1 起主色固定为黛蓝，作者旧的主题色设置不再生效，但存储键保留不删 | `src/design-system/tokens.ts` | `scripts/check-ui-design.mjs`（重写后覆盖新 token） | 缺少测试：旧主题色存储键不被删除 |
+| C43 | 主色填充与其文字、正文与次要文字与所在表面、链接与稿纸之间，在明暗两种模式下对比度都不低于 4.5:1。G1 起主色固定为黛蓝，作者旧的主题色设置不再生效，但存储键保留不删 | `src/design-system/tokens.ts` | `scripts/check-ui-design.mjs`（规格对比度组合明暗各算一遍）、`src/theme.spec.ts`（旧主题色键不删） | 无 |
 | C44 | 设计作用域标记引用计数安装，卸载时恢复先前值，StrictMode 下正确 | `src/design-system/scope.ts` | `scripts/check-ui-design.mjs`、`design-system.spec.ts` | 无 |
 | C45 | `dsh-manuscript` 在没有 shell 宿主的独立 Web 模式下仍有完整的降级 token 与控件 | `packages/dsh-manuscript/src/client/themes.tsx`、`packages/dsh-editor-seats/src/tokens.ts` | `packages/dsh-manuscript/src/client/themes.spec.ts`、`e2e/ai-plugins-standalone.mjs` | 无 |
 
@@ -69,5 +69,5 @@
 | C50 | 加载、失败、空、禁用、成功都有真实状态；不虚构进度或“已写入” | 各界面 | 分散在各 spec | 新界面逐个补状态夹具 |
 | C51 | 错误、冲突、待确认的信息不只靠颜色，不被折叠隐藏 | 各界面 | 无 | 新组件库的 Notice 与提案卡补测试 |
 | C52 | 可选 AI 能力加载完成前不挂载对话与补全；失败显示可重试的错误态 | `src/client/capabilities.ts` | `capabilities.spec.ts` | 无 |
-| C53 | 图标按钮都有可访问名称；禁用与加载状态在语义上不可操作 | 各界面 | `.dev` 实测脚本（仓库外） | 新组件库补测试 |
-| C54 | 减少动态效果与 forced-colors 下状态仍可辨认 | `src/client/ui/motion.ts`、样式 | `e2e/ui-design.mjs`（reduced motion） | 缺少 forced-colors 检查 |
+| C53 | 图标按钮都有可访问名称；禁用与加载状态在语义上不可操作 | `src/ui/icon-button.tsx`（必填 `label`）等 | `src/ui/components.spec.tsx`、`e2e/settings-ui.mjs`（axe）、`e2e/ui-design.mjs` | 无 |
+| C54 | 减少动态效果与 forced-colors 下状态仍可辨认 | `src/ui/motion.ts`、各 sheet 的 `@media` 兜底 | `e2e/ui-design.mjs`（reduced motion + forced-colors 焦点/选中可见） | 无 |

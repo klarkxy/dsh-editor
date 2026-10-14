@@ -6,7 +6,7 @@
 
 - 实现或修改产品行为前，先阅读 [产品原则](docs/product-principles.md) 和 [架构决策](docs/architecture.md)，再读修改目录下的指南。纯文档、注释或局部文案任务按涉及内容阅读相关指南；涉及产品或信任边界时仍须阅读对应原则与决策。
 - **凡涉及可见界面，包括插件面板、设置、消息卡片，先读 [UI 施工约定](docs/ui-agent-guide.md) 和 [设计说明](docs/ui-design.md)。** 不能只凭“做得更现代”重新设计。
-- 本仓库固定 React / Electron / Radix / CodeMirror。普通功能任务不迁移框架、不新增第二套 UI 库或主题系统。
+- 本仓库固定 React / Electron / CodeMirror，交互原语用 Radix primitives；界面样式走自有「原稿」设计系统（`@radix-ui/themes` 已移除）。普通功能任务不迁移框架、不新增第二套 UI 库或主题系统。
 
 ## 不随功能任务改变的边界
 
