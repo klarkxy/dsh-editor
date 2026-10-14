@@ -51,7 +51,7 @@ import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
-import { ActivityDots, Button as HostButton, Dialog as HostDialog, Input as HostInput, TextArea as HostTextArea, ShellUiProvider, radixThemesStyles, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, Button as HostButton, Dialog as HostDialog, Input as HostInput, TextArea as HostTextArea, ShellUiProvider, useChromeMotion } from './ui/index.ts'
 import { windowBridge } from '../model/window-controls.ts'
 import { replaceOutcomeForIdentity, searchIdentity, type ReplaceOutcome, type SearchReplaceReport, type SearchScope } from '../model/search-panel.ts'
 import { PinnedPane } from './pinned-pane.tsx'
@@ -937,7 +937,6 @@ function injectShellStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   /* design-system-spec §4：旧样式整体进 legacy 层（保持原有先后次序），
      token 定义进 dsh.tokens 层，层序声明由 collectStyles 统一输出。 */
-  defineStyles('legacy', 'radix-themes', radixThemesStyles)
   defineStyles('legacy', 'shell-legacy', redesignedStyles)
   defineStyles('legacy', 'yuangao-components', componentStyles)
   defineStyles('legacy', 'yuangao-responsive', responsiveStyles)

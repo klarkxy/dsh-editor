@@ -1,21 +1,16 @@
-import radixThemesCss from '@radix-ui/themes/styles.css'
 import { useLayoutEffect, type ReactNode } from 'react'
 import type { ThemeValue } from '../../model/theme.ts'
-import { rewriteRadixThemesCss } from '../../model/theme-root.ts'
 import { mountDesignScope } from '../../design-system/scope.ts'
 import { DesignSystemGallery } from '../../design-system/gallery.tsx'
 import { UiRoot } from '../../ui/root.tsx'
 
-export const radixThemesStyles = rewriteRadixThemesCss(radixThemesCss)
-
 export const SHELL_GRAY_COLOR = 'gray'
 
 /*
- * 迁移期 ShellTheme：旧 Radix <Theme> 渲染出的 DOM（.radix-themes + data-*）
- * 由这里的普通 div 原样输出——注入表里的 accent/gray 变量与 .rt-
- * 选择器仍以它为作用域，直到 Phase 6a 的变量退役与 legacy 层折叠完成。
- * accentColor 固定 indigo（design-system-spec §1）；样式统一由
- * registerShellRoot 的 injectShellStyles 注入 head。
+ * ShellTheme 输出旧 Radix <Theme> 的 DOM（.radix-themes + data-*）作为
+ * 主题作用域：tokens.ts 的 TOKEN_SCOPE 与 legacy 层里尚未折叠的
+ * `.radix-themes` 选择器仍以它为根，直到 6a-3 的层折叠完成。
+ * 样式统一由 registerShellRoot 的 injectShellStyles 注入 head。
  */
 export function ShellTheme(props: {
   appearance: ThemeValue

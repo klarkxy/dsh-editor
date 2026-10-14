@@ -1,13 +1,17 @@
-import radixThemesCss from '@radix-ui/themes/styles.css'
+import { dshUiStandaloneAliases, scopedFallbackTokens } from 'dsh-editor-seats/tokens'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
-export function rewriteRadixThemesCss(css: string): string {
-  return css
-    .replaceAll(':root, .light, .light-theme {', '.radix-themes, .light, .light-theme {')
-    .replaceAll(':root {', '.radix-themes {')
-}
-
-export const radixThemesStyles = rewriteRadixThemesCss(radixThemesCss)
+/*
+ * 独立宿主（不在 .radix-themes 内）渲染自己的 .radix-themes 包装层，
+ * 那份作用域让 seats 的 :root 兜底失效，所以由这里的打包样式在同一
+ * 作用域上补齐：Radix 命名的字阶/色板字面量，加上把 --dsh-ui-* 直读
+ * 桥到 --dsw-* 与这些字面量的别名表（editor-core 已改读 原稿 token）。
+ */
+const THEME_ATTR = 'data-dsh-manuscript-theme'
+const THEME_SCOPE = `.radix-themes[${THEME_ATTR}]`
+export const manuscriptStandaloneStyles = `${scopedFallbackTokens(THEME_SCOPE, `${THEME_SCOPE}.dark`)}
+${THEME_SCOPE} {
+${dshUiStandaloneAliases}}`
 
 export function ensureManuscriptThemes(): void {
   if (typeof document === 'undefined') return
@@ -15,7 +19,7 @@ export function ensureManuscriptThemes(): void {
   const style = document.createElement('style')
   style.setAttribute('data-plugin', 'dsh-manuscript')
   style.setAttribute('data-dsh-manuscript-themes', '')
-  style.textContent = radixThemesStyles
+  style.textContent = manuscriptStandaloneStyles
   document.head.appendChild(style)
 }
 
@@ -58,18 +62,13 @@ export function ManuscriptTheme(props: { children?: ReactNode }) {
     </div>
   )
   if (!needsTheme) return body
-  /* 与 Radix <Theme> 渲染出的 DOM 相同：注入表里的 accent/gray 变量与
-     .rt- 选择器以它为作用域，直到 6a 的变量退役完成。 */
+  /* 与旧 Radix <Theme> 渲染出的 DOM 结构相同；`.radix-themes` 仍是 tokens
+     与 seats 兜底的作用域标记，`data-dsh-manuscript-theme` 锚定上面的
+     standalone token 表。 */
   return (
     <div
       className={`radix-themes ${appearance} ${appearance}-theme`}
-      data-is-root-theme="true"
-      data-accent-color="indigo"
-      data-gray-color="auto"
-      data-has-background="true"
-      data-panel-background="solid"
-      data-radius="medium"
-      data-scaling="100%"
+      {...{ [THEME_ATTR]: true }}
       style={{ display: 'contents' }}>
       {body}
     </div>

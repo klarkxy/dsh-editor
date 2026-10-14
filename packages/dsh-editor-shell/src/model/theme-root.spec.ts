@@ -1,35 +1,23 @@
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { rewriteRadixThemesCss } from './theme-root.ts'
-import { SHELL_GRAY_COLOR, radixThemesStyles } from '../client/ui/theme-root.tsx'
+import { tokenStyles } from '../design-system/tokens.ts'
+import { SHELL_GRAY_COLOR } from '../client/ui/theme-root.tsx'
 
-const require = createRequire(import.meta.url)
-const publishedCss = readFileSync(require.resolve('@radix-ui/themes/styles.css'), 'utf8')
-
-describe('radix themes css rewrite', () => {
-  it('scopes :root token blocks to .radix-themes without dropping component rules', () => {
-    const result = radixThemesStyles || rewriteRadixThemesCss(publishedCss)
-    const lines = result.split(/\r?\n/)
-    expect(lines.some((line) => line.startsWith(':root,') || line.startsWith(':root {'))).toBe(false)
-    expect(result).toContain('.rt-BaseButton')
-    expect(result).toContain(":root:where(:has(.radix-themes[data-is-root-theme='true']")
-  })
-
-  it('rewrites only the standalone :root token selectors', () => {
-    const rewritten = rewriteRadixThemesCss([
-      ':root, .light, .light-theme { --gray-1: #fcfcfc; }',
-      ':root { --gray-contrast: white; }',
-      ".rt-BaseButton { display: inline-flex; }",
-      ":root:where(:has(.radix-themes[data-is-root-theme='true']:where(.light, .light-theme))) { color-scheme: light; }",
-    ].join('\n'))
-    const lines = rewritten.split('\n')
-    expect(lines.some((line) => line.startsWith(':root,') || line.startsWith(':root {'))).toBe(false)
-    expect(rewritten).toContain('.rt-BaseButton')
-    expect(rewritten).toContain(':root:where(:has(.radix-themes[data-is-root-theme=')
-  })
-
+describe('shell theme scope', () => {
   it('anchors neutrals on the 原稿 gray ramp for the migration period', () => {
     expect(SHELL_GRAY_COLOR).toBe('gray')
+  })
+
+  it('keeps the metric ladder the retired theme stylesheet supplied', () => {
+    /* 旧主题样式表退役后，作用域内仍引用度量别名的规则从这些别名取值；
+       像素值对齐旧梯级（scaling 100%）。 */
+    for (const decl of [
+      '--space-5: var(--dsh-ui-space-6)',
+      '--space-8: 48px',
+      '--font-size-3: 16px',
+      '--font-weight-medium: var(--dsh-ui-weight-medium)',
+      '--line-height-4: 26px',
+      '--accent-9: var(--dsh-ui-accent)',
+      '--gray-12: #1E2420',
+    ]) expect(tokenStyles).toContain(decl)
   })
 })

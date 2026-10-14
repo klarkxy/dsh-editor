@@ -34,18 +34,18 @@ export const chatMessageStyles = `
   flex: 0 0 14px;
   width: 14px;
   height: 14px;
-  color: var(--gray-9);
+  color: var(--dsh-ui-faint);
 }
 .radix-themes .chat-step-status,
 .radix-themes .chat-step-error-dot {
   width: 6px;
   height: 6px;
   border-radius: var(--dsh-ui-radius-full);
-  background: var(--gray-8);
+  background: var(--dsh-ui-faint);
 }
-.radix-themes .chat-step-status.is-ok { background: var(--green-9); }
+.radix-themes .chat-step-status.is-ok { background: var(--dsh-ui-success); }
 .radix-themes .chat-step-status.is-error,
-.radix-themes .chat-step-error-dot { background: var(--red-9); }
+.radix-themes .chat-step-error-dot { background: var(--dsh-ui-danger); }
 .radix-themes .chat-step-mark .activity-dots { margin-inline-end: 0; }
 .radix-themes .chat-step-label { flex: none; }
 .radix-themes .chat-step-dot {
@@ -53,7 +53,7 @@ export const chatMessageStyles = `
   width: 2px;
   height: 2px;
   border-radius: var(--radius-1);
-  background: var(--gray-8);
+  background: var(--dsh-ui-faint);
 }
 .radix-themes .chat-step-preview {
   min-width: 0;
@@ -68,7 +68,7 @@ export const chatMessageStyles = `
   margin: var(--space-1) 0 0 calc(14px + var(--space-2));
   overflow-wrap: anywhere;
   word-break: break-word;
-  color: var(--gray-11);
+  color: var(--dsh-ui-muted);
   font-size: var(--font-size-1);
   line-height: var(--line-height-1);
   white-space: pre-wrap;
@@ -81,15 +81,15 @@ export const chatMessageStyles = `
   margin: var(--space-1) 0 0;
   max-width: 100%;
   padding: var(--space-3);
-  border: 1px solid var(--gray-a5);
+  border: 1px solid var(--dsh-ui-line);
   border-radius: var(--radius-4);
-  background: var(--gray-2);
+  background: var(--dsh-ui-bg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
   font-family: var(--code-font-family);
   font-size: var(--font-size-1);
-  color: var(--gray-12);
+  color: var(--dsh-ui-text);
 }
 :is(.shell, .dsh-drawer) .chat-markdown > :first-child { margin-top: 0; }
 :is(.shell, .dsh-drawer) .chat-markdown > :last-child { margin-bottom: 0; }
@@ -104,14 +104,14 @@ export const chatMessageStyles = `
 :is(.shell, .dsh-drawer) .chat-markdown blockquote {
   margin: 0 0 var(--space-2);
   padding-left: var(--space-3);
-  border-left: 2px solid var(--gray-a5);
-  color: var(--gray-11);
+  border-left: 2px solid var(--dsh-ui-line);
+  color: var(--dsh-ui-muted);
 }
-:is(.shell, .dsh-drawer) .chat-markdown hr { margin: var(--space-3) 0; border: 0; border-top: 1px solid var(--gray-a5); }
+:is(.shell, .dsh-drawer) .chat-markdown hr { margin: var(--space-3) 0; border: 0; border-top: 1px solid var(--dsh-ui-line); }
 :is(.shell, .dsh-drawer) .chat-markdown code {
   padding: 0 var(--space-1);
   border-radius: var(--radius-2);
-  background: var(--gray-3);
+  background: var(--dsh-ui-surface);
   font-family: var(--code-font-family);
 }
 :is(.shell, .dsh-drawer) .chat-markdown pre {
@@ -120,14 +120,14 @@ export const chatMessageStyles = `
   margin: 0 0 var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-2);
-  background: var(--gray-2);
+  background: var(--dsh-ui-bg);
   white-space: pre-wrap;
   max-width: 100%;
   font-family: var(--code-font-family);
 }
 :is(.shell, .dsh-drawer) .chat-markdown pre code { padding: 0; background: transparent; }
-:is(.shell, .dsh-drawer) .chat-markdown a { color: var(--accent-11); }
+:is(.shell, .dsh-drawer) .chat-markdown a { color: var(--dsh-ui-accent); }
 :is(.shell, .dsh-drawer) .chat-markdown table { border-collapse: collapse; width: 100%; margin: 0 0 var(--space-2); }
-:is(.shell, .dsh-drawer) .chat-markdown th, :is(.shell, .dsh-drawer) .chat-markdown td { border: 1px solid var(--gray-5); padding: var(--space-1) var(--space-2); }
+:is(.shell, .dsh-drawer) .chat-markdown th, :is(.shell, .dsh-drawer) .chat-markdown td { border: 1px solid var(--dsh-ui-sunken); padding: var(--space-1) var(--space-2); }
 
 `

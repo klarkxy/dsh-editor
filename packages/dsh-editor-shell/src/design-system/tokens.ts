@@ -39,6 +39,10 @@ export const LIGHT_TOKENS = {
   warning: '#8A5A12', 'warning-soft': '#F6EEDC',
   danger: '#A8322A', 'danger-soft': '#F7E4E1',
   scrim: 'rgba(16, 20, 18, 0.48)',
+  /* 用量图分类色：哑化的八色序列，chart-1 即主题色，其余按可区分度取
+     灰调的彩度值。 */
+  'chart-1': '#2E4F7A', 'chart-2': '#3E7A66', 'chart-3': '#8A5A12', 'chart-4': '#A8322A',
+  'chart-5': '#6B5B95', 'chart-6': '#2F6B3F', 'chart-7': '#3E7CA6', 'chart-8': '#96592B',
   'menu-fill': '#FFFFFF', 'menu-blur': 'none',
   'switch-thumb': '#FFFFFF',
   'elevation-soft': '0 0 0 0.5px rgba(30, 36, 32, 0.16)',
@@ -69,6 +73,8 @@ export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
   warning: '#E0B060', 'warning-soft': '#332A1A',
   danger: '#F08A7E', 'danger-soft': '#3A1F1C',
   scrim: 'rgba(0, 0, 0, 0.55)',
+  'chart-1': '#8FB0DE', 'chart-2': '#6FBCA2', 'chart-3': '#E0B060', 'chart-4': '#F08A7E',
+  'chart-5': '#B0A8D8', 'chart-6': '#7CC78F', 'chart-7': '#82AED4', 'chart-8': '#D8955F',
   'menu-fill': '#252A26', 'menu-blur': 'none',
   'switch-thumb': '#E6EAE3',
   'elevation-soft': '0 0 0 0.5px rgba(218, 223, 214, 0.18)',
@@ -140,8 +146,35 @@ const DARK_GRAY = `
 const RADIX_ALIASES = `
   --default-font-family: var(--dsh-ui-font-ui);
   --code-font-family: var(--dsh-ui-font-mono);
+  /* 字号/行高/间距沿用旧 Radix 梯级的像素值（scaling 固定 100%），
+     与原稿字阶一致的走 --dsh-ui-*，无对应档的保留字面量直到 6a-3。 */
   --font-size-1: var(--dsh-ui-text-xs);
   --font-size-2: var(--dsh-ui-text-base);
+  --font-size-3: 16px; --font-size-4: 18px; --font-size-5: var(--dsh-ui-text-xl);
+  --font-size-6: var(--dsh-ui-text-2xl); --font-size-7: 28px;
+  --font-size-8: 35px; --font-size-9: 60px;
+  --font-weight-regular: var(--dsh-ui-weight-regular);
+  --font-weight-medium: var(--dsh-ui-weight-medium);
+  --font-weight-bold: 700;
+  --line-height-1: 16px; --line-height-2: 20px; --line-height-3: 24px;
+  --line-height-4: 26px; --line-height-5: 28px; --line-height-6: 30px;
+  --line-height-7: 36px; --line-height-8: 40px; --line-height-9: 60px;
+  --space-1: var(--dsh-ui-space-1); --space-2: var(--dsh-ui-space-2);
+  --space-3: var(--dsh-ui-space-3); --space-4: var(--dsh-ui-space-4);
+  --space-5: var(--dsh-ui-space-6); --space-6: var(--dsh-ui-space-8);
+  --space-7: 40px; --space-8: 48px; --space-9: 64px;
+  /* 作用域内仍读旧色名的插件/挂件桥到原稿语义，而不是旧 indigo。 */
+  --accent-8: var(--dsh-ui-accent-border); --accent-9: var(--dsh-ui-accent);
+  --accent-10: var(--dsh-ui-accent-hover); --accent-11: var(--dsh-ui-accent);
+  --accent-a3: var(--dsh-ui-accent-soft); --accent-a4: var(--dsh-ui-accent-soft);
+  --accent-a8: var(--dsh-ui-accent-border); --accent-contrast: var(--dsh-ui-on-accent);
+  --red-9: var(--dsh-ui-danger); --red-11: var(--dsh-ui-danger);
+  --red-a3: var(--dsh-ui-danger-soft); --red-a5: var(--dsh-ui-danger-soft);
+  --red-a6: var(--dsh-ui-danger-soft);
+  --green-9: var(--dsh-ui-success); --green-11: var(--dsh-ui-success);
+  --green-a3: var(--dsh-ui-success-soft);
+  --amber-9: var(--dsh-ui-warning); --amber-a4: var(--dsh-ui-warning-soft);
+  --amber-a6: var(--dsh-ui-warning-soft); --amber-a8: var(--dsh-ui-warning-soft);
   --color-background: var(--dsh-ui-bg);
   --color-overlay: var(--dsh-ui-scrim);
   --backdrop-filter-panel: none;

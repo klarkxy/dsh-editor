@@ -55,7 +55,7 @@ export const paperThemeSpec = {
     height: '100%',
     width: '100%',
     backgroundColor: 'transparent',
-    color: 'var(--gray-12)',
+    color: 'var(--dsh-ui-text)',
     fontWeight: '400',
     fontSize: 'var(--paper-font-size)',
     lineHeight: 'var(--paper-line-height, var(--leading-body, 1.9))',
@@ -73,7 +73,7 @@ export const paperThemeSpec = {
   },
   '.cm-content': {
     padding: `calc(var(--paper-pad-block, ${PAPER_PAD_BLOCK}) + var(--paper-header-space, 0px)) var(--paper-pad-inline, ${PAPER_PAD_INLINE}) 32px`,
-    caretColor: 'var(--accent-9)',
+    caretColor: 'var(--dsh-ui-accent)',
     boxSizing: 'border-box',
     width: '100%',
     maxWidth: 'var(--paper-max-width, none)',
@@ -100,18 +100,18 @@ export const paperThemeSpec = {
 export const paperTheme: Extension = EditorView.theme({
   ...paperThemeSpec,
   /* Non-current paragraphs stay secondary text only while typing.
-     Blur removes .cm-focused, so those lines fall back to --gray-12.
+     Blur removes .cm-focused, so those lines fall back to --dsh-ui-text.
      Color, not opacity: a line alpha would also fade links and quotes. */
   '&.cm-focused .cm-paper-dim': {
-    color: 'var(--gray-11)',
+    color: 'var(--dsh-ui-muted)',
   },
   '&.cm-focused': { outline: 'none' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent-9)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--dsh-ui-accent)' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'var(--accent-a4)',
+    backgroundColor: 'var(--dsh-ui-selected)',
   },
   '.cm-placeholder': {
-    color: 'var(--gray-10)',
+    color: 'var(--dsh-ui-muted)',
   },
   /* Live-preview decorations. */
   /* 一级标题即章节标题（§4 修订）：display 字、26px、常规字重、居中，
@@ -124,7 +124,7 @@ export const paperTheme: Extension = EditorView.theme({
     textAlign: 'center',
     textIndent: '0',
     paddingBottom: '0.4em',
-    borderBottom: '1px solid var(--dsh-ui-line, var(--gray-6))',
+    borderBottom: '1px solid var(--dsh-ui-line)',
   },
   '.cm-lp-h2': { fontSize: 'var(--paper-h2-size, 1.35em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.55' },
   '.cm-lp-h3': { fontSize: 'var(--paper-h3-size, 1.15em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.6' },
@@ -135,31 +135,31 @@ export const paperTheme: Extension = EditorView.theme({
   '.cm-lp-code': {
     fontFamily: 'var(--code-font-family)',
     fontSize: '0.88em',
-    backgroundColor: 'var(--gray-a3)',
+    backgroundColor: 'var(--dsh-ui-hover)',
     borderRadius: '3px',
     padding: '0 3px',
   },
-  '.cm-lp-mark': { color: 'var(--gray-10)' },
+  '.cm-lp-mark': { color: 'var(--dsh-ui-muted)' },
   '.cm-lp-quote': {
-    borderLeft: '3px solid var(--gray-6)',
+    borderLeft: '3px solid var(--dsh-ui-line-strong)',
     paddingLeft: '12px',
     fontStyle: 'italic',
-    color: 'var(--gray-11)',
+    color: 'var(--dsh-ui-muted)',
   },
-  '.cm-lp-hr-line': { borderTop: '1px solid var(--gray-6)' },
+  '.cm-lp-hr-line': { borderTop: '1px solid var(--dsh-ui-line-strong)' },
   '.cm-lp-hr': { color: 'transparent' },
   '.cm-lp-link': {
-    color: 'var(--accent-11)',
+    color: 'var(--dsh-ui-accent)',
     textDecoration: 'underline',
     textUnderlineOffset: '3px',
     textDecorationThickness: 'from-font',
   },
   '.cm-lp-bullet': {
-    color: 'var(--gray-10)',
+    color: 'var(--dsh-ui-muted)',
     marginInlineEnd: '0.15em',
   },
   '.cm-lp-task': {
-    accentColor: 'var(--accent-9)',
+    accentColor: 'var(--dsh-ui-accent)',
     cursor: 'pointer',
     verticalAlign: 'middle',
     marginInlineEnd: '0.15em',
@@ -167,7 +167,7 @@ export const paperTheme: Extension = EditorView.theme({
     height: '0.95em',
   },
   /* FIM ghost inline widget. */
-  '.cm-ghost': { color: 'var(--gray-9)', whiteSpace: 'pre-wrap' },
+  '.cm-ghost': { color: 'var(--dsh-ui-faint)', whiteSpace: 'pre-wrap' },
   /* 正文段落：firstLineIndent 偏好映射为 --paper-first-indent（0 或 2em）。 */
   '.cm-lp-para': { textIndent: 'var(--paper-first-indent, 0)' },
   /* 分节符 / 中文小节号：居中、上下留白；不改文本。
@@ -186,7 +186,7 @@ export const paperTheme: Extension = EditorView.theme({
   '.cm-lp-section--symbol': {
     fontFamily: 'var(--dsh-ui-font-ui, var(--paper-font-family))',
     fontVariantEmoji: 'text',
-    color: 'var(--s-muted, var(--gray-11))',
+    color: 'var(--s-muted, var(--dsh-ui-muted))',
   },
   /* 段间空行（§4）：两个非空行之间的空行收为段距高；光标行恢复原行高。 */
   '.cm-lp-blank': {
@@ -200,8 +200,8 @@ export const paperTheme: Extension = EditorView.theme({
 /* Base syntax colors for markdown tokens the live preview leaves alone
  * (links, raw marks while editing). All token-driven. */
 const paperHighlightStyle = HighlightStyle.define([
-  { tag: [tags.processingInstruction, tags.punctuation, tags.contentSeparator], color: 'var(--gray-10)' },
-  { tag: tags.link, color: 'var(--accent-11)' },
+  { tag: [tags.processingInstruction, tags.punctuation, tags.contentSeparator], color: 'var(--dsh-ui-muted)' },
+  { tag: tags.link, color: 'var(--dsh-ui-accent)' },
   { tag: tags.monospace, fontFamily: 'var(--code-font-family)' },
 ])
 

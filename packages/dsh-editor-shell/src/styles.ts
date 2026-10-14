@@ -29,8 +29,8 @@ export const baseStyles = `
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
-  background: var(--gray-2);
-  color: var(--gray-12);
+  background: var(--dsh-ui-bg);
+  color: var(--dsh-ui-text);
   font: 400 var(--font-size-2)/1.45 var(--default-font-family);
   overflow: hidden;
 }
@@ -48,15 +48,15 @@ export const baseStyles = `
 @keyframes shell-success-draw { from { stroke-dashoffset: 42; } }
 .shell textarea:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)) { resize: none; outline: none; }
 .shell :focus:not(:where([data-dsh-plugin-surface] *)) { outline: none; }
-.shell :focus-visible:not([class^="rt-"]):not([class*=" rt-"]) { box-shadow: 0 0 0 2px var(--accent-10); }
+.shell :focus-visible:not([class^="rt-"]):not([class*=" rt-"]) { outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; }
 .shell button:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)):disabled { cursor: not-allowed; opacity: .55; }
 .radix-themes .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-.radix-themes .muted { color: var(--gray-11); }
-.radix-themes .warning { color: var(--red-9); }
+.radix-themes .muted { color: var(--dsh-ui-muted); }
+.radix-themes .warning { color: var(--dsh-ui-danger); }
 .shell ::-webkit-scrollbar { width: 8px; height: 8px; }
 .shell ::-webkit-scrollbar-track { background: transparent; }
-.shell ::-webkit-scrollbar-thumb { background: var(--gray-a6); border-radius: var(--radius-2); }
-.shell ::-webkit-scrollbar-thumb:hover { background: var(--gray-a8); }
+.shell ::-webkit-scrollbar-thumb { background: var(--dsh-ui-line-strong); border-radius: var(--radius-2); }
+.shell ::-webkit-scrollbar-thumb:hover { background: var(--dsh-ui-faint); }
 `
 
 export const componentStyles = `
@@ -72,8 +72,8 @@ export const componentStyles = `
   min-width: 0;
   padding-left: var(--space-3);
   padding-right: 0;
-  border-bottom: 1px solid var(--gray-a5);
-  background: var(--gray-2);
+  border-bottom: 1px solid var(--dsh-ui-line);
+  background: var(--dsh-ui-bg);
   -webkit-app-region: drag;
 }
 .shell > .chrome button, .shell > .chrome summary, .shell > .chrome input, .shell > .chrome a, .shell > .chrome .select { -webkit-app-region: no-drag; }
@@ -133,8 +133,8 @@ export const componentStyles = `
   align-self: center;
   height: var(--control-h);
 }
-.shell .window-controls button:hover { background: var(--gray-a3); }
-.shell .window-controls button.window-close:hover { background: var(--red-9); color: var(--accent-contrast); }
+.shell .window-controls button:hover { background: var(--dsh-ui-hover); }
+.shell .window-controls button.window-close:hover { background: var(--dsh-ui-danger); color: var(--dsh-ui-on-accent); }
 .shell-extensions-dock {
   display: flex;
   align-items: center;
@@ -165,18 +165,18 @@ export const componentStyles = `
   flex: 1 1 auto;
 }
 .radix-themes .path-fallback { min-width: 0; }
-.radix-themes .icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border: 0; border-radius: var(--radius-3); background: transparent; cursor: pointer; color: var(--gray-10); transition: transform 120ms ${EASE}, background-color 150ms ${EASE}, color 150ms ${EASE}; }
-.radix-themes .icon-button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.radix-themes .icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border: 0; border-radius: var(--radius-3); background: transparent; cursor: pointer; color: var(--dsh-ui-muted); transition: transform 120ms ${EASE}, background-color 150ms ${EASE}, color 150ms ${EASE}; }
+.radix-themes .icon-button:hover { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); }
 .radix-themes .icon-button:active { transform: scale(.9); }
 
 /* Sidebar/tree/search rules moved to src/app/files/files-rail.styles.ts (§3). */
 ${historyStyles}
 :is(.shell, .dsh-drawer) .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; }
-:is(.shell, .dsh-drawer) .pinned-header { border-bottom: 1px solid var(--gray-a5); }
+:is(.shell, .dsh-drawer) .pinned-header { border-bottom: 1px solid var(--dsh-ui-line); }
 :is(.shell, .dsh-drawer) .pinned-body { min-height: 0; flex: 1 1 auto; }
 :is(.shell, .dsh-drawer) .pinned-markdown { min-width: 0; overflow-wrap: anywhere; }
 
-.radix-themes .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--gray-3); color: var(--gray-11); font-style: normal; }
+.radix-themes .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--dsh-ui-surface); color: var(--dsh-ui-muted); font-style: normal; }
 .radix-themes .export-summary { min-width: 0; }
 .radix-themes .export-chapters { max-height: 280px; }
 .radix-themes .export-chapters ol { margin: 0; padding: 0; list-style: none; }
@@ -204,7 +204,7 @@ ${historyStyles}
   object-fit: contain;
   box-shadow: var(--shadow-4);
   border-radius: var(--radius-2);
-  background: var(--color-panel-solid);
+  background: var(--dsh-ui-raised);
 }
 .radix-themes .file-dialog.image-preview-dialog .image-preview-close {
   position: absolute;
@@ -217,10 +217,10 @@ ${historyStyles}
   min-height: 34px;
   padding: 0;
   font-size: var(--font-size-4);
-  color: var(--gray-11);
-  background: var(--color-panel-solid);
+  color: var(--dsh-ui-muted);
+  background: var(--dsh-ui-raised);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--gray-a6);
+  outline: 1px solid var(--dsh-ui-line-strong);
 }
 
 .shell .panel-resizer {
@@ -252,14 +252,14 @@ ${historyStyles}
 /* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶）。
    页眉不显示标题文字（正文一级标题即章节名），只留右侧「⋯」菜单；
    天头细线改由 live-preview 一级标题的底线承担。 */
-.radix-themes .paper-page-header { height: 100%; box-sizing: border-box; padding-top: 28px; color: var(--dsh-ui-text, var(--gray-12)); }
+.radix-themes .paper-page-header { height: 100%; box-sizing: border-box; padding-top: 28px; color: var(--dsh-ui-text); }
 .radix-themes .paper-page-headline { position: relative; max-width: var(--paper-measure, 100%); margin-inline: auto; padding-inline: var(--paper-pad-inline); box-sizing: border-box; }
 .radix-themes .paper-page-menu { position: absolute; inset-inline-end: var(--paper-pad-inline); top: 0; display: inline-flex; align-items: center; }
 
 .radix-themes .editor-action-menu { min-width: 220px; }
 
 /* 稿纸页脚状态行：版心居中、12px muted，固定在可视稿纸下沿。 */
-.radix-themes .paper-footer-status { margin-inline: auto; display: flex; gap: 12px; align-items: baseline; font-size: var(--font-size-1); color: var(--s-muted, var(--gray-11)); }
+.radix-themes .paper-footer-status { margin-inline: auto; display: flex; gap: 12px; align-items: baseline; font-size: var(--font-size-1); color: var(--s-muted, var(--dsh-ui-muted)); }
 
 /* 选段改写浮层（§4）：预设一行 + 指令一行 + 操作行。 */
 .dsh-popover .rewrite-popover { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2, 8px); min-width: 300px; }
@@ -274,7 +274,7 @@ ${historyStyles}
   height: 100%;
   min-height: 0;
   background: transparent;
-  color: var(--gray-12);
+  color: var(--dsh-ui-text);
 }
 /* 版心两侧各一条 1px margin-rule 竖线：横坐标由 editor.tsx 按 .cm-content
    实际内容盒量出后写进 --paper-rule-left / --paper-rule-right（线内缘距
@@ -308,33 +308,33 @@ ${historyStyles}
   text-align: start;
 }
 .radix-themes .paper-input .cm-line { text-align: start; }
-.radix-themes .paper-input .cm-placeholder { color: var(--gray-10); }
+.radix-themes .paper-input .cm-placeholder { color: var(--dsh-ui-muted); }
 .radix-themes .paper-scroll { max-width: 36em; margin: 0 auto; }
 
-.radix-themes .ghost { color: var(--gray-9); font: inherit; letter-spacing: inherit; line-height: inherit; }
-.radix-themes .ghost.is-loading { color: transparent; background-image: linear-gradient(90deg, var(--gray-9) 0%, var(--gray-11) 46%, var(--gray-9) 100%); background-size: 180% 100%; background-clip: text; -webkit-background-clip: text; animation: ghost-shimmer 1.35s ${EASE} infinite; }
+.radix-themes .ghost { color: var(--dsh-ui-faint); font: inherit; letter-spacing: inherit; line-height: inherit; }
+.radix-themes .ghost.is-loading { color: transparent; background-image: linear-gradient(90deg, var(--dsh-ui-faint) 0%, var(--dsh-ui-muted) 46%, var(--dsh-ui-faint) 100%); background-size: 180% 100%; background-clip: text; -webkit-background-clip: text; animation: ghost-shimmer 1.35s ${EASE} infinite; }
 @keyframes ghost-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -80% 0; } }
 
-.radix-themes .editor-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--space-8); padding: var(--space-2) var(--space-5); border-top: 1px solid var(--gray-a5); background: var(--paper-fill); color: var(--gray-11); flex-shrink: 0; }
-.radix-themes .editor-tools button { display: inline-flex; align-items: center; justify-content: center; min-height: var(--space-6); padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius-3); background: var(--gray-a3); color: var(--gray-12); cursor: pointer; font-size: var(--font-size-1); transition: transform 140ms ${EASE}, background-color 150ms ${EASE}, border-color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
-.radix-themes .editor-tools button:hover:not(:disabled) { background: var(--gray-a4); border-color: var(--gray-a5); box-shadow: var(--shadow-2); transform: translateY(-1px); }
+.radix-themes .editor-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--space-8); padding: var(--space-2) var(--space-5); border-top: 1px solid var(--dsh-ui-line); background: var(--paper-fill); color: var(--dsh-ui-muted); flex-shrink: 0; }
+.radix-themes .editor-tools button { display: inline-flex; align-items: center; justify-content: center; min-height: var(--space-6); padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius-3); background: var(--dsh-ui-hover); color: var(--dsh-ui-text); cursor: pointer; font-size: var(--font-size-1); transition: transform 140ms ${EASE}, background-color 150ms ${EASE}, border-color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
+.radix-themes .editor-tools button:hover:not(:disabled) { background: var(--dsh-ui-hover); border-color: var(--dsh-ui-line); box-shadow: var(--shadow-2); transform: translateY(-1px); }
 .radix-themes .editor-tools button:active:not(:disabled) { transform: scale(.97); }
-.radix-themes .editor-ghost-tip { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-4); color: var(--gray-11); font-size: var(--font-size-1); }
+.radix-themes .editor-ghost-tip { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-4); color: var(--dsh-ui-muted); font-size: var(--font-size-1); }
 .radix-themes .editor-tools .ghost-actions { display: flex; gap: var(--space-1); align-items: center; padding: 0 var(--space-1); }
-.radix-themes .editor-tools .ghost-actions > small { font-size: var(--font-size-1); color: var(--gray-11); }
-.radix-themes .editor-tools .ghost-actions .kbd { font-family: var(--code-font-family); font-size: var(--font-size-1); padding: 2px var(--space-1); border-radius: var(--radius-2); background: var(--gray-3); color: var(--gray-11); margin-right: var(--space-1); }
-.radix-themes .editor-tools .ghost-actions .fim-sep { color: var(--gray-6); padding: 0 var(--space-1); user-select: none; }
+.radix-themes .editor-tools .ghost-actions > small { font-size: var(--font-size-1); color: var(--dsh-ui-muted); }
+.radix-themes .editor-tools .ghost-actions .kbd { font-family: var(--code-font-family); font-size: var(--font-size-1); padding: 2px var(--space-1); border-radius: var(--radius-2); background: var(--dsh-ui-surface); color: var(--dsh-ui-muted); margin-right: var(--space-1); }
+.radix-themes .editor-tools .ghost-actions .fim-sep { color: var(--dsh-ui-line-strong); padding: 0 var(--space-1); user-select: none; }
 /* 软/描边样式的危险按钮用红字；solid 变体保持 Radix 自带的 on-accent 白字，
    否则红字落在红色填充上等于没有标签。 */
-.radix-themes .danger-action:not(.rt-variant-solid) { color: var(--red-9); }
+.radix-themes .danger-action:not(.rt-variant-solid) { color: var(--dsh-ui-danger); }
 
-.radix-themes .proposal { position: relative; padding: var(--space-3); margin: var(--space-3) 0 var(--space-2); max-width: 100%; background: var(--color-panel-solid); box-shadow: inset 0 0 0 1px var(--gray-a5); border-radius: var(--radius-3); display: grid; gap: var(--space-2); }
-.radix-themes .proposal > strong { font: 500 var(--font-size-2)/1.4 var(--default-font-family); color: var(--gray-12); }
-.radix-themes .proposal p { margin: 0; white-space: pre-wrap; color: var(--gray-11); }
+.radix-themes .proposal { position: relative; padding: var(--space-3); margin: var(--space-3) 0 var(--space-2); max-width: 100%; background: var(--dsh-ui-raised); outline: 1px solid var(--dsh-ui-line); outline-offset: -1px; border-radius: var(--radius-3); display: grid; gap: var(--space-2); }
+.radix-themes .proposal > strong { font: 500 var(--font-size-2)/1.4 var(--default-font-family); color: var(--dsh-ui-text); }
+.radix-themes .proposal p { margin: 0; white-space: pre-wrap; color: var(--dsh-ui-muted); }
 .radix-themes .proposal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .radix-themes .selection-diff { display: grid; gap: var(--space-2); }
-.radix-themes .selection-diff section small { font-size: var(--font-size-1); color: var(--gray-11); }
-.radix-themes .proposal-conflict { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--gray-a5); font-size: var(--font-size-1); color: var(--red-9); }
+.radix-themes .selection-diff section small { font-size: var(--font-size-1); color: var(--dsh-ui-muted); }
+.radix-themes .proposal-conflict { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--dsh-ui-line); font-size: var(--font-size-1); color: var(--dsh-ui-danger); }
 
 /* ── Chat ───────────────────────────────────────────────── */
 /* 窄窗抽屉是 Portal，挂在 .shell 之外；聊天然结构规则对抽屉同样生效。 */
@@ -349,13 +349,13 @@ ${historyStyles}
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--color-panel-solid);
+  background: var(--dsh-ui-raised);
 }
 :is(.shell, .dsh-drawer) .chat > * { min-width: 0; max-width: 100%; }
 :is(.shell, .dsh-drawer) .chat[hidden] { display: none !important; pointer-events: none; }
 :is(.shell, .dsh-drawer) .chat-header {
   min-height: var(--space-8);
-  border-bottom: 1px solid var(--gray-a5);
+  border-bottom: 1px solid var(--dsh-ui-line);
 }
 :is(.shell, .dsh-drawer) .chat-history { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
 :is(.shell, .dsh-drawer) .chat-history .rt-ScrollAreaViewport { overscroll-behavior: contain; }
@@ -376,14 +376,14 @@ ${chatMessageStyles}
 
 /* ── Focus mode / layout toggles ────────────────────────── */
 /* 工作台网格：.dsh-frame 是 flex 列容器，PanelGroup 占满剩余高度。 */
-.shell .shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--gray-2); }
+.shell .shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--dsh-ui-bg); }
 .shell .shell-panel.editor-cell { background: var(--paper-fill); }
 .shell .editor-cell { position: relative; background: var(--paper-fill); }
 .shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: flex; flex-direction: column; }
 /* 覆盖层外框（§4 修订）：只提供底色与边距；标题与关闭由插件自带，
    shell 不叠标题栏。 */
 .shell .center-overlay-surface { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.shell .center-overlays [data-dsh-center-overlay] { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--color-panel-solid); pointer-events: auto; }
+.shell .center-overlays [data-dsh-center-overlay] { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--dsh-ui-raised); pointer-events: auto; }
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
@@ -453,7 +453,7 @@ ${chatMessageStyles}
 /* ── Settings page content ────────────────────────────────
    分区内容沿用旧设置弹窗的行/块映射，作用域从 .settings-dialog 换成
    全页设置的 .dsh-settings-page；弹窗自身的网格/导航/翻页规则随 C36 退役。 */
-.radix-themes .dsh-settings-page { font: 400 var(--font-size-2)/1.5 var(--default-font-family); color: var(--gray-12); --control-h: 34px; }
+.radix-themes .dsh-settings-page { font: 400 var(--font-size-2)/1.5 var(--default-font-family); color: var(--dsh-ui-text); --control-h: 34px; }
 .radix-themes .dsh-settings-section > :is(.settings-general,.models-page,.usage-page) { display: grid; gap: var(--space-5); }
 .radix-themes .dsh-settings-page .settings-block.rt-Card::before,
 .radix-themes .dsh-settings-page .settings-block.rt-Card::after { display: none; }
@@ -467,9 +467,9 @@ ${chatMessageStyles}
 .radix-themes .dsh-settings-page .rt-BaseButton:not([role="switch"]) { font-size: var(--font-size-2); min-height: var(--control-h); }
 .radix-themes .dsh-settings-page :is(input,textarea,select) { font-family: var(--default-font-family); font-size: var(--font-size-2); }
 .radix-themes .dsh-settings-page .rt-TextFieldRoot { min-height: var(--control-h); }
-.radix-themes .dsh-settings-page .rt-CalloutRoot { color: var(--accent-12); }
+.radix-themes .dsh-settings-page .rt-CalloutRoot { color: var(--dsh-ui-accent); }
 .radix-themes .dsh-settings-page :is(p,small,.muted) { line-height: 1.5; }
-.radix-themes .dsh-settings-page :is(button,input,textarea,summary,a,[tabindex]):focus-visible { outline: 2px solid var(--accent-8); outline-offset: 2px; }
+.radix-themes .dsh-settings-page :is(button,input,textarea,summary,a,[tabindex]):focus-visible { outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; }
 .radix-themes .dsh-settings-page :is(.models-hint,.models-warning,.about-note) { overflow-wrap: anywhere; }
 .radix-themes .dsh-settings-page .author-preferences textarea { field-sizing: content; min-height: 156px; max-height: min(320px, 40dvh); line-height: 1.7; }
 .radix-themes .dsh-settings-page .models-writing-route { display: grid; grid-template-columns: 112px minmax(0,1fr) 16px; }
@@ -499,7 +499,7 @@ ${chatMessageStyles}
 }
 
 .radix-themes .select { position: relative; display: inline-block; min-width: 0; }
-.radix-themes .dsh-settings-page .select-trigger[data-placeholder] .rt-SelectTriggerInner { color: var(--gray-11); }
+.radix-themes .dsh-settings-page .select-trigger[data-placeholder] .rt-SelectTriggerInner { color: var(--dsh-ui-muted); }
 .radix-themes .dsh-settings-page .select-trigger { min-width: 184px; max-width: 100%; min-height: var(--control-h); font-size: var(--font-size-2); }
 
 .radix-themes .models-writing-route-controls > .select { flex: 0 1 18rem; min-width: 12rem; max-width: 100%; }
@@ -514,8 +514,8 @@ ${chatMessageStyles}
 .radix-themes .models-input-name { flex: 1 1 200px; }
 .radix-themes .models-field-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: center; gap: var(--space-3); }
 .radix-themes .models-credential-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
-.radix-themes .models-credential-dot-configured { background: var(--green-9); }
-.radix-themes .models-credential-dot-missing { background: var(--red-9); }
+.radix-themes .models-credential-dot-configured { background: var(--dsh-ui-success); }
+.radix-themes .models-credential-dot-missing { background: var(--dsh-ui-danger); }
 .radix-themes .models-button-add { align-self: flex-start; }
 .radix-themes .models-customized > summary { cursor: pointer; list-style: none; }
 .radix-themes .models-customized > summary::-webkit-details-marker { display: none; }
@@ -525,7 +525,7 @@ ${chatMessageStyles}
 .radix-themes .models-candidate-dialog .models-candidate-label { display: flex; align-items: center; gap: var(--space-2); }
 
 .radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-block: var(--space-2) var(--space-3); }
-.radix-themes .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-a3); color: var(--accent-11); font: 500 var(--font-size-1)/1.4 var(--default-font-family); }
+.radix-themes .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--dsh-ui-accent-soft); color: var(--dsh-ui-accent); font: 500 var(--font-size-1)/1.4 var(--default-font-family); }
 .radix-themes .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--dsh-ui-z-toast, 70); animation: shell-toast-in 260ms ${EASE}; }
 @keyframes shell-toast-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 
@@ -537,7 +537,7 @@ ${chatMessageStyles}
 .radix-themes .usage-log-list { margin: 0; padding: 0; list-style: none; }
 .radix-themes .usage-log-row {
   display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) 0; border-bottom: 1px solid var(--gray-a4);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--dsh-ui-line);
 }
 .radix-themes .usage-log-row:last-child { border-bottom: 0; }
 .radix-themes .usage-log-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -565,31 +565,31 @@ ${chatMessageStyles}
 .radix-themes .activity-dots.is-pulse i:nth-child(3) { animation-delay: .4s; }
 .radix-themes .activity-dots.is-typing i:nth-child(2) { animation-delay: .15s; }
 .radix-themes .activity-dots.is-typing i:nth-child(3) { animation-delay: .3s; }
-.radix-themes .activity-ring { display: inline-block; vertical-align: middle; color: var(--accent-9); }
-.radix-themes .activity-shimmer { position: relative; display: block; width: 96px; height: 3px; border-radius: 999px; background: var(--gray-a6); overflow: hidden; }
-.radix-themes .activity-shimmer i { position: absolute; top: 0; bottom: 0; left: 0; width: 33%; border-radius: inherit; background: var(--accent-9); opacity: .5; animation: shell-activity-shimmer 1.5s ease-in-out infinite; }
+.radix-themes .activity-ring { display: inline-block; vertical-align: middle; color: var(--dsh-ui-accent); }
+.radix-themes .activity-shimmer { position: relative; display: block; width: 96px; height: 3px; border-radius: 999px; background: var(--dsh-ui-line-strong); overflow: hidden; }
+.radix-themes .activity-shimmer i { position: absolute; top: 0; bottom: 0; left: 0; width: 33%; border-radius: inherit; background: var(--dsh-ui-accent); opacity: .5; animation: shell-activity-shimmer 1.5s ease-in-out infinite; }
 .radix-themes .activity-skeleton { display: grid; gap: 8px; }
-.radix-themes .activity-skeleton__line { position: relative; display: block; border-radius: var(--radius-2); background: var(--gray-a5); overflow: hidden; }
+.radix-themes .activity-skeleton__line { position: relative; display: block; border-radius: var(--radius-2); background: var(--dsh-ui-line); overflow: hidden; }
 .radix-themes .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
 .radix-themes .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: shell-activity-pulse 1.4s ${EASE} infinite; }
 .radix-themes .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
 .radix-themes .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
 .radix-themes .panel-skeleton { display: grid; gap: var(--space-2); }
-.radix-themes .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-2); background: var(--gray-a5); overflow: hidden; }
+.radix-themes .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-2); background: var(--dsh-ui-line); overflow: hidden; }
 .radix-themes .panel-skeleton i::after,
-.radix-themes .activity-skeleton__line::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--gray-a3), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
+.radix-themes .activity-skeleton__line::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--dsh-ui-hover), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
 .radix-themes .activity-text { display: inline-flex; align-items: center; gap: 6px; animation: shell-fade-in 250ms ${EASE} both; }
-.radix-themes .success-mark { display: inline-block; width: 1.1em; height: 1.1em; color: var(--green-9); vertical-align: -.15em; }
+.radix-themes .success-mark { display: inline-block; width: 1.1em; height: 1.1em; color: var(--dsh-ui-success); vertical-align: -.15em; }
 .radix-themes .success-mark path { stroke: currentColor; stroke-dasharray: 42; stroke-dashoffset: 0; animation: shell-success-draw 250ms ${EASE}; }
-.radix-themes .import-working { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--gray-11); }
+.radix-themes .import-working { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--dsh-ui-muted); }
 .radix-themes .activity-reveal { animation: shell-fade-in 250ms ${EASE} both; }
 .radix-themes .models-loading { max-width: 480px; margin-top: 12px; }
 .radix-themes .usage-loading { max-width: 420px; margin-top: 12px; }
-.radix-themes .models-writing-route .route-saving { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; color: var(--gray-10); }
+.radix-themes .models-writing-route .route-saving { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; color: var(--dsh-ui-muted); }
 .radix-themes .models-writing-route .route-saving .activity-dots { margin-inline-end: 0; }
-.radix-themes .export-loading { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-5) 0 var(--space-2); color: var(--gray-11); }
+.radix-themes .export-loading { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-5) 0 var(--space-2); color: var(--dsh-ui-muted); }
 .radix-themes .export-loading .activity-skeleton { width: min(320px, 100%); }
-.radix-themes .writing-progress-settings .goal-saving { display: inline-flex; align-items: center; margin-inline-start: 6px; color: var(--gray-10); vertical-align: middle; }
+.radix-themes .writing-progress-settings .goal-saving { display: inline-flex; align-items: center; margin-inline-start: 6px; color: var(--dsh-ui-muted); vertical-align: middle; }
 .radix-themes .writing-progress-settings .goal-saving .activity-dots { margin-inline-end: 0; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -607,7 +607,7 @@ ${chatMessageStyles}
   }
   .shell *:hover, .shell *:active { transform: none !important; }
   .radix-themes .settings-page { opacity: 1 !important; transform: none !important; }
-  .radix-themes .ghost.is-loading { animation: none; color: var(--gray-9); background: none; }
+  .radix-themes .ghost.is-loading { animation: none; color: var(--dsh-ui-faint); background: none; }
   .radix-themes .panel-activity-dots i,
   .radix-themes .panel-skeleton i::after { animation: none !important; }
 }

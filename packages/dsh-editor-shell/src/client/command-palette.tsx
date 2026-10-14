@@ -52,9 +52,9 @@ import {
   ThemeInkIcon,
 } from './icons.tsx'
 
-/* 主题变量只挂在 .radix-themes 上（:root 已被 rewrite 掉，有 Theme 时
-   seats fallback 也不生效）。命令面板必须 Portal 进 Theme 根，否则底板 /
-   遮罩的 var(--color-panel-solid) / var(--gray-a6) 全是空的，条目会直接
+/* 主题 token 只挂在主题作用域（.radix-themes / [data-dsh-theme]）上，有
+   Theme 时 seats fallback 也不生效。命令面板必须 Portal 进主题根，否则
+   --dsh-ui-raised / --dsh-ui-line-strong 等底板变量全是空的，条目会直接
    叠在稿纸上。 */
 
 function useThemePortalContainer() {

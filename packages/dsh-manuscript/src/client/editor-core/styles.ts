@@ -146,7 +146,7 @@ ${surfaceTokenAliases}
 .manuscript-paper-textarea .cm-editor {
   height: 100%;
   background: transparent;
-  color: var(--gray-12);
+  color: var(--dsh-ui-text);
   font-size: var(--paper-font-size);
   line-height: var(--paper-line-height);
   font-family: var(--paper-font-family);
@@ -162,33 +162,33 @@ ${surfaceTokenAliases}
   margin-inline: auto;
   box-sizing: border-box;
   text-align: start;
-  caret-color: var(--accent-9);
+  caret-color: var(--dsh-ui-accent);
 }
 .manuscript-paper-textarea .cm-line {
   padding-bottom: var(--paper-paragraph-spacing, 0em);
 }
 /* Match paperTheme: secondary text only while the editor is focused. */
 .manuscript-paper-textarea .cm-editor.cm-focused .cm-paper-dim {
-  color: var(--gray-11);
+  color: var(--dsh-ui-muted);
 }
 .manuscript-paper-textarea .cm-editor .cm-placeholder {
-  color: var(--gray-9);
+  color: var(--dsh-ui-faint);
 }
 .manuscript-paper-textarea .cm-cursor,
 .manuscript-paper-textarea .cm-dropCursor {
-  border-left-color: var(--accent-9);
+  border-left-color: var(--dsh-ui-accent);
 }
 .manuscript-paper-textarea .cm-selectionBackground,
 .manuscript-paper-textarea .cm-editor.cm-focused .cm-selectionBackground {
-  background: var(--accent-a4);
+  background: var(--dsh-ui-selected);
 }
 .manuscript-paper-textarea .cm-activeLine {
-  background: var(--gray-a2);
+  background: var(--dsh-ui-hover);
 }
 .manuscript-paper-textarea .cm-gutters {
-  background: var(--color-background);
-  color: var(--gray-11);
-  border-right: 1px solid var(--gray-a5);
+  background: var(--dsh-ui-bg);
+  color: var(--dsh-ui-muted);
+  border-right: 1px solid var(--dsh-ui-line);
 }
 .manuscript-paper-textarea .cm-lp-h1,
 .manuscript-paper-textarea .cm-lp-h2,
@@ -196,28 +196,28 @@ ${surfaceTokenAliases}
 .manuscript-paper-textarea .cm-lp-h4,
 .manuscript-paper-textarea .cm-lp-h5,
 .manuscript-paper-textarea .cm-lp-h6 {
-  color: var(--gray-12);
+  color: var(--dsh-ui-text);
 }
 .manuscript-paper-textarea .cm-paper-search {
-  background: var(--color-background);
-  color: var(--gray-12);
+  background: var(--dsh-ui-bg);
+  color: var(--dsh-ui-text);
   font-family: var(--default-font-family);
 }
 .manuscript-paper-textarea .cm-paper-search input {
-  background: var(--color-background);
-  color: var(--gray-12);
-  border-color: var(--gray-6);
+  background: var(--dsh-ui-bg);
+  color: var(--dsh-ui-text);
+  border-color: var(--dsh-ui-line-strong);
 }
 .manuscript-paper-textarea .cm-searchMatch {
-  background: var(--amber-a4);
+  background: var(--dsh-ui-warning-soft);
 }
 .manuscript-paper-textarea .cm-searchMatch-selected {
-  background: var(--amber-a6);
+  background: var(--dsh-ui-warning-soft);
 }
 .manuscript-paper-ghost,
 .manuscript-paper-textarea [data-testid$="-ghost"],
 .manuscript-paper-textarea .cm-ghost {
-  color: var(--gray-9);
+  color: var(--dsh-ui-faint);
 }
 
 /* Ghost tip, proposal patch, conflict guard, status note. */

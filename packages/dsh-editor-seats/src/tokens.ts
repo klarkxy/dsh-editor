@@ -1,9 +1,10 @@
 /*
  * Standalone Radix fallback. Injected by manuscript / overlay (and any host
  * that is not already inside `.radix-themes`) so those styles can read the
- * same variables the shell gets from `@radix-ui/themes`. Hex lives only in
- * this fallback. Values follow the official DSH neutral / radius contract
- * while keeping the existing Radix variable names.
+ * same Radix-compatible variables the shell used to get from its legacy
+ * theme stylesheet. Hex lives only in this fallback. Values follow the
+ * official DSH neutral / radius contract while keeping the existing Radix
+ * variable names.
  *
  * Light: `:root:not(:has(.radix-themes))`
  * Dark:  `:root[data-theme="dark"]` and official `body[data-ds-dark-theme]`,
@@ -141,6 +142,46 @@ ${lightPalette}}
 :root[data-theme="dark"]:not(:has(.radix-themes)),
 body[data-ds-dark-theme]:not(:has(.radix-themes)) {
 ${darkPalette}}`
+
+/*
+ * Scoped variant of `radixFallbackTokens` for a component that renders its
+ * own `.radix-themes` wrapper standalone (e.g. the manuscript theme root).
+ * Such a wrapper makes the `:root` fallback above inert via `:has()`, so the
+ * same palettes and metrics are re-emitted on the wrapper's own selectors.
+ */
+export function scopedFallbackTokens(lightSelector: string, darkSelector: string): string {
+  return `${lightSelector} {
+${lightPalette}}
+${darkSelector} {
+${darkPalette}}`
+}
+
+/*
+ * `--dsh-ui-*` bridge for those standalone wrappers: product styles read the
+ * 原稿 names directly, but the shell token sheet never reaches them, so each
+ * name resolves through the official `--dsw-*` aliases and then the
+ * Radix-named literals in this file. Same chain order as surfaceTokenVars.
+ */
+export const dshUiStandaloneAliases = `
+  --dsh-ui-text: var(--dsw-alias-label-primary, var(--gray-12));
+  --dsh-ui-muted: var(--dsw-alias-label-secondary, var(--gray-11));
+  --dsh-ui-faint: var(--dsw-alias-label-tertiary, var(--gray-10));
+  --dsh-ui-bg: var(--dsw-alias-bg-base, var(--color-background));
+  --dsh-ui-surface: var(--dsw-alias-bg-layer-1, var(--color-surface));
+  --dsh-ui-raised: var(--dsw-alias-bg-layer-2, var(--color-panel-solid));
+  --dsh-ui-line: var(--dsw-alias-border-l2, var(--gray-a5));
+  --dsh-ui-line-strong: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, var(--gray-6)));
+  --dsh-ui-hover: var(--dsw-alias-interactive-bg-hover, var(--gray-a3));
+  --dsh-ui-selected: var(--dsw-specific-sidebar-nav-item-active, var(--gray-a4));
+  --dsh-ui-accent: var(--dsw-alias-link, var(--accent-9));
+  --dsh-ui-accent-soft: var(--dsw-alias-state-business-tertiary, var(--accent-a3));
+  --dsh-ui-accent-border: var(--dsw-alias-border-l3, var(--accent-a8));
+  --dsh-ui-warning-soft: var(--dsw-alias-state-warn-secondary, var(--amber-a4));
+  --dsh-ui-font-ui: var(--dsw-font-family, var(--default-font-family));
+  --dsh-ui-font-mono: var(--ds-font-family-code, var(--code-font-family));
+  --dsh-ui-font-display: var(--paper-serif, serif);
+  --dsh-ui-weight-regular: var(--font-weight-regular, 400);
+`
 
 /**
  * Local semantic names for plugin and standalone chrome.

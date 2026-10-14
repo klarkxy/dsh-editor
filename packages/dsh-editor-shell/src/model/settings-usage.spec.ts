@@ -33,7 +33,7 @@ describe('usage chart model series', () => {
     expect(series.map((item) => item.key)).toEqual(['openai/gpt-5', 'minimax/m3'])
     expect(series[0]).toMatchObject({ tokens: 330, requests: 5 })
     expect(series[1]).toMatchObject({ tokens: 60, requests: 2 })
-    expect(series.map((item) => item.color)).toEqual(['--indigo-9', '--teal-9'])
+    expect(series.map((item) => item.color)).toEqual(['--dsh-ui-chart-1', '--dsh-ui-chart-2'])
     expect(collectModelSeries(days).map((item) => item.color)).toEqual(series.map((item) => item.color))
     expect(collectModelSeries([{ date: '2025-01-03', inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, requests: 1 }])).toEqual([])
   })

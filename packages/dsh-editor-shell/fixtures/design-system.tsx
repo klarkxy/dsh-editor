@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
+import { ShellTheme } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
 import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
 import { tokenStyles } from '../src/design-system/tokens.ts'
@@ -26,7 +26,6 @@ import {
 
 /* 与 client/root.tsx injectShellStyles 相同的注册次序；fixture 直接注入
    collectStyles() 输出，层序声明也一并覆盖。 */
-defineStyles('legacy', 'radix-themes', radixThemesStyles)
 defineStyles('legacy', 'shell-legacy', redesignedStyles)
 defineStyles('legacy', 'yuangao-components', componentStyles)
 defineStyles('legacy', 'yuangao-responsive', responsiveStyles)

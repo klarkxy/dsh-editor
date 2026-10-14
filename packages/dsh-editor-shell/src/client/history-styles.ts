@@ -32,7 +32,7 @@ export const historyStyles = `
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--gray-a5);
+  background: var(--dsh-ui-line);
 }
 .radix-themes .history-commit:first-child::before { top: 14px; }
 .radix-themes .history-commit:last-child::before { bottom: auto; height: 14px; }
@@ -43,17 +43,17 @@ export const historyStyles = `
   width: 7px;
   height: 7px;
   border-radius: var(--dsh-ui-radius-full);
-  background: var(--gray-8);
+  background: var(--dsh-ui-faint);
 }
-.radix-themes .history-commit[data-selected='true'] { background: var(--gray-a3); }
-.radix-themes .history-commit[data-selected='true'] .history-commit-dot { background: var(--accent-9); }
-.radix-themes .history-commit:hover { background: var(--gray-a3); }
+.radix-themes .history-commit[data-selected='true'] { background: var(--dsh-ui-selected); }
+.radix-themes .history-commit[data-selected='true'] .history-commit-dot { background: var(--dsh-ui-accent); }
+.radix-themes .history-commit:hover { background: var(--dsh-ui-hover); }
 .radix-themes .history-commit-body { display: grid; gap: 2px; min-width: 0; }
 .radix-themes .history-commit-top { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 .radix-themes .history-hash {
   font-family: var(--code-font-family);
   font-size: var(--font-size-1);
-  color: var(--accent-11);
+  color: var(--dsh-ui-accent);
 }
 .radix-themes .history-hash-lg { font-size: var(--font-size-2); }
 .radix-themes .history-subject { min-width: 0; }
@@ -70,9 +70,9 @@ export const historyStyles = `
 }
 .radix-themes .history-change > :last-child { overflow-wrap: anywhere; }
 .radix-themes .history-kind { font-family: var(--code-font-family); font-weight: var(--dsh-ui-weight-strong); }
-.radix-themes .history-change-added .history-kind { color: var(--green-11); }
-.radix-themes .history-change-removed .history-kind { color: var(--red-11); }
-.radix-themes .history-change-modified .history-kind { color: var(--amber-11); }
+.radix-themes .history-change-added .history-kind { color: var(--dsh-ui-success); }
+.radix-themes .history-change-removed .history-kind { color: var(--dsh-ui-danger); }
+.radix-themes .history-change-modified .history-kind { color: var(--dsh-ui-warning); }
 @media (max-width: 720px) {
   .radix-themes .history-split { grid-template-columns: 1fr; max-height: min(70dvh, calc(100dvh - 180px)); }
 }

@@ -6,7 +6,7 @@ import { intlLocale, t } from '../i18n/index.ts'
 
 export const USAGE_DAYS = 30
 export const RECENT_DAYS = 7
-const MODEL_PALETTE = ['--indigo-9', '--teal-9', '--amber-9', '--crimson-9', '--violet-9', '--green-9', '--blue-9', '--orange-9']
+const MODEL_PALETTE = ['--dsh-ui-chart-1', '--dsh-ui-chart-2', '--dsh-ui-chart-3', '--dsh-ui-chart-4', '--dsh-ui-chart-5', '--dsh-ui-chart-6', '--dsh-ui-chart-7', '--dsh-ui-chart-8']
 
 export type ModelUsage = {
   inputTokens?: number

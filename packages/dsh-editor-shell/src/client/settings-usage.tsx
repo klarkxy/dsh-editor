@@ -51,10 +51,10 @@ function resolveToken(styles: CSSStyleDeclaration, token: string): string {
 function readChartTheme(node: HTMLElement): ChartTheme {
   const styles = getComputedStyle(node)
   return {
-    axis: styles.getPropertyValue('--gray-11').trim(),
-    split: styles.getPropertyValue('--gray-a5').trim(),
-    tooltipBg: styles.getPropertyValue('--color-panel-solid').trim(),
-    tooltipFg: styles.getPropertyValue('--gray-12').trim(),
+    axis: styles.getPropertyValue('--dsh-ui-muted').trim(),
+    split: styles.getPropertyValue('--dsh-ui-line').trim(),
+    tooltipBg: styles.getPropertyValue('--dsh-ui-raised').trim(),
+    tooltipFg: styles.getPropertyValue('--dsh-ui-text').trim(),
   }
 }
 
@@ -73,10 +73,10 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
     days: props.days,
     series: props.series,
     theme: {
-      axis: 'var(--gray-11)',
-      split: 'var(--gray-a5)',
-      tooltipBg: 'var(--color-panel-solid)',
-      tooltipFg: 'var(--gray-12)',
+      axis: 'var(--dsh-ui-muted)',
+      split: 'var(--dsh-ui-line)',
+      tooltipBg: 'var(--dsh-ui-raised)',
+      tooltipFg: 'var(--dsh-ui-text)',
     },
     reduceMotion,
     formatNumber,

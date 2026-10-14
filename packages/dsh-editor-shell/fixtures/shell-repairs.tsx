@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SettingsModelsSection } from '../src/client/settings-models.tsx'
 import { ModelPicker } from '../src/client/chat-model-picker.tsx'
-import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
+import { ShellTheme } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
 import type { ShellContext } from '../src/client/shared.ts'
 
@@ -44,7 +44,7 @@ Object.assign(window, { shellRepairs: controls })
 function Fixture() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   return <ShellTheme appearance={theme}>
-    <style>{radixThemesStyles}{redesignedStyles}</style>
+    <style>{redesignedStyles}</style>
     <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>Toggle fixture theme</button>
     <SettingsModelsSection ctx={ctx} writingScope={{} as never} showWritingRoutes={false} />
     <ModelPicker ctx={ctx} session={session as never} onConfigure={() => {}} />

@@ -18,8 +18,10 @@ const fixture = resolve(output, 'fixture.tsx')
 await writeFile(fixture, `
 import { createRoot } from ${JSON.stringify(shellRequire.resolve('react-dom/client').replaceAll('\\', '/'))}
 import { ProposalCard } from ${source('packages/dsh-editor-shell/src/client/chat-proposal.tsx')}
-import { ShellTheme, radixThemesStyles } from ${source('packages/dsh-editor-shell/src/client/ui/theme-root.tsx')}
+import { ShellTheme } from ${source('packages/dsh-editor-shell/src/client/ui/theme-root.tsx')}
 import { redesignedStyles } from ${source('packages/dsh-editor-shell/src/styles.ts')}
+import { componentStyles } from ${source('packages/dsh-editor-shell/src/design-system/styles.ts')}
+import { tokenStyles } from ${source('packages/dsh-editor-shell/src/design-system/tokens.ts')}
 const params = new URLSearchParams(location.search)
 const mode = params.get('mode') || 'partial'
 const appearance = params.get('theme') === 'dark' ? 'dark' : 'light'
@@ -52,7 +54,7 @@ const ctx = { connection: { rpc: { async call(_channel, endpoint, body) {
 } } } }
 createRoot(document.getElementById('root')).render(
   <ShellTheme appearance={appearance}>
-    <style>{radixThemesStyles}{redesignedStyles}</style>
+    <style>{tokenStyles}{componentStyles}{redesignedStyles}</style>
     <ProposalCard ctx={ctx} sessionId="fixture-session" proposal={proposal} receiptId="fixture-result"
       onApplied={path => refreshedPaths.push(path)} />
   </ShellTheme>

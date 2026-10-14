@@ -213,8 +213,8 @@ describe('chat process CSS', () => {
   })
 
   it('colors process-row status dots green for success and red for failure', () => {
-    expect(redesignedStyles).toContain('.chat-step-status.is-ok { background: var(--green-9); }')
+    expect(redesignedStyles).toContain('.chat-step-status.is-ok { background: var(--dsh-ui-success); }')
     expect(redesignedStyles).toContain('.chat-step-status.is-error')
-    expect(redesignedStyles).toContain('background: var(--red-9)')
+    expect(redesignedStyles).toContain('background: var(--dsh-ui-danger)')
   })
 })

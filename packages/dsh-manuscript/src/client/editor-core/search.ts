@@ -205,20 +205,20 @@ export const paperSearchKeymap: readonly KeyBinding[] = [
 
 const paperSearchTheme = EditorView.theme({
   '.cm-panels': {
-    backgroundColor: 'var(--color-panel-solid)',
-    color: 'var(--gray-12)',
-    borderColor: 'var(--gray-6)',
+    backgroundColor: 'var(--dsh-ui-raised)',
+    color: 'var(--dsh-ui-text)',
+    borderColor: 'var(--dsh-ui-line-strong)',
   },
   '.cm-panels-top': {
-    borderBottom: '1px solid var(--gray-6)',
+    borderBottom: '1px solid var(--dsh-ui-line-strong)',
   },
   '.cm-paper-search': {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     padding: '8px 12px',
-    backgroundColor: 'var(--color-panel-solid)',
-    color: 'var(--gray-12)',
+    backgroundColor: 'var(--dsh-ui-raised)',
+    color: 'var(--dsh-ui-text)',
     fontFamily: 'var(--default-font-family)',
     fontSize: 'var(--font-size-2)',
     letterSpacing: '.04em',
@@ -234,15 +234,14 @@ const paperSearchTheme = EditorView.theme({
     flex: '1 1 10em',
     minHeight: '28px',
     padding: '4px 8px',
-    border: '1px solid var(--gray-6)',
+    border: '1px solid var(--dsh-ui-line-strong)',
     borderRadius: '4px',
-    backgroundColor: 'var(--color-surface)',
-    color: 'var(--gray-12)',
+    backgroundColor: 'var(--dsh-ui-surface)',
+    color: 'var(--dsh-ui-text)',
     font: '400 var(--font-size-2)/1.4 var(--default-font-family)',
   },
   '.cm-paper-search input:focus': {
-    outline: 'none',
-    boxShadow: '0 0 0 2px var(--accent-a8)',
+    outline: '2px solid var(--dsh-ui-accent-border)',
   },
   '.cm-paper-search button': {
     display: 'inline-flex',
@@ -253,51 +252,51 @@ const paperSearchTheme = EditorView.theme({
     border: 0,
     borderRadius: '4px',
     background: 'transparent',
-    boxShadow: '0 0 0 1px var(--gray-6)',
-    color: 'var(--gray-11)',
+    outline: '1px solid var(--dsh-ui-line-strong)',
+    color: 'var(--dsh-ui-muted)',
     font: '500 var(--font-size-1)/1 var(--default-font-family)',
     letterSpacing: '.08em',
     cursor: 'pointer',
   },
   '.cm-paper-search button:hover': {
-    backgroundColor: 'var(--gray-a3)',
-    color: 'var(--gray-12)',
+    backgroundColor: 'var(--dsh-ui-hover)',
+    color: 'var(--dsh-ui-text)',
   },
   '.cm-paper-search button[aria-pressed="true"]': {
-    backgroundColor: 'var(--accent-a3)',
-    color: 'var(--accent-11)',
+    backgroundColor: 'var(--dsh-ui-accent-soft)',
+    color: 'var(--dsh-ui-accent)',
   },
   '.cm-paper-search-count': {
     minWidth: '4.5em',
-    color: 'var(--gray-10)',
+    color: 'var(--dsh-ui-muted)',
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'center',
   },
   '.cm-paper-search [name="close"]': {
     minWidth: '28px',
     padding: '4px 8px',
-    color: 'var(--gray-10)',
+    color: 'var(--dsh-ui-muted)',
   },
 })
 
 const paperSearchMatchTheme = EditorView.baseTheme({
   '&light .cm-searchMatch': {
-    backgroundColor: 'var(--amber-a4)',
+    backgroundColor: 'var(--dsh-ui-warning-soft)',
   },
   '&dark .cm-searchMatch': {
-    backgroundColor: 'var(--amber-a4)',
+    backgroundColor: 'var(--dsh-ui-warning-soft)',
   },
   '&light .cm-searchMatch-selected': {
-    backgroundColor: 'var(--amber-a6)',
+    backgroundColor: 'var(--dsh-ui-warning-soft)',
   },
   '&dark .cm-searchMatch-selected': {
-    backgroundColor: 'var(--amber-a6)',
+    backgroundColor: 'var(--dsh-ui-warning-soft)',
   },
   '&light .cm-selectionMatch': {
-    backgroundColor: 'var(--accent-a3)',
+    backgroundColor: 'var(--dsh-ui-accent-soft)',
   },
   '&dark .cm-selectionMatch': {
-    backgroundColor: 'var(--accent-a3)',
+    backgroundColor: 'var(--dsh-ui-accent-soft)',
   },
 })
 

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
+import { ShellTheme } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
 import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
 import { tokenStyles } from '../src/design-system/tokens.ts'
@@ -54,7 +54,6 @@ import { DshPortalContext } from '../src/ui/shared.ts'
 
 /* 与 design-system.tsx fixture 相同的注册次序；组件样式经各自 .styles.ts
    的 defineStyles 进入同一张 collectStyles() 输出。 */
-defineStyles('legacy', 'radix-themes', radixThemesStyles)
 defineStyles('legacy', 'shell-legacy', redesignedStyles)
 defineStyles('legacy', 'yuangao-components', componentStyles)
 defineStyles('legacy', 'yuangao-responsive', responsiveStyles)

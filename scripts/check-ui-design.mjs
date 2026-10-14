@@ -205,17 +205,21 @@ check('accent location selection and unchanged editor typography contract', () =
   assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not([data-accent-color])'))
   assert(!componentStyles.includes('button.rt-BaseButton.rt-variant-solid:not(.send)'))
 })
-check('no !important in product style sources beyond the listed exceptions', () => {
-  /* !important 的绝对禁令（design-system-spec §5）：组件层不允许出现；增量
-     drift 扫描只管改动文件，这里做全量兜底。下面列出的既有出现是唯一例外，
-     只允许减少，不允许新增 —— 新增文件或新增条目都会失败。
-     注释里的 !important 不计算（与 drift 扫描同一套注释剔除逻辑）。 */
-  const exceptions = new Map([
-    ['packages/dsh-editor-shell/src/styles.ts', { max: 12, reason: 'legacy 层旧样式表的既有声明，随界面迁移逐条删除' }],
-    ['packages/dsh-manuscript/src/client/editor-core/styles.ts', { max: 24, reason: '未分层插件样式表，压过 editor-core 挂件的内联默认样式（ghost 提示、提案、冲突条、页脚内边距）' }],
-    ['packages/dsh-manuscript/src/client/overlay-styles.ts', { max: 3, reason: '未分层插件样式表，prefers-reduced-motion 覆盖 portal 出去的抽屉' }],
-  ])
-  const root = fileURLToPath(new URL('..', import.meta.url))
+/* 产品源码边界：shell、manuscript 与私有面板。官方插件包和 seats/proofread
+   的 standalone 兜底声明文件不在此列 —— 它们给没有本编辑器主题作用域的宿主
+   提供字面量回退，是定义侧而不是消费侧。 */
+const PRODUCT_STYLE_DIRS = [
+  'packages/dsh-editor-shell/src',
+  'packages/dsh-manuscript/src',
+  'packages/dsh-editor-panel-base/src',
+  'packages/dsh-editor-memory-panel/src',
+  'packages/dsh-editor-overview-panel/src',
+  'packages/dsh-editor-proofread-panel/src',
+  'packages/dsh-editor-cards/src',
+  'packages/dsh-editor-novel-kernel/src',
+]
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+function collectProductSources() {
   const sources = []
   const walk = dir => {
     for (const entry of readdirSync(dir)) {
@@ -229,18 +233,58 @@ check('no !important in product style sources beyond the listed exceptions', () 
       sources.push(absolute)
     }
   }
-  for (const dir of [
-    'packages/dsh-editor-shell/src',
-    'packages/dsh-manuscript/src',
-    'packages/dsh-editor-panel-base/src',
-    'packages/dsh-editor-memory-panel/src',
-    'packages/dsh-editor-overview-panel/src',
-    'packages/dsh-editor-proofread-panel/src',
-    'packages/dsh-editor-cards/src',
-    'packages/dsh-editor-novel-kernel/src',
-  ]) walk(join(root, dir))
-  for (const absolute of sources) {
-    const relative = absolute.slice(root.length).split(sep).join('/')
+  for (const dir of PRODUCT_STYLE_DIRS) walk(join(REPO_ROOT, dir))
+  return sources
+}
+
+check('no Radix palette variables remain in product sources', () => {
+  /* 6a-2：旧 Radix 调色板变量在产品源码里退役为 --dsh-ui-* 语义 token。
+     design-system/tokens.ts 的 RADIX_ALIASES 迁移桥是唯一例外 —— 它是
+     作用域内的定义侧，随 6a-3 的 legacy 层折叠一并删除。seats/proofread
+     的 standalone 兜底链不在扫描范围（见 PRODUCT_STYLE_DIRS）。 */
+  const palette = /--(?:accent|gray|red|green|amber|blue|iris|indigo|violet|teal|cyan|purple|plum|pink|crimson|tomato|ruby|orange|yellow|lime|mint|grass|sky|jade|brown|bronze|gold|slate|mauve|olive|sage|sand|color)-/
+  const migrationBridge = 'packages/dsh-editor-shell/src/design-system/tokens.ts'
+  for (const absolute of collectProductSources()) {
+    const relative = absolute.slice(REPO_ROOT.length).split(sep).join('/')
+    if (relative === migrationBridge) continue
+    const hit = readFileSync(absolute, 'utf8').match(palette)
+    assert(!hit, `${relative} still references Radix variable ${hit?.[0]}`)
+  }
+})
+check('no @radix-ui/themes reference in any package source', () => {
+  /* 包依赖在 6a-3 移除；这里先保证 src/ 里不再 import、resolve 或在注释里
+     继续描述对它的依赖。 */
+  const packages = join(REPO_ROOT, 'packages')
+  const hits = []
+  const walk = dir => {
+    for (const entry of readdirSync(dir)) {
+      const absolute = join(dir, entry)
+      if (statSync(absolute).isDirectory()) {
+        if (!/^(node_modules|lib|dist)$/.test(entry)) walk(absolute)
+        continue
+      }
+      if (!/\.(ts|tsx|css|mts|cts)$/.test(entry)) continue
+      if (readFileSync(absolute, 'utf8').includes('@radix-ui/themes')) hits.push(absolute.slice(REPO_ROOT.length).split(sep).join('/'))
+    }
+  }
+  for (const entry of readdirSync(packages)) {
+    const src = join(packages, entry, 'src')
+    try { if (statSync(src).isDirectory()) walk(src) } catch { /* no src */ }
+  }
+  assert.deepEqual(hits, [])
+})
+check('no !important in product style sources beyond the listed exceptions', () => {
+  /* !important 的绝对禁令（design-system-spec §5）：组件层不允许出现；增量
+     drift 扫描只管改动文件，这里做全量兜底。下面列出的既有出现是唯一例外，
+     只允许减少，不允许新增 —— 新增文件或新增条目都会失败。
+     注释里的 !important 不计算（与 drift 扫描同一套注释剔除逻辑）。 */
+  const exceptions = new Map([
+    ['packages/dsh-editor-shell/src/styles.ts', { max: 12, reason: 'legacy 层旧样式表的既有声明，随界面迁移逐条删除' }],
+    ['packages/dsh-manuscript/src/client/editor-core/styles.ts', { max: 24, reason: '未分层插件样式表，压过 editor-core 挂件的内联默认样式（ghost 提示、提案、冲突条、页脚内边距）' }],
+    ['packages/dsh-manuscript/src/client/overlay-styles.ts', { max: 3, reason: '未分层插件样式表，prefers-reduced-motion 覆盖 portal 出去的抽屉' }],
+  ])
+  for (const absolute of collectProductSources()) {
+    const relative = absolute.slice(REPO_ROOT.length).split(sep).join('/')
     const found = findings(readFileSync(absolute, 'utf8')).filter(f => f.rule === 'cascade-override').length
     if (!found) continue
     const allowed = exceptions.get(relative)
