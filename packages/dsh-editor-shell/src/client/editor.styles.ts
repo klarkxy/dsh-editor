@@ -126,7 +126,9 @@ defineStyles('dsh.surfaces', 'dsh-editor', `
 }
 .radix-themes .proposal > strong { font: var(--dsh-ui-weight-medium) var(--dsh-ui-text-base)/1.4 var(--dsh-ui-font-ui); color: var(--dsh-ui-text); display: block; margin-bottom: var(--dsh-ui-space-3); }
 .radix-themes .proposal p { margin: 0; white-space: pre-wrap; color: var(--dsh-ui-muted); }
-.radix-themes .proposal-actions {
+/* 只作用于编辑器选段建议卡（manuscript 槽位 class「proposal」），
+   不得裸写 .proposal-actions——会话提案卡同名类的换行规则在 chat.styles.ts。 */
+.radix-themes .proposal .proposal-actions {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--dsh-ui-space-2);
   padding-top: var(--dsh-ui-space-4); margin-top: var(--dsh-ui-space-4); border-top: 0.5px solid var(--dsh-ui-line);
 }

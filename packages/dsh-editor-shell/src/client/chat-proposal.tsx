@@ -533,36 +533,40 @@ export function ProposalCard(props: {
   const footer = <Flex asChild direction="column" gap="2" mt="3">
     <footer>
       {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
-        {/* 同回合全部核对安全时，首个待处理卡操作行头部给「全部应用」批量入口。 */}
-        {state === 'ready' && props.applyAll ? <Button
-          type="button"
-          variant="secondary"
-          disabled={props.applyAll.busy}
-          onClick={props.applyAll.run}>
-          {t('chat.applyAll', { count: props.applyAll.count })}
-        </Button> : null}
-        {state === 'ready' ? <Button type="button" variant="primary" onClick={() => void apply()}>
-          {t('chat.applyChanges')}
-        </Button> : null}
-        {state === 'ready' ? <Button
-          type="button"
-          variant="secondary"
-          className="proposal-dismiss"
-          onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
-          {t('chat.discardProposal')}
-        </Button> : null}
+        {/* 主操作组弹性占满一行：ghost「稍后处理」能并排行尾就右对齐，
+            放不下则整个落到下一行左对齐，不产生右飘孤儿按钮。 */}
+        <Flex className="proposal-actions__main" gap="2" wrap="wrap">
+          {/* 同回合全部核对安全时，首个待处理卡操作行头部给「全部应用」批量入口。 */}
+          {state === 'ready' && props.applyAll ? <Button
+            type="button"
+            variant="secondary"
+            disabled={props.applyAll.busy}
+            onClick={props.applyAll.run}>
+            {t('chat.applyAll', { count: props.applyAll.count })}
+          </Button> : null}
+          {state === 'ready' ? <Button type="button" variant="primary" onClick={() => void apply()}>
+            {t('chat.applyChanges')}
+          </Button> : null}
+          {state === 'ready' ? <Button
+            type="button"
+            variant="secondary"
+            className="proposal-dismiss"
+            onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
+            {t('chat.discardProposal')}
+          </Button> : null}
+          {canRecheckNow ? <Button type="button" variant="primary" onClick={() => void check()}>
+            {t('chat.recheck')}
+          </Button> : null}
+          {canUndo ? <Button type="button" variant="secondary" onClick={() => void undo()}>
+            {t('chat.undoThis')}
+          </Button> : null}
+        </Flex>
         {state === 'ready' ? <Button
           type="button"
           variant="ghost"
           className="proposal-defer"
           onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
           {t('chat.defer')}
-        </Button> : null}
-        {canRecheckNow ? <Button type="button" variant="primary" onClick={() => void check()}>
-          {t('chat.recheck')}
-        </Button> : null}
-        {canUndo ? <Button type="button" variant="secondary" onClick={() => void undo()}>
-          {t('chat.undoThis')}
         </Button> : null}
       </Flex> : null}
       <Text

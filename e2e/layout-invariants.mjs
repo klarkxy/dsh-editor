@@ -16,7 +16,9 @@
  */
 import { spawn } from 'node:child_process'
 import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { resolve, sep } from 'node:path'
+import { build } from 'tsdown'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
@@ -311,6 +313,64 @@ await configureProfile(profileRoot, {
 })
 await syncPresetDeclarations(home, profileRoot)
 
+/* ---- Proposal-action fixture: real ProposalCard/ProposalBoard markup built
+   with tsdown and mounted into the live rail/drawer via window hook, so the
+   wrap invariant measures production cards, not a synthetic row. The page is
+   the real shell, so card styles come from the app itself. ---- */
+const shellRequire = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))
+const fixtureDir = resolve(output, 'proposal-mount')
+await mkdir(fixtureDir, { recursive: true })
+const fixtureSrc = resolve(fixtureDir, 'mount.tsx')
+const absSource = (p) => JSON.stringify(resolve(root, p).replaceAll('\\', '/'))
+await writeFile(fixtureSrc, `
+import { createRoot } from ${JSON.stringify(shellRequire.resolve('react-dom/client').replaceAll('\\', '/'))}
+import { ProposalCard } from ${absSource('packages/dsh-editor-shell/src/client/chat-proposal.tsx')}
+import { createProposalBoard } from ${absSource('packages/dsh-editor-shell/src/model/proposal-board.ts')}
+import { ProposalBoardScope, useProposalRowBoard } from ${absSource('packages/dsh-editor-shell/src/client/chat-proposal-board.tsx')}
+
+const fileState = Object.fromEntries(['正文/001.md', '正文/002.md'].map(p => [p, { version: 'v0', text: '旧文 ' + p }]))
+const proposals = [
+  { kind: 'edit', path: '正文/001.md', oldText: fileState['正文/001.md'].text, newText: '新文 001', summary: '替换第一句' },
+  { kind: 'edit', path: '正文/002.md', oldText: fileState['正文/002.md'].text, newText: '新文 002', summary: '替换第二句' },
+]
+const ctx = { connection: { rpc: { async call(_channel, endpoint, body) {
+  const state = fileState[body.path]
+  if (endpoint === 'proposal.receipt') return { ok: true, value: { receipt: null } }
+  if (endpoint === 'proposal.prepare' && state) return { ok: true, value: { kind: 'edit', version: state.version, before: state.text, after: '新文 ' + body.path } }
+  if (endpoint === 'file.read' && state) return { ok: true, value: { version: state.version, text: state.text } }
+  return { ok: false, error: { code: 'probe', message: endpoint, details: {} } }
+} } } }
+function BoundCard({ id, proposal }) {
+  const rowBoard = useProposalRowBoard(id)
+  return <ProposalCard ctx={ctx} sessionId="probe" proposal={proposal}
+    board={rowBoard.board} boardId={id} boardTurnKey={rowBoard.turnKey}
+    applyAll={rowBoard.applyAll} onApplied={() => {}} />
+}
+window.__mountProposalProbe = (host) => {
+  const board = createProposalBoard()
+  const turnKeys = new Map([['p1', 0], ['p2', 0]])
+  return createRoot(host).render(
+    <ProposalBoardScope board={board} turnKeys={turnKeys}>
+      <BoundCard id="p1" proposal={proposals[0]} />
+      <BoundCard id="p2" proposal={proposals[1]} />
+    </ProposalBoardScope>)
+}
+`, 'utf8')
+await build({
+  entry: { mount: fixtureSrc }, format: ['esm'], platform: 'browser', target: 'es2022',
+  outDir: resolve(fixtureDir, 'out'), clean: true, hash: false, dts: false,
+  deps: { alwaysBundle: [/.*/] },
+  plugins: [{
+    name: 'probe-css',
+    resolveId(id) { if (id.endsWith('.css')) return `\0probe-css:${id}.as-text` },
+    async load(id) {
+      if (!id.startsWith('\0probe-css:')) return
+      const spec = id.slice('\0probe-css:'.length, -'.as-text'.length)
+      return `export default ${JSON.stringify(await readFile(shellRequire.resolve(spec), 'utf8'))}`
+    },
+  }],
+})
+
 const VIEWPORTS = [
   { width: 1440, height: 900 },
   { width: 1024, height: 768 },
@@ -326,6 +386,78 @@ try {
   page.setDefaultTimeout(15_000)
   page.on('pageerror', (e) => failures.push(`pageerror: ${e.message}`))
   page.on('console', (m) => { if (m.type() === 'error') failures.push(`console: ${m.text()}`) })
+
+  // Serve the fixture bundle same-origin so dynamic import works without CORS.
+  await page.route('**/__proposal-mount/**', async (route) => {
+    const name = new URL(route.request().url()).pathname.split('/__proposal-mount/')[1]
+    const target = resolve(fixtureDir, 'out', name)
+    const body = await readFile(target).catch(() => null)
+    if (!body || !target.startsWith(resolve(fixtureDir, 'out'))) return route.fulfill({ status: 404 })
+    return route.fulfill({ contentType: 'application/javascript', body })
+  })
+
+  /* 把真实提案卡挂进指定容器（dock rail 或 drawer 的 aside.chat），
+     隐藏原 history 让卡片独占宽度，量测每条 action row 的行分布。 */
+  const probeProposalActions = async (label, scopeSelector) => {
+    const mounted = await page.evaluate(async (sel) => {
+      document.querySelector('#li-proposal-probe')?.remove()
+      document.querySelectorAll('aside.chat > .chat-history[style*="display: none"]').forEach((el) => { el.style.display = '' })
+      if (!window.__mountProposalProbe) {
+        try { await import('/__proposal-mount/mount.js') } catch { return 'import-failed' }
+      }
+      const chat = document.querySelector(sel)
+      const history = chat?.querySelector(':scope > .chat-history')
+      if (!chat || !history) return 'no-chat'
+      history.style.display = 'none'
+      const cover = document.createElement('div')
+      cover.id = 'li-proposal-probe'
+      cover.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding:16px;flex:1;min-height:0;overflow:auto'
+      history.insertAdjacentElement('afterend', cover)
+      window.__mountProposalProbe(cover)
+      return 'ok'
+    }, scopeSelector)
+    if (mounted !== 'ok') { failures.push(`${label}: proposal probe mount failed (${mounted})`); return }
+    /* 等两条卡都核对完成：首卡出现「全部应用 (2)」说明四键全宽行已在量测对象里。 */
+    await page.locator('#li-proposal-probe .proposal-actions button').first().waitFor({ timeout: 10_000 }).catch(() => undefined)
+    await page.locator('#li-proposal-probe .proposal-actions').first()
+      .getByRole('button', { name: /全部应用/ }).waitFor({ timeout: 10_000 }).catch(() => undefined)
+    const rows = await page.evaluate(() => {
+      const probe = document.querySelector('#li-proposal-probe')
+      if (!probe) return null
+      return [...probe.querySelectorAll('.proposal-actions')].map((row) => {
+        const rowLeft = row.getBoundingClientRect().left
+        const buttons = [...row.querySelectorAll('button')].filter((b) => b.getClientRects().length)
+        const lines = []
+        for (const b of buttons) {
+          const rect = b.getBoundingClientRect()
+          let line = lines.find((l) => Math.abs(l.top - rect.top) < 4)
+          if (!line) { line = { top: rect.top, items: [] }; lines.push(line) }
+          line.items.push({ left: rect.left, defer: b.classList.contains('proposal-defer') })
+        }
+        return { rowLeft, total: buttons.length, lines }
+      })
+    })
+    await page.evaluate(() => {
+      const probe = document.querySelector('#li-proposal-probe')
+      const history = probe?.previousElementSibling
+      if (history && history.classList.contains('chat-history')) history.style.display = ''
+      probe?.remove()
+    })
+    if (!rows || rows.length === 0) { failures.push(`${label}: proposal probe found no action rows`); return }
+    for (const row of rows) {
+      if (row.total <= 1) continue
+      for (let i = 0; i < row.lines.length; i += 1) {
+        const line = row.lines[i]
+        if (line.items.length !== 1) continue
+        const item = line.items[0]
+        const ok = item.defer && i === row.lines.length - 1 && Math.abs(item.left - row.rowLeft) <= 4
+        if (!ok) {
+          failures.push(`${label}: action button orphaned on a shared row (total ${row.total}, ` +
+            `line ${i + 1}/${row.lines.length}, defer=${item.defer}, left=${item.left.toFixed(1)} vs row ${row.rowLeft.toFixed(1)})`)
+        }
+      }
+    }
+  }
 
   await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(
@@ -579,6 +711,12 @@ try {
   }, 'official resource preview mounted in 资料 tab', 15_000)
   const alerts = await page.locator(`${S.filesRail} [role="alert"]`).count()
   if (alerts > 0) failures.push(`rightbar preview: ${alerts} alert(s) in files rail after opening map.png`)
+  /* 图片解码晚于容器挂载：等预览内真的渲出 img/canvas 再量测，
+     否则这一步会偶发在「mount 成功但位图未出」的中间帧上。 */
+  await waitFor(async () => page.evaluate(() => {
+    const panel = document.querySelector('[data-sidebar-right-panel]')
+    return Boolean(panel && [...panel.querySelectorAll('img,canvas')].some((el) => el.getBoundingClientRect().width > 0))
+  }).catch(() => false), 'preview media rendered', 10_000).catch(() => undefined)
 
   // Containment: the preview must live INSIDE the aux 资料 panel — inside
   // the aux rail box, below the tab strip, never intersecting the paper.
@@ -731,6 +869,11 @@ try {
     }
   }
 
+  // ---- proposal action rows at 1440 rail (~380px): ghost 稍后处理 either
+  // sits at the end of the first line or drops to a full left-aligned line;
+  // a single orphan button on a shared row is a defect. ----
+  await probeProposalActions('proposal-actions/1440', '.dsh-pane--aux aside.chat')
+
   // ---- Partner Drawer at 760 / 390: C35 anchor (empty state), one-row
   // toolbar, tab strip as the top row with the close button at its end,
   // accessible name kept, no horizontal overflow. The long-thread variant
@@ -815,6 +958,10 @@ try {
     if (openHow) {
       note(`drawer/${width}`, `open=${openHow} activeAfterOpen=${await describeActive()}`)
       await drawerProbe(String(width))
+      if (width === 390) {
+        /* 抽屉宽度下的提案操作行：同一换行不变量，容器换成 .dsh-drawer。 */
+        await probeProposalActions('proposal-actions/390', '.dsh-drawer aside.chat')
+      }
       /* Escape 仍要关闭并把焦点还给触发它的控件。 */
       await page.keyboard.press('Escape').catch(() => undefined)
       await page.waitForTimeout(700)

@@ -84,7 +84,10 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
   background: var(--dsh-ui-surface); color: var(--dsh-ui-text);
   box-shadow: none; scrollbar-gutter: stable;
 }
-:is(.shell, .dsh-drawer) .proposal-actions { display: flex; flex-wrap: wrap; gap: var(--dsh-ui-space-2); }
+:is(.shell, .dsh-drawer) .proposal-actions { display: flex; flex-wrap: wrap; gap: var(--dsh-ui-space-2); align-items: center; }
+/* 主操作组占据整行剩余宽度,把 ghost「稍后处理」顶到行尾;放不下时
+   「稍后处理」整行落到第二行左对齐,不留单行右飘的孤儿按钮。 */
+:is(.shell, .dsh-drawer) .proposal-actions__main { display: flex; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; gap: var(--dsh-ui-space-2); justify-content: inherit; }
 :is(.shell, .dsh-drawer) .proposal-path-line {
   font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);
   margin: var(--dsh-ui-space-1) 0 0;
@@ -101,14 +104,22 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
 :is(.shell, .dsh-drawer) .proposal-settled__row .proposal-status { flex: none; }
 :is(.shell, .dsh-drawer) .proposal-card-settled .dsh-disclosure__content { min-width: 0; margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line); }
 
-/* 待处理提案粘性条：钉在滚动口顶部居中，浮于行内容之上。 */
+/* 待处理提案粘性条：吸顶满宽实底条 + 底部分隔线,按钮居中;
+   不再用浮起的圆角药丸,滚动内容从条下经过时不再压住卡片头。 */
 :is(.shell, .dsh-drawer) .chat-proposal-pill {
-  position: sticky; top: var(--dsh-ui-space-2); z-index: var(--dsh-ui-z-sticky);
-  align-self: center; display: flex; flex-wrap: wrap; justify-content: center;
-  gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-1);
-  background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong);
-  border-radius: var(--dsh-ui-radius-full); box-shadow: var(--dsh-ui-elevation-soft);
+  position: sticky; top: 0; z-index: var(--dsh-ui-z-sticky);
+  align-self: stretch;
+  /* 内容列内边距是 space-5（.chat-history .dsh-scroll-area > .dsh-flex）：
+     负 margin 让实底条与底线吃满整条线宽，而不是停在内容列内。 */
+  margin-inline: calc(-1 * var(--dsh-ui-space-5));
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-5);
+  background: var(--dsh-ui-surface);
+  border-bottom: 0.5px solid var(--dsh-ui-line);
 }
+/* 吸顶条高度约 control-sm + 2×space-2 + 0.5px 线;滚到卡片时让卡片头
+   落在条下方(scrollIntoView 也吃 scroll-margin)。 */
+:is(.shell, .dsh-drawer) .proposal-card { scroll-margin-top: calc(var(--dsh-ui-control-sm) + var(--dsh-ui-space-5)); }
 
 /* 编辑提案 hunk 差异：3 行上下文、加删按 token 着色、未改动段折叠，
    超过 max-height 内部滚动（新建文件提案仍是全文块，不走这里）。 */
