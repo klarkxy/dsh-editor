@@ -38,17 +38,22 @@ export function SidebarTools(props: {
   useLocale()
   const hostRef = useRef<HTMLDivElement | null>(null)
   /* 工具贡献按「请求时才渲染」的约定工作（记忆面板在 memory-open 前渲染
-     null），空槽位回填启动列表。layout effect 在绘制前量一次，已打开的
-     工具重挂载时不会闪一帧空态。 */
+     null），空槽位回填启动列表。宿主可能给每条贡献留常驻挂载节点，所以
+     以「是否有产生布局的后代元素」判定空位，而不是数直接子节点。
+     layout effect 在绘制前量一次，已打开的工具重挂载时不会闪一帧空态。 */
   const [slotEmpty, setSlotEmpty] = useState(true)
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host) return
-    const update = () => setSlotEmpty(host.childElementCount === 0)
+    const update = () => {
+      const rendered = Array.from(host.querySelectorAll('*'))
+        .some((el) => el.getClientRects().length > 0)
+      setSlotEmpty(!rendered)
+    }
     update()
     if (typeof MutationObserver === 'undefined') return
     const observer = new MutationObserver(update)
-    observer.observe(host, { childList: true, subtree: true })
+    observer.observe(host, { childList: true, subtree: true, attributes: true })
     return () => observer.disconnect()
   }, [])
   const [commandTick, setCommandTick] = useState(0)
