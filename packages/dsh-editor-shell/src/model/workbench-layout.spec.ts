@@ -199,6 +199,16 @@ describe('workbench layout', () => {
       expect(layout.auxTab).toBe('reference')
       expect(data.get(AUX_TAB_KEY)).toBe('partner')
     })
+
+    it('钉住是作者行为：pinReference 展开辅助栏写 assistant-open，但不写页签', () => {
+      const { data, storage } = storageOf({ [AUX_OPEN_KEY]: 'false', [AUX_TAB_KEY]: 'partner' })
+      const layout = new WorkbenchLayoutModel(storage, 'w1')
+      layout.pinReference()
+      expect(layout.snapshot.aux.open).toBe(true)
+      expect(layout.auxTab).toBe('reference')
+      expect(data.get(AUX_OPEN_KEY)).toBe('true')
+      expect(data.get(AUX_TAB_KEY)).toBe('partner')
+    })
   })
 
   describe('右侧栏预览（系统动作）', () => {

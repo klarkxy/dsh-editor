@@ -176,14 +176,18 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
      惰性取：文档文本异步进编辑器；状态变化时重渲染重新解析。 */
   const [docStatus, setDocStatus] = useState<EditorCoreStatus>('empty')
   /* 首页「继续写作」的上次位置：文档载入与保存落稳后记一条
-     { path, title, excerpt }（localStorage，多作品共存）。 */
+     { path, title, excerpt }（localStorage，多作品共存）。updatedAt 只在
+     成功保存（saved）时打新时间戳，首页相对时间以它为准。 */
   const openWorkspaceIdNow = workspaceOpen.kind === 'ready' ? workspaceOpen.workspaceId : undefined
   useEffect(() => {
     if (!openWorkspaceIdNow || !path) return
     if (docStatus !== 'saved' && docStatus !== 'draft') return
     const handle = editorHandleRef.current
     const text = handle?.getText() || handle?.getDocument()?.text || ''
-    writeHomeResumeDoc(openWorkspaceIdNow, deriveHomeResumeDoc(path, text))
+    writeHomeResumeDoc(openWorkspaceIdNow, {
+      ...deriveHomeResumeDoc(path, text),
+      updatedAt: docStatus === 'saved' ? Date.now() : undefined,
+    })
   }, [openWorkspaceIdNow, path, docStatus, editorHandleRef])
   const getActiveDocTitle = useCallback(() => {
     if (!path) return undefined
@@ -736,7 +740,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           setPinnedPath(null)
         }} /> : null}
       preview={<RightbarSlotSurface renderSlot={renderSlot} canShow={!pluginsOpen} viewportWidth={previewViewport} />} />}
-    tools={<SidebarTools renderSlot={renderSlot} seatContext={seatContext} />} />
+    tools={<SidebarTools renderSlot={renderSlot} seatContext={seatContext}
+      entries={sidebarToolEntries} commands={commands} />} />
 
   return (
     <ShellUiProvider theme={theme}>
@@ -849,7 +854,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         <RootFileDialogs
           actions={fileActions} ctx={ctx} fileSession={fileSession} files={files}
           editorHandleRef={editorHandleRef} path={path} chapterFiles={chapterFiles}
-          pinnedPath={pinnedPath} setPinnedPath={setPinnedPath} exportDocuments={exportDocuments}
+          pinnedPath={pinnedPath} setPinnedPath={(target) => {
+            setPinnedPath(target)
+            /* 钉住＝作者行为：开辅助栏并切到「资料」（§2 切换来源 2）。 */
+            if (target) workbench.pinReference()
+          }} exportDocuments={exportDocuments}
           openDocument={openDocument} />
         {renderCommandPalette()}
         {renderImportDialog()}

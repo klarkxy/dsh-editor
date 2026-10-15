@@ -1,10 +1,11 @@
-import { memo } from 'react'
-import { Box } from '../ui/index.ts'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Box, ChevronRightIcon, EmptyState, ListRow, ToolIcon } from '../ui/index.ts'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle, EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
-import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
-import { useLocale } from '../i18n/index.ts'
+import type { ShellCommandRegistry, ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
+import { toolLaunchers, type SlotEntry } from '../model/plugin-surfaces.ts'
+import { t, useLocale } from '../i18n/index.ts'
 import { type RevealRequest, type ShellContext } from './shared.ts'
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
@@ -28,11 +29,62 @@ export function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellCo
   );
 }
 
-export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatContext: ShellToolSeatContext }) {
+export function SidebarTools(props: {
+  renderSlot?: SettingsRenderSlot
+  seatContext: ShellToolSeatContext
+  entries?: readonly SlotEntry[]
+  commands?: ShellCommandRegistry
+}) {
+  useLocale()
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  /* 工具贡献按「请求时才渲染」的约定工作（记忆面板在 memory-open 前渲染
+     null），空槽位回填启动列表。layout effect 在绘制前量一次，已打开的
+     工具重挂载时不会闪一帧空态。 */
+  const [slotEmpty, setSlotEmpty] = useState(true)
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const update = () => setSlotEmpty(host.childElementCount === 0)
+    update()
+    if (typeof MutationObserver === 'undefined') return
+    const observer = new MutationObserver(update)
+    observer.observe(host, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+  const [commandTick, setCommandTick] = useState(0)
+  useEffect(() => props.commands?.subscribe(() => setCommandTick((value) => value + 1)), [props.commands])
+  const launchers = useMemo(
+    () => toolLaunchers(props.entries ?? [], props.commands?.list() ?? [], props.seatContext.locale),
+    [props.entries, props.commands, props.seatContext.locale, commandTick],
+  )
   return <div className="sidebar-tools">
-    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
+    <div ref={hostRef} data-dsh-plugin-surface="" style={{ display: 'contents' }}>
       {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
     </div>
+    {slotEmpty ? <div className="dsh-tools-empty">
+      <EmptyState
+        title={t('aux.toolsEmpty')}
+        body={launchers.length ? t('aux.toolsEmptyHint') : t('aux.toolsEmptyNone')} />
+      {launchers.length ? <div className="dsh-tools-empty__list">
+        {launchers.map((item) => {
+          const disabled = item.command.enabled?.(props.seatContext) === false
+            || (item.command.when === 'workspace' && !props.seatContext.sessionId)
+          return <ListRow
+            key={item.id}
+            className={disabled ? 'dsh-tools-empty__row is-disabled' : 'dsh-tools-empty__row'}
+            leading={<ToolIcon size="md" />}
+            label={<span className="dsh-tools-empty__text">
+              <span className="dsh-tools-empty__name">{item.label}</span>
+              {item.hint ? <span className="dsh-tools-empty__desc">{item.hint}</span> : null}
+            </span>}
+            trailing={disabled ? null : <ChevronRightIcon size="sm" />}
+            onSelect={disabled ? undefined : () => {
+              if (item.command.when === 'workspace') props.seatContext.revealSidebar()
+              item.command.run(props.seatContext)
+            }} />
+        })}
+      </div> : null}
+    </div> : null}
   </div>
 }
 

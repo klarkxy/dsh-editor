@@ -462,6 +462,24 @@ try {
   await memoryCloseButton.click()
   await memoryPanel.waitFor({ state: 'detached', timeout: 3_000 })
 
+  // Tools tab empty state: with every contribution dormant, the tab lists the
+  // registered launchers; clicking one must open the tool in this tab.
+  const toolsEmpty = page.locator(S.toolsEmpty)
+  await toolsEmpty.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined)
+  if (!(await toolsEmpty.isVisible().catch(() => false))) {
+    failures.push('tools tab shows no empty state after the last tool closes')
+  } else {
+    const memoryLauncher = toolsEmpty.locator(S.toolsEmptyRow).filter({ hasText: '记忆维护' })
+    if (!(await memoryLauncher.count())) {
+      failures.push('tools empty state does not list the memory launcher')
+    } else {
+      await memoryLauncher.click()
+      await memoryPanel.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined)
+      if (!(await memoryPanel.isVisible().catch(() => false))) failures.push('tools launcher did not reopen the memory panel')
+      else await memoryPanel.getByRole('button', { name: /关闭/ }).click().catch(() => undefined)
+    }
+  }
+
   // Theme switching is a command-palette command (Phase 4.1). light → dark →
   // light; the DOM data-theme and localStorage must update and survive reload.
   await toggleTheme(page)

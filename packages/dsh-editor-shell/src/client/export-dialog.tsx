@@ -4,7 +4,7 @@ import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dia
 import { Checkbox } from '../ui/checkbox.tsx'
 import { SegmentedControl } from '../ui/segmented-control.tsx'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
-import { sanitizeExportTitle, type ChapterExport, type ExportFormat } from '../export.ts'
+import { exportChapterChars, sanitizeExportTitle, type ChapterExport, type ExportFormat } from '../export.ts'
 import { displayTreeFileName, isAuthorFacingDocumentPath, isHiddenProjectPath, normalizeProjectDirectory, sortDocumentPaths } from '../project-files.ts'
 import { buildBook } from '../export-book.ts'
 import { buildDocxBlob } from '../export-docx.ts'
@@ -193,7 +193,7 @@ function ExportPreviewDialog(props: {
                         disabled={busy}
                         /* §3 文件名规则：显示名去扩展名，完整路径留在 title。 */
                         label={<span title={path}>{displayTreeFileName(group.dir ? path.slice(group.dir.length + 1) : path)}</span>}
-                        description={chapter ? `${t('export.chapterMeta', { chars: chapter.text.length })}${chapter.text.trim() ? '' : t('export.chapterEmpty')}` : undefined}
+                        description={chapter ? `${t('export.chapterMeta', { chars: exportChapterChars(path, chapter.text) })}${chapter.text.trim() ? '' : t('export.chapterEmpty')}` : undefined}
                         onCheckedChange={(checked) => setSelection({ key: groupsKey, paths: setDocSelection(selected, path, checked === true) })} />
                     })}
                   </div>

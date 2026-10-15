@@ -11,6 +11,7 @@ import { EditorChrome } from './editor-chrome.tsx'
 import { useEditorCommands } from './editor-commands.ts'
 import { usePaperView, type PaperViewCallbacks } from './editor-view.ts'
 import { createDraftSyncTimer } from './draft-sync.ts'
+import { countWords } from '../../text-stats.ts'
 import { defaultFimPayload, defaultPatchPayload, extractText } from './completion-payload.ts'
 import type {
   EditorCoreDraft, EditorCoreDraftBackup, EditorCoreHandle, EditorCorePaperProjection,
@@ -277,7 +278,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   paperOffsetRef.current = paperOffset
 
   const paperText = projected.text
-  const wordCount = useMemo(() => paperText.replace(/\s/g, '').length, [paperText])
+  const wordCount = useMemo(() => countWords(paperText), [paperText])
   const state: SaveState = documentReady ? saveState(doc, textRef.current, conflict) : error ? 'error' : path ? 'loading' : 'empty'
   const ghost = ghostCandidates[ghostIndex] ?? ''
 

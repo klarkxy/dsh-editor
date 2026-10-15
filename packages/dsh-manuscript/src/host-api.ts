@@ -38,6 +38,8 @@ export {
   parentRelative,
 } from './rpc/paths.ts'
 
+export { countWords } from './text-stats.ts'
+
 export {
   PROJECT_RULES_TEMPLATE,
   ProjectRulesError,

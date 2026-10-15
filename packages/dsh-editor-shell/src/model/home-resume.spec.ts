@@ -63,9 +63,16 @@ describe('home resume store', () => {
   it('round-trips per workspace and survives corrupt payloads', () => {
     const store = fakeStore()
     const doc: HomeResumeDoc = { path: '正文/001.md', title: '雨日归家', excerpt: '林舟进门。' }
-    writeHomeResumeDoc('w1', doc, store)
+    const stamp = Date.parse('2026-10-15T10:00:00Z')
+    writeHomeResumeDoc('w1', { ...doc, updatedAt: stamp }, store)
     writeHomeResumeDoc('w2', { path: '第二章.md', title: '渡口' }, store)
-    expect(readHomeResumeMap(store)).toEqual({ w1: doc, w2: { path: '第二章.md', title: '渡口' } })
+    const map = readHomeResumeMap(store)
+    expect(map.w1).toMatchObject(doc)
+    expect(map.w2).toMatchObject({ path: '第二章.md', title: '渡口' })
+    expect(map.w1!.updatedAt).toBe(stamp)
+    /* 草稿期的摘录刷新不带时间戳：沿用上一次保存的 stamp，不重置。 */
+    writeHomeResumeDoc('w1', { ...doc, excerpt: '第二段更新。' }, store)
+    expect(readHomeResumeMap(store).w1).toMatchObject({ excerpt: '第二段更新。', updatedAt: stamp })
     removeHomeResumeDoc('w1', store)
     expect(readHomeResumeMap(store).w1).toBeUndefined()
 
@@ -87,6 +94,22 @@ describe('recentWorkRowMeta', () => {
     expect(meta).toEqual(['t:2026-10-13', '雨日归家'])
     /* 右对齐信息是作品位置（目录末尾两段），不是章节路径。 */
     expect(lineInfo).toBe('…\\Writing\\ux-work')
+  })
+
+  it('prefers the save timestamp over the workspace open time, and falls back when absent', () => {
+    const stamp = Date.parse('2026-10-15T10:00:00Z')
+    const { meta: saved } = recentWorkRowMeta(
+      { path: 'C:\\Writing\\ux-work', updatedAt: '2026-10-13' },
+      { path: '正文/001.md', title: '雨日归家', updatedAt: stamp },
+      fmt,
+    )
+    expect(saved[0]).toBe(`t:${new Date(stamp).toISOString()}`)
+    const { meta: opened } = recentWorkRowMeta(
+      { path: 'C:\\Writing\\ux-work', updatedAt: '2026-10-13' },
+      { path: '正文/001.md', title: '雨日归家' },
+      fmt,
+    )
+    expect(opened[0]).toBe('t:2026-10-13')
   })
 
   it('shortens a posix work path with an ellipsis', () => {

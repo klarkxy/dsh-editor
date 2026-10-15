@@ -216,6 +216,8 @@ export const S = Object.freeze({
   memoryPanel: '[data-testid="memory-panel"]',
   memoryList: '.memory-list',
   memoryStatus: '.memory-status',
+  toolsEmpty: '.dsh-tools-empty',
+  toolsEmptyRow: '.dsh-tools-empty__row',
   h2: 'h2',
 
   // ---- proposals -------------------------------------------------------------

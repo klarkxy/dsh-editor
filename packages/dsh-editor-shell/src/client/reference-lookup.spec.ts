@@ -87,10 +87,13 @@ describe('on-demand reference lookup', () => {
     expect(dialog).toContain('active = false; controller.abort()')
     expect(root).toContain('onOpenReference={openDocument}')
     // 4.1: pinning still routes through setPinnedPath, and now also opens the
-    // aux rail on the 资料 tab (shell-rewrite-spec §2 切换来源 2).
+    // aux rail on the 资料 tab (shell-rewrite-spec §2 切换来源 2). Both entry
+    // points do it: the editor pin callbacks and the tree context-menu pin
+    // that flows through RootFileDialogs' setPinnedPath (the seat-context
+    // toggle goes through workbench.model directly).
     expect(root).toContain('onPinReference')
     expect(root).toContain('setPinnedPath(target)')
-    expect(root).toContain('workbench.pinReference()')
+    expect(root.match(/workbench\.pinReference\(\)/g)).toHaveLength(3)
     expect(editor).toContain('handleRef.current?.selectParagraph?.(target ?? undefined)')
     expect(editor).toContain('handleRef.current?.isTargetCurrent(target)')
   })

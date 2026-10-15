@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
+  countWords,
   FileOpError,
   listDirStrict,
   normalizeWorkspaceRelative,
@@ -64,7 +65,7 @@ function titleAndExcerpt(relative: string, text: string): { title: string; excer
     title,
     excerpt,
     empty: withoutLeadingH1.replace(/\s/g, '').length === 0,
-    chars: text.replace(/\s/g, '').length,
+    chars: countWords(text),
   }
 }
 

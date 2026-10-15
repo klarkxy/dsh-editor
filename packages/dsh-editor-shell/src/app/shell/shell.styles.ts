@@ -129,6 +129,19 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 :is(.shell, .dsh-drawer) .sidebar-tools { min-width: 0; gap: var(--dsh-ui-space-2); }
 :is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel) { animation: shell-panel-enter 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 
+/* 「工具」空态：列出能打开的贡献（没有打开命令的不出现）。空态是宿主
+   内容、不在 data-dsh-plugin-surface 里，正常走层。 */
+.dsh-tools-empty { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-2); }
+.dsh-tools-empty__list { display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); }
+.dsh-tools-empty__row { min-height: var(--dsh-ui-control-lg); padding-block: var(--dsh-ui-space-1); }
+.dsh-tools-empty__row.is-disabled { opacity: var(--dsh-ui-dim-opacity); }
+.dsh-tools-empty__text { display: flex; flex-direction: column; min-width: 0; }
+.dsh-tools-empty__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-tools-empty__desc {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs);
+}
+
 /* 窄窗（≤760px）：快捷键提示先让位；作品菜单截断但保留真实命中区。 */
 @media (max-width: 760px) {
   .dsh-topbar .palette-trigger-kbd { display: none; }

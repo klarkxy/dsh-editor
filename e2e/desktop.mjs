@@ -290,11 +290,29 @@ async function launchPhase(name, extraEnv, inspect) {
 }
 
 const phases = []
-phases.push(await launchPhase('first-run-home', {}, async (state) => {
+phases.push(await launchPhase('first-run-home', {}, async (state, ctx) => {
   const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
   if (!state.shell || state.officialHome || !state.editorName || !onboarding || !state.settingsControl) {
     throw new Error(`first-run home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding })}`)
   }
+  // Ctrl+K must open the command palette through the official native bridge:
+  // before-input-event matches the registered chord, then the renderer command
+  // toggles the palette. Drive the key through webContents.sendInputEvent —
+  // CDP-synthesized input (page.keyboard.press) never reaches before-input-event.
+  await ctx.app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    win?.focus()
+    win?.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['control'] })
+    win?.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'K', modifiers: ['control'] })
+  })
+  const palette = ctx.window.getByRole('dialog', { name: '搜索与命令' })
+  try {
+    await palette.waitFor({ state: 'visible', timeout: 10_000 })
+  } catch (error) {
+    throw new Error(`Ctrl+K did not open the command palette: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  await ctx.window.keyboard.press('Escape')
+  await palette.waitFor({ state: 'hidden', timeout: 10_000 })
 }))
 
 phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state, ctx) => {

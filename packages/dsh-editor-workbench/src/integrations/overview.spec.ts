@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, SandboxExecutionPolicyLike, WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { countWords, type FileSystemLike, type FsDirEntryLike, type FsInfoLike, type FsPathInfoLike, type FsTargetLike, type FsWriteIntentLike, type SandboxExecutionPolicyLike, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import { readProjectOverview, type OverviewAccess } from '../integrations/overview.ts'
 
 let root = ''
@@ -153,6 +153,19 @@ describe('project overview', () => {
       meta: { beats: 0, hasState: false },
     })
     expect(overview.totals.chars).toBe(14)
+  })
+
+  /* 口径统一：概览字数必须与稿纸页脚/导出预检同一个 countWords（剥 frontmatter 后）。 */
+  it('counts chapter chars with the shared countWords on frontmatter-stripped prose', async () => {
+    const raw = '---\nbeats: [码头]\n---\n# 第一章\n\n正文一 句。\n\n第二段。\n'
+    await write('正文/001.md', raw)
+    await write('资料/说明.txt', '笔记 正文。\n')
+    const overview = await readProjectOverview(access())
+    const chapter = overview.chapters.find((item) => item.path === '正文/001.md')!
+    const note = overview.chapters.find((item) => item.path === '资料/说明.txt')!
+    expect(chapter.chars).toBe(countWords('# 第一章\n\n正文一 句。\n\n第二段。\n'))
+    expect(note.chars).toBe(countWords('笔记 正文。\n'))
+    expect(overview.totals.chars).toBe(chapter.chars + note.chars)
   })
 
   it('excludes AGENTS.md and other assistant files from counts and the chapter list', async () => {

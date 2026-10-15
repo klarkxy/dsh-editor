@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
+import type { MutableRefObject } from 'react'
 import type { SessionFace } from '../dsh-compat.ts'
 import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { defaultCreateDirectory } from '../project-files.ts'
@@ -37,7 +37,7 @@ export function RootFileDialogs({ actions, ctx, fileSession, files, editorHandle
   path: string
   chapterFiles: string[]
   pinnedPath: string | null
-  setPinnedPath: Dispatch<SetStateAction<string | null>>
+  setPinnedPath(path: string | null): void
   exportDocuments(directory?: string): Promise<void>
   openDocument(path: string): void
 }) {

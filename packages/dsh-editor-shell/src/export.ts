@@ -1,4 +1,5 @@
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
+import { countWords } from 'dsh-manuscript/client/editor-core'
 import { t } from './i18n/index.ts'
 import { isAuthorFacingDocumentPath, sortDocumentPaths } from './project-files.ts'
 
@@ -30,8 +31,14 @@ function withoutLeadingHeading(text: string): string {
   return text.replace(/^\uFEFF/, '').replace(/^\s*#\s+[^\r\n]*(?:\r?\n|$)/, '')
 }
 
+/* 行字数与稿纸页脚、文档概览同一个 countWords（非空白字符数），
+   .md 先剥章节 frontmatter，与概览的 prose 口径一致。 */
 export function chapterExportChars(text: string): number {
-  return text.replace(/\s/g, '').length
+  return countWords(text)
+}
+
+export function exportChapterChars(path: string, text: string): number {
+  return countWords(chapterExportText(path, text))
 }
 
 export function chapterExportEmpty(text: string): boolean {

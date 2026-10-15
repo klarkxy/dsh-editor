@@ -876,6 +876,15 @@ try {
     await page.keyboard.press('Escape')
     await page.locator(S.paletteContent).waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
   }
+  // The web chord is Ctrl+Alt+K (the desktop chord Ctrl+K is owned by the
+  // native before-input-event bridge and is covered by e2e/desktop.mjs).
+  {
+    await page.keyboard.press('Control+Alt+K')
+    const opened = await page.locator(S.paletteContent).waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false)
+    if (!opened) failures.push('palette/chord: Control+Alt+K did not open the command palette')
+    await page.keyboard.press('Escape')
+    await page.locator(S.paletteContent).waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
+  }
   // ---- §8 dialog focus return: the migrated export precheck dialog must
   // Escape-close and return focus to the 作品菜单 invoker. ----
   await page.getByRole('button', { name: '作品菜单' }).click()

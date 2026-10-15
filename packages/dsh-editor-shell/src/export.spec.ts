@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { countWords } from 'dsh-manuscript/client/editor-core'
 import { collectDocuments } from './client/export-dialog.tsx'
-import { buildExport, prepareExport } from './export.ts'
+import { buildExport, exportChapterChars, prepareExport } from './export.ts'
 import type { ShellContext } from './client/shared.ts'
 
 describe('document export', () => {
@@ -72,6 +73,22 @@ describe('document export', () => {
     expect(prepared.content).not.toContain('beats:')
     expect(prepared.content).not.toContain('now: 黄昏')
     expect(prepared.content).toContain('---\nkeep: true\n---\n原文。')
+  })
+
+  /* 同一份正文：导出行、导出合计与稿纸页脚（countWords）必须给出同一个数字。
+     概览侧在 dsh-editor-workbench 的 overview.spec 里对同一口径断言。 */
+  it('counts export rows and totals with the paper-footer countWords on frontmatter-stripped text', () => {
+    const raw = '---\nbeats: [码头]\n---\n# 第一章\n\n正文一 句。\n\n第二段。\n'
+    const prose = '# 第一章\n\n正文一 句。\n\n第二段。\n'
+    const expected = countWords(prose)
+    const prepared = prepareExport([
+      { path: '正文/001.md', text: raw },
+      { path: '资料/说明.txt', text: '笔记 正文。\n' },
+    ], '口径', 'markdown')
+    const row = prepared.chapters.find((item) => item.path === '正文/001.md')
+    expect(row).toMatchObject({ chars: expected })
+    expect(exportChapterChars('正文/001.md', raw)).toBe(expected)
+    expect(prepared.totalChars).toBe(expected + countWords('笔记 正文。\n'))
   })
 })
 

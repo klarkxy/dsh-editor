@@ -9,6 +9,9 @@ export type HomeResumeDoc = {
   path: string
   title: string
   excerpt?: string
+  /* 最近一次成功保存（或载入）的时间戳；首页相对时间从这里取，
+     而不是作品打开时间。 */
+  updatedAt?: number
 }
 
 export const HOME_RESUME_KEY = 'dsh-editor.home.last-doc'
@@ -33,7 +36,12 @@ export function readHomeResumeMap(store: KeyValueStore | undefined = storage()):
     const map: Record<string, HomeResumeDoc> = {}
     for (const [workspaceId, doc] of Object.entries(parsed)) {
       if (doc && typeof doc.path === 'string' && typeof doc.title === 'string') {
-        map[workspaceId] = { path: doc.path, title: doc.title, excerpt: typeof doc.excerpt === 'string' ? doc.excerpt : undefined }
+        map[workspaceId] = {
+          path: doc.path,
+          title: doc.title,
+          excerpt: typeof doc.excerpt === 'string' ? doc.excerpt : undefined,
+          updatedAt: typeof doc.updatedAt === 'number' && Number.isFinite(doc.updatedAt) ? doc.updatedAt : undefined,
+        }
       }
     }
     return map
@@ -46,7 +54,9 @@ export function writeHomeResumeDoc(workspaceId: string, doc: HomeResumeDoc, stor
   if (!store || !workspaceId || !doc.path) return
   try {
     const map = readHomeResumeMap(store)
-    map[workspaceId] = doc
+    /* updatedAt 只在调用方明确给（成功保存）时更新；草稿期的摘录刷新
+       沿用上一次保存的时间戳。 */
+    map[workspaceId] = { ...doc, updatedAt: doc.updatedAt ?? map[workspaceId]?.updatedAt }
     store.setItem(HOME_RESUME_KEY, JSON.stringify(map))
   } catch { /* 记忆是增强，写不进就跳过 */ }
 }
@@ -93,7 +103,9 @@ export function recentWorkRowMeta(
   formatTime: (iso: string | undefined) => string,
 ): { lineInfo: string; meta: string[] } {
   const meta: string[] = []
-  const time = formatTime(workspace.updatedAt)
+  /* 相对时间先取保存时间戳；记录里没有（旧数据）才退回作品打开时间。 */
+  const stamp = resume?.updatedAt ? new Date(resume.updatedAt).toISOString() : workspace.updatedAt
+  const time = formatTime(stamp)
   if (time) meta.push(time)
   if (resume?.title) meta.push(resume.title)
   return { lineInfo: recentWorkPath(workspace.path ?? ''), meta }
