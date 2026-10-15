@@ -8,7 +8,8 @@ import {
 import type { SessionFace } from '../dsh-compat.ts'
 import type { RpcResult, ShellContext } from './shared.ts'
 import { Box, Card, Flex, Heading } from '../ui/index.ts'
-import { Button, Dialog } from './ui/index.ts'
+import { Button, Dialog, DialogTitle } from './ui/index.ts'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { CrossIcon } from './icons.tsx'
 import { t } from '../i18n/index.ts'
 import { currentSession, isObservableSource } from '../model/components.ts'
@@ -74,10 +75,13 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next) props.onClose() }}
-      title={path ? t('preview.aria', { path: fileName }) : t('preview.close')}
       className="file-dialog image-preview-dialog"
       overlayClassName="file-dialog-overlay"
       initialFocusRef={closeRef}>
+      {/* 无可见标题的图片预览：可访问名由这一个隐藏 Title 承担。 */}
+      <VisuallyHidden>
+        <DialogTitle>{path ? t('preview.aria', { path: fileName }) : t('preview.close')}</DialogTitle>
+      </VisuallyHidden>
       {url ? <Box>
         <img src={url} alt={path} />
       </Box> : null}

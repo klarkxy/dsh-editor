@@ -1,5 +1,5 @@
-export { Dialog, type DialogProps } from './dialog.tsx'
-export { Confirm, ConfirmCancel, type ConfirmProps } from './confirm.tsx'
+export { Dialog, DialogDescription, DialogTitle, type DialogProps } from './dialog.tsx'
+export { Confirm, ConfirmCancel, ConfirmDescription, ConfirmTitle, type ConfirmProps } from './confirm.tsx'
 export {
   Menu,
   MenuTrigger,

@@ -1,5 +1,4 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 import { IconButton } from './icon-button.tsx'
@@ -9,7 +8,10 @@ import './dialog.styles.ts'
 export type DialogProps = {
   open: boolean
   onOpenChange(open: boolean): void
-  title: ReactNode
+  /* titleHidden 模式时壳不渲染 Title/Description：调用方在 children 里
+     用 DialogTitle/DialogDescription 包住可见节点（可访问名即所见标题）。
+     非 titleHidden 模式下 title 仍是必填的可见头部标题。 */
+  title?: ReactNode
   description?: ReactNode
   size?: 'sm' | 'md' | 'lg'
   initialFocusRef?: RefObject<HTMLElement | null>
@@ -25,10 +27,33 @@ export type DialogProps = {
   overlayClassName?: string
   /** §9 钩子：渲染为内容节点的 data-testid。 */
   testid?: string
-  /** 宿主契约：标题/描述只做可访问名，可见头部由 children 自绘。 */
+  /** 宿主契约：可访问名由 children 内的 DialogTitle/DialogDescription
+     （包住可见标题节点）提供，壳不渲染任何标题/描述。 */
   titleHidden?: boolean
   /** 关闭自动聚焦前的拦截口；preventDefault 之后不再恢复焦点。 */
   onCloseAutoFocus?(event: Event): void
+}
+
+/* 对话框可访问名节点：asChild 包住调用方的可见标题/描述，让
+   aria-labelledby/aria-describedby 直接指向所见文本，不再渲染重复副本。 */
+export function DialogTitle(props: { asChild?: boolean; className?: string; children?: ReactNode }) {
+  return (
+    <DialogPrimitive.Title
+      asChild={props.asChild}
+      className={cx(props.asChild ? undefined : 'dsh-dialog__title', props.className)}>
+      {props.children}
+    </DialogPrimitive.Title>
+  )
+}
+
+export function DialogDescription(props: { asChild?: boolean; className?: string; children?: ReactNode }) {
+  return (
+    <DialogPrimitive.Description
+      asChild={props.asChild}
+      className={cx(props.asChild ? undefined : 'dsh-dialog__desc', props.className)}>
+      {props.children}
+    </DialogPrimitive.Description>
+  )
 }
 
 export function Dialog(props: DialogProps) {
@@ -95,14 +120,7 @@ export function Dialog(props: DialogProps) {
             }
           }}
         >
-          {props.titleHidden ? (
-            <>
-              <VisuallyHidden><DialogPrimitive.Title>{props.title}</DialogPrimitive.Title></VisuallyHidden>
-              {props.description
-                ? <VisuallyHidden><DialogPrimitive.Description>{props.description}</DialogPrimitive.Description></VisuallyHidden>
-                : null}
-            </>
-          ) : (
+          {props.titleHidden ? null : (
             <>
               <div className="dsh-dialog__header">
                 <DialogPrimitive.Title className="dsh-dialog__title">{props.title}</DialogPrimitive.Title>

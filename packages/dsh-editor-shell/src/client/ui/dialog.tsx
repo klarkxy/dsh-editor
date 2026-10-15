@@ -1,10 +1,14 @@
 import type { ReactNode, RefObject } from 'react'
 import { Dialog as InternalDialog } from '../../ui/index.ts'
 
+export { DialogDescription, DialogTitle } from '../../ui/index.ts'
+
 export type DialogProps = {
   open: boolean
   onOpenChange(open: boolean): void
-  title: string
+  /* 可访问名由 children 里的 DialogTitle/DialogDescription（包住可见标题）
+     提供；title/description 仅为兼容保留，不再渲染出任何副本。 */
+  title?: string
   description?: string
   children?: ReactNode
   className?: string
@@ -25,7 +29,8 @@ function stripOverlayClass(className: string): string {
 }
 
 /* C04：宿主对话框委托给内部 Dialog（src/ui/dialog.tsx），props 契约不变；
-   titleHidden 保留「壳负责可访问名、children 自绘可见头部」的语义。 */
+   titleHidden 模式下壳不渲染标题/描述，调用方在 children 里用
+   DialogTitle/DialogDescription 包住可见节点，可访问名即所见。 */
 export function Dialog(props: DialogProps) {
   return (
     <InternalDialog

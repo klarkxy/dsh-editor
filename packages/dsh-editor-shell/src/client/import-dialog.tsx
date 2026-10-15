@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { importSummary, type ImportFlow } from './import-flow.ts'
 import { t } from '../i18n/index.ts'
-import { ActivityRing, ActivityText, Button, Dialog } from './ui/index.ts'
+import { ActivityRing, ActivityText, Button, Dialog, DialogTitle } from './ui/index.ts'
 
 function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): void; onContinue(): void; onCleanup(): void }) {
   const focus = useRef<HTMLButtonElement | null>(null)
@@ -20,15 +20,16 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !working) props.onCancel() }}
-      title={title}
       className="file-dialog import-dialog file-dialog-overlay import-overlay"
       overlayClassName="file-dialog-overlay import-overlay"
       dismissible={!working}
       initialFocusRef={focus}>
       <Flex direction="column" gap="3">
-        <Heading as="h2" size="4" id="import-dialog-title">
-          {title}
-        </Heading>
+        <DialogTitle asChild>
+          <Heading as="h2" size="4">
+            {title}
+          </Heading>
+        </DialogTitle>
         {working ? <Flex className="import-working" align="center" gap="3">
           <ActivityRing size={22} />
           <ActivityText cue="none">

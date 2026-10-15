@@ -6,7 +6,7 @@ import { reasoningChoiceOf, reasoningEffortsFor, type ReasoningChoice } from './
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
-import { ActivityDots, Dialog } from './ui/index.ts'
+import { ActivityDots, Dialog, DialogDescription, DialogTitle } from './ui/index.ts'
 
 import type { ShellContext } from './shared.ts'
 import { failureMessage, text } from './settings-models-copy.ts'
@@ -283,17 +283,19 @@ export function ModelListEditor(props: {
       <Dialog
         open={candidates !== undefined}
         onOpenChange={(next: boolean) => { if (!next) closePicker() }}
-        title={t.candidateTitle}
-        description={t.candidateDescription}
         className="file-dialog models-candidate-dialog"
         overlayClassName="file-dialog-overlay models-overlay">
         <header>
-          <Heading as="h2" size="4">
-            {t.candidateTitle}
-          </Heading>
-          <Text as="p" size="2" color="gray" className="models-candidate-description">
-            {t.candidateDescription}
-          </Text>
+          <DialogTitle asChild>
+            <Heading as="h2" size="4">
+              {t.candidateTitle}
+            </Heading>
+          </DialogTitle>
+          <DialogDescription asChild>
+            <Text as="p" size="2" color="gray" className="models-candidate-description">
+              {t.candidateDescription}
+            </Text>
+          </DialogDescription>
           <Button variant="secondary" className="models-button" onClick={closePicker}>
             {t.candidateClose}
           </Button>

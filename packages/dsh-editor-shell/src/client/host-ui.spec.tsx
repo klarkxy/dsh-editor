@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UiRoot } from '../ui/index.ts'
 import { Select } from './select.tsx'
 import { Button, Input, TextArea } from './ui/controls.tsx'
-import { Dialog } from './ui/dialog.tsx'
+import { Dialog, DialogDescription, DialogTitle } from './ui/dialog.tsx'
 
 const html = (node: ReactNode) => renderToStaticMarkup(createElement(UiRoot, { theme: 'light' }, node))
 
@@ -107,7 +107,7 @@ describe('C04 host controls smoke', () => {
     expect(out).toContain('dsh-textarea')
   })
 
-  it('Dialog renders open chrome with hidden accessible title and testid', () => {
+  it('Dialog renders open chrome with the visible heading as its only accessible title', () => {
     const firstFocus = createRef<HTMLElement>()
     const out = renderQuiet(
       <Dialog
@@ -120,14 +120,17 @@ describe('C04 host controls smoke', () => {
         testid="host-dialog"
         dismissible={false}
         initialFocusRef={firstFocus}>
-        <h2>宿主对话框</h2>
+        <DialogTitle asChild><h2>宿主对话框</h2></DialogTitle>
+        <DialogDescription asChild><p>描述文本</p></DialogDescription>
         <button type="button">确定</button>
       </Dialog>)
     expect(out).toContain('role="dialog"')
     expect(out).toContain('data-testid="host-dialog"')
-    expect(out).toContain('宿主对话框')
     expect(out).toContain('plugin-overlay')
-    /* titleHidden：可见标题由 children 的 h2 提供，不重复渲染 header。 */
+    /* 可见 h2/p 即 Radix Title/Description（aria-labelledby 的 id 在
+       layout effect 里注册，SSR markup 不含该属性，只断言去重与无副本）。 */
+    expect(out.match(/宿主对话框/g)).toHaveLength(1)
+    expect(out.match(/描述文本/g)).toHaveLength(1)
     expect(out).not.toContain('dsh-dialog__title')
   })
 

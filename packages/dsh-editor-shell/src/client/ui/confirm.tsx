@@ -1,5 +1,4 @@
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { useRef, type ReactElement, type ReactNode, type RefObject } from 'react'
 import { cx, useDshPortalContainer } from '../../ui/shared.ts'
 import '../../ui/dialog.styles.ts'
@@ -9,7 +8,9 @@ import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus
 export type ConfirmProps = {
   open: boolean
   onOpenChange(open: boolean): void
-  title: string
+  /* 可访问名由 children 里的 ConfirmTitle/ConfirmDescription（包住可见
+     标题/正文）提供；title/description 仅为兼容保留，不再渲染副本。 */
+  title?: string
   description?: string
   children?: ReactNode
   className?: string
@@ -29,8 +30,27 @@ function stripOverlayClass(className: string): string {
   return className.replace(/\bfile-dialog-overlay\b/g, '').replace(/\s+/g, ' ').trim()
 }
 
+/* 确认框可访问名节点：asChild 包住调用方的可见标题/正文，
+   aria-labelledby/aria-describedby 直接指向所见文本。 */
+export function ConfirmTitle(props: { asChild?: boolean; className?: string; children?: ReactNode }) {
+  return (
+    <AlertDialogPrimitive.Title asChild={props.asChild} className={props.className}>
+      {props.children}
+    </AlertDialogPrimitive.Title>
+  )
+}
+
+export function ConfirmDescription(props: { asChild?: boolean; className?: string; children?: ReactNode }) {
+  return (
+    <AlertDialogPrimitive.Description asChild={props.asChild} className={props.className}>
+      {props.children}
+    </AlertDialogPrimitive.Description>
+  )
+}
+
 /* Phase 4.8：宿主确认框落在内部 ConfirmDialog chrome 上（.dsh-dialog .dsh-confirm）。
-   调用方仍在 children 里渲染可见标题/正文/按钮，Title/Description 只做可访问名。 */
+   壳不渲染标题/描述，调用方在 children 里用 ConfirmTitle/ConfirmDescription
+   包住可见节点，可访问名即所见。 */
 export function Confirm(props: ConfirmProps) {
   const dismissible = props.dismissible !== false
   const container = useDshPortalContainer()
@@ -66,12 +86,6 @@ export function Confirm(props: ConfirmProps) {
           if (node?.closest('[role="listbox"], .select-list, [data-radix-select-content]')) event.preventDefault()
         }}
       >
-        <VisuallyHidden>
-          <AlertDialogPrimitive.Title>{props.title}</AlertDialogPrimitive.Title>
-        </VisuallyHidden>
-        {props.description
-          ? <VisuallyHidden><AlertDialogPrimitive.Description>{props.description}</AlertDialogPrimitive.Description></VisuallyHidden>
-          : null}
         {props.children}
       </AlertDialogPrimitive.Content>
     </>

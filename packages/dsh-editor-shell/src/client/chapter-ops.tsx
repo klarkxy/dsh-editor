@@ -21,7 +21,7 @@ import {
 } from '../chapter-ops-view.ts'
 import { ProposalCard } from './chat.tsx'
 import { CrossIcon } from './icons.tsx'
-import { ActivityDots, Button, Dialog, Input } from './ui/index.ts'
+import { ActivityDots, Button, Dialog, DialogTitle, Input } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
@@ -88,7 +88,6 @@ function SplitFormDialog(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !busy) props.onCancel() }}
-      title={t('chapterOps.splitTitle')}
       className="file-dialog prompt-dialog chapter-ops-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!busy}
@@ -96,9 +95,11 @@ function SplitFormDialog(props: {
       returnFocusRef={props.returnFocusRef}>
       <Flex direction="column" gap="3">
         <Flex justify="between" align="start" gap="3">
-          <Heading as="h2" size="4" id="chapter-ops-split-title">
-            {t('chapterOps.splitTitle')}
-          </Heading>
+          <DialogTitle asChild>
+            <Heading as="h2" size="4">
+              {t('chapterOps.splitTitle')}
+            </Heading>
+          </DialogTitle>
           <IconButton
             variant="ghost"
             size="sm"
@@ -188,16 +189,17 @@ function ProposalReviewDialog(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next) props.onClose() }}
-      title={title}
       className="file-dialog chapter-ops-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       initialFocusRef={close}
       returnFocusRef={props.returnFocusRef}>
       <Flex direction="column" gap="3">
         <Flex justify="between" align="start" gap="3">
-          <Heading as="h2" size="4" id="chapter-ops-review-title">
-            {title}
-          </Heading>
+          <DialogTitle asChild>
+            <Heading as="h2" size="4">
+              {title}
+            </Heading>
+          </DialogTitle>
           <IconButton
             ref={close}
             variant="ghost"

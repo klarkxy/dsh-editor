@@ -13,7 +13,7 @@ export { RadioGroup, type RadioOption } from './radio-group.tsx'
 export { SegmentedControl, type SegmentedOption } from './segmented-control.tsx'
 export { Slider } from './slider.tsx'
 export { Field } from './field.tsx'
-export { Dialog, type DialogProps } from './dialog.tsx'
+export { Dialog, DialogDescription, DialogTitle, type DialogProps } from './dialog.tsx'
 export { ConfirmDialog } from './confirm-dialog.tsx'
 export { Drawer } from './drawer.tsx'
 export {

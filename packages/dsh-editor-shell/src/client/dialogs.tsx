@@ -1,7 +1,18 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { Flex, Heading, IconButton, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
-import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
+import {
+  ActivityDots,
+  Button,
+  Confirm,
+  ConfirmCancel,
+  ConfirmDescription,
+  ConfirmTitle,
+  Dialog,
+  DialogDescription,
+  DialogTitle,
+  Input,
+} from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
 import './dialogs.styles.ts'
 
@@ -26,19 +37,22 @@ export function ConfirmDialog(props: {
     <Confirm
       open={open}
       onOpenChange={(next: boolean) => { if (!next) props.onCancel() }}
-      title={display.title}
-      description={display.message}
       className="file-dialog confirm-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay confirm-overlay"
       initialFocusRef={cancel}
       returnFocusRef={props.returnFocusRef}>
       <Flex direction="column" gap="3">
-        <Heading as="h2" size="4" id={`${props.id}-title`}>
-          {display.title}
-        </Heading>
-        <Text size="2" id={`${props.id}-message`}>
-          {display.message}
-        </Text>
+        {/* 可见标题/正文即 AlertDialog 的可访问名，不再有隐藏副本。 */}
+        <ConfirmTitle asChild>
+          <Heading as="h2" size="4">
+            {display.title}
+          </Heading>
+        </ConfirmTitle>
+        <ConfirmDescription asChild>
+          <Text size="2">
+            {display.message}
+          </Text>
+        </ConfirmDescription>
         {props.note ? <Notice tone="danger">
           {props.note}
         </Notice> : null}
@@ -84,7 +98,6 @@ export function TextPromptDialog(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onCancel() }}
-      title={display.title}
       className="file-dialog prompt-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
@@ -92,9 +105,11 @@ export function TextPromptDialog(props: {
       returnFocusRef={props.returnFocusRef}>
       <Flex direction="column" gap="3">
         <Flex justify="between" align="start" gap="3">
-          <Heading as="h2" size="4" id={`${props.id}-title`}>
-            {display.title}
-          </Heading>
+          <DialogTitle asChild>
+            <Heading as="h2" size="4">
+              {display.title}
+            </Heading>
+          </DialogTitle>
           <IconButton
             variant="ghost"
             size="sm"
@@ -171,8 +186,6 @@ export function NewProjectDialog(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
-      title={t('dialog.newProject')}
-      description={props.directory ? t('dialog.projectDirectory', { path: props.directory }) : undefined}
       className="file-dialog create-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
@@ -181,13 +194,17 @@ export function NewProjectDialog(props: {
       <Flex direction="column" gap="3">
         <Flex justify="between" align="start" gap="3">
           <Flex direction="column" gap="1">
-            <Heading as="h2" size="4" id="new-project-dialog-title">
-              {t('dialog.newProject')}
-            </Heading>
-            <Text size="2" color="gray" className="project-directory">
-              {props.directory === undefined ? t('dialog.projectDirectoryLoading') : props.directory
-                ? t('dialog.projectDirectory', { path: props.directory }) : t('dialog.newProjectHint')}
-            </Text>
+            <DialogTitle asChild>
+              <Heading as="h2" size="4">
+                {t('dialog.newProject')}
+              </Heading>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <Text size="2" color="gray" className="project-directory">
+                {props.directory === undefined ? t('dialog.projectDirectoryLoading') : props.directory
+                  ? t('dialog.projectDirectory', { path: props.directory }) : t('dialog.newProjectHint')}
+              </Text>
+            </DialogDescription>
           </Flex>
           <IconButton
             variant="ghost"

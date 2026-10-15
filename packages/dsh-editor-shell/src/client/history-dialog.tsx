@@ -3,7 +3,7 @@ import { Flex, Heading, IconButton, Text } from '../ui/index.ts'
 import type { SnapshotChange, SnapshotResponse } from 'dsh-editor-workbench/contracts'
 import { formatRecentTime } from '../home-stage.ts'
 import { formatBytes, intlLocale, t, useLocale } from '../i18n/index.ts'
-import { ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
+import { ActivitySkeleton, ActivityText, Button, Dialog, DialogDescription, DialogTitle } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
 import { isAuthorFacingDocumentPath } from '../project-files.ts'
 import './dialogs.styles.ts'
@@ -59,8 +59,6 @@ function HistoryPanel(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
-      title={t('workspace.commitHistory')}
-      description={t('workspace.historyHint')}
       className={`file-dialog history-dialog${empty ? ' history-dialog-empty' : ''} file-dialog-overlay`}
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
@@ -69,12 +67,16 @@ function HistoryPanel(props: {
       <Flex direction="column" gap="3">
         <Flex justify="between" align="start" gap="3">
           <Flex direction="column" gap="1" minWidth="0">
-            <Heading as="h2" size="4" id="history-panel-title">
-              {t('workspace.commitHistory')}
-            </Heading>
-            <Text size="1" color="gray">
-              {t('workspace.historyHint')}
-            </Text>
+            <DialogTitle asChild>
+              <Heading as="h2" size="4">
+                {t('workspace.commitHistory')}
+              </Heading>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <Text size="1" color="gray">
+                {t('workspace.historyHint')}
+              </Text>
+            </DialogDescription>
           </Flex>
           <IconButton
             variant="ghost"

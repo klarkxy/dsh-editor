@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState, type RefObject } from 'react';
 import { Card, Flex, Heading, Notice, ScrollArea, Text } from '../ui/index.ts'
-import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
+import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog, DialogTitle } from './ui/index.ts'
 import { Checkbox } from '../ui/checkbox.tsx'
 import { SegmentedControl } from '../ui/segmented-control.tsx'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
@@ -121,7 +121,6 @@ function ExportPreviewDialog(props: {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !busy) props.onCancel() }}
-      title={t('export.fullText')}
       className="file-dialog export-preview-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       testid="dsh-export-precheck"
@@ -133,9 +132,11 @@ function ExportPreviewDialog(props: {
           <Text size="1" color="gray">
             {t('export.title')}
           </Text>
-          <Heading as="h2" size="4" id="export-preview-title">
-            {t('export.fullText')}
-          </Heading>
+          <DialogTitle asChild>
+            <Heading as="h2" size="4">
+              {t('export.fullText')}
+            </Heading>
+          </DialogTitle>
         </Flex>
         {collecting ? <Flex className="export-loading" direction="column" align="center" gap="3">
           <ActivityRing size={24} />

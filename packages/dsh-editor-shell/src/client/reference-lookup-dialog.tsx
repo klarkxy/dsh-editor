@@ -3,7 +3,7 @@ import { Button, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
-import { Dialog } from './ui/index.ts'
+import { Dialog, DialogTitle } from './ui/index.ts'
 import { lookupReferences, type ReferenceLookupResult } from './reference-lookup.ts'
 
 type LookupState =
@@ -53,11 +53,10 @@ export function ReferenceLookupDialog(props: {
   return <Dialog
     open
     onOpenChange={(open) => { if (!open) props.onClose() }}
-    title={t('reference.title')}
     className="file-dialog editor-action-dialog file-dialog-overlay"
     returnFocusRef={props.returnFocusRef}>
     <Flex direction="column" gap="3">
-      <Heading as="h2" size="4">{t('reference.title')}</Heading>
+      <DialogTitle asChild><Heading as="h2" size="4">{t('reference.title')}</Heading></DialogTitle>
       <Text size="2">{t('reference.query', { query })}</Text>
       <Text size="2" color="gray">{t('reference.description')}</Text>
       {state.kind === 'loading' ? <Text role="status" size="2">{t('common.loading')}</Text> : null}
