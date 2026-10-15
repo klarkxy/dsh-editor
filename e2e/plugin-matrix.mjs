@@ -535,74 +535,6 @@ function assertStandaloneOverlayChrome(chrome, label, expectDark) {
   return chrome
 }
 
-async function readProofreadPlacement(page) {
-  return page.evaluate((sel) => {
-    const rect = (el) => {
-      if (!el) return null
-      const box = el.getBoundingClientRect()
-      return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
-    }
-    const dock = document.querySelector(sel.dock)
-    const style = dock ? getComputedStyle(dock) : null
-    const panel = document.querySelector(sel.panel)
-    const panelStyle = panel ? getComputedStyle(panel) : null
-    return {
-      space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
-      dockVars: dock ? {
-        position: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-position').trim(),
-        right: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-right').trim(),
-        bottom: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-bottom').trim(),
-      } : null,
-      dock: style ? { position: style.position, right: style.right, bottom: style.bottom, top: style.top, left: style.left } : null,
-      panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
-      boxes: {
-        dock: rect(dock),
-        toggle: rect(document.querySelector(sel.open)),
-        panel: rect(panel),
-        check: rect(document.querySelector(sel.check)),
-      },
-    }
-  }, { dock: S.proofreadDock, panel: S.proofreadPanel, open: S.proofreadOpen, check: S.proofreadCheck })
-}
-
-async function assertProofreadStandalonePlacement(page, label) {
-  const viewport = page.viewportSize()
-  if (!viewport) throw new Error(`${label}: missing viewport`)
-  await page.locator(S.proofreadPanel).waitFor({ state: 'visible' })
-  await page.locator(S.proofreadCheck).waitFor({ state: 'visible' })
-  const placement = await readProofreadPlacement(page)
-  if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .dsh-proofread-dock`)
-  if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
-    throw new Error(`${label}: host --dsh-ext-* unexpectedly set ${JSON.stringify(placement.dockVars)}`)
-  }
-  if (placement.dock.position !== 'absolute') {
-    throw new Error(`${label}: expected dock position absolute, got ${placement.dock.position}`)
-  }
-  if (placement.dock.right === 'auto' || placement.dock.bottom === 'auto') {
-    throw new Error(`${label}: dock right/bottom collapsed to auto (space-4=${JSON.stringify(placement.space4)}); ${JSON.stringify(placement.dock)}`)
-  }
-  const rightPx = Number.parseFloat(placement.dock.right)
-  const bottomPx = Number.parseFloat(placement.dock.bottom)
-  if (!Number.isFinite(rightPx) || rightPx < 0 || !Number.isFinite(bottomPx) || bottomPx < 0) {
-    throw new Error(`${label}: dock right/bottom not a length ${JSON.stringify(placement.dock)}`)
-  }
-  boxInsideViewport(placement.boxes.panel, viewport, `${label} proofread-panel`)
-  boxInsideViewport(placement.boxes.check, viewport, `${label} proofread-check`)
-  boxInsideViewport(placement.boxes.toggle, viewport, `${label} proofread-open`)
-  const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
-  const chrome = assertStandaloneOverlayChrome(
-    await readOverlayChrome(page, {
-      panel: S.proofreadPanel,
-      header: '.dsh-proofread-panel-header',
-      button: S.proofreadCheck,
-      input: '[data-testid="proofread-input"]',
-    }),
-    label,
-    expectDark,
-  )
-  return { viewport, ...placement, chrome, expectDark }
-}
-
 async function readZhihuPlacement(page) {
   return page.evaluate((sel) => {
     const rect = (el) => {
@@ -725,46 +657,6 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       if (await overlay.count()) throw new Error(`${name}: manuscript UI remained after removal`)
     }
     if (expectsManuscript) await page.locator(S.manuscriptClose).click();
-    const expectsProofread = expectedPlugins.includes('dsh-proofread');
-    if (expectsProofread) {
-      await page.locator(S.proofreadOpen).click();
-      await page.locator(S.proofreadPanel).waitFor();
-      await page.locator(S.proofreadInput).fill('我们以经做好准备。');
-      await page.locator(S.proofreadInput).press('Control+Enter');
-      await page.locator(S.proofreadResult).getByText('建议：已经',{exact:true}).waitFor();
-      if (name === '06-proofread-only') {
-        const panel = page.locator(S.proofreadPanel)
-        const placements = {}
-        placements['1280x800'] = await assertProofreadStandalonePlacement(page, `${name} 1280x800`)
-        await assertStandaloneThemes(page, name, [
-          { label: 'finding-message', locator: panel.locator(S.proofreadFindingMessage).first() },
-          { label: 'result-summary', locator: panel.locator(S.proofreadResultSummary).first() },
-          { label: 'input', locator: page.locator(S.proofreadInput) },
-        ], async (theme) => {
-          placements[theme] = await assertProofreadStandalonePlacement(page, `${name} ${theme}`)
-        })
-        const state = report.states.find((item) => item.name === name)
-        if (state) state.standaloneDock = placements
-      }
-      await page.locator(S.proofreadInput).fill('今天晴天。');
-      boxInsideViewport(await page.locator(S.proofreadCheck).boundingBox(), page.viewportSize(), `${name} proofread-check before click`)
-      await page.locator(S.proofreadCheck).click();
-      await page.locator(S.proofreadResult).waitFor();
-      if (name === '06-proofread-only') {
-        await page.setViewportSize({ width: 900, height: 640 })
-        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-        const narrow = await assertProofreadStandalonePlacement(page, `${name} 900x640`)
-        const state = report.states.find((item) => item.name === name)
-        if (state?.standaloneDock) state.standaloneDock['900x640'] = narrow
-        await page.locator(S.proofreadInput).fill('我们以经做好准备。')
-        await page.locator(S.proofreadCheck).click()
-        await page.locator(S.proofreadResult).getByText('建议：已经', { exact: true }).waitFor()
-        await page.setViewportSize({ width: 1280, height: 800 })
-      }
-      await page.locator(S.proofreadInput).press('Escape');
-      await page.locator(S.proofreadOpen).waitFor();
-      if (await page.locator(S.proofreadOpen).count() !== 1) throw new Error('duplicate proofread contribution');
-    } else if (await page.locator(S.proofreadOpen).count()) throw new Error('proofread entry survived removal');
     const expectsZhihu = expectedPlugins.includes('@klarkxy/dsh-zhihu');
     if (expectsZhihu) {
       const callZhihu=async(method,payload)=>{const response=await page.request.post(`${origin}/zhihu/${method}`,{headers:{'content-type':'application/json'},data:{type:'client-request',rpcId:name,method,payload}});return (await response.json()).result};
@@ -822,7 +714,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
     report.states.find((item) => item.name === name).web = {
       ready: true,
       manuscriptOverlay: expectsManuscript,
-      proofread: expectsProofread, zhihu: expectsZhihu,
+      zhihu: expectsZhihu,
       pageErrors,
     }
   } catch (error) {
@@ -851,7 +743,6 @@ function safeCleanup() {
 
 resetOutput()
 const manuscriptTarball = stageTarball('dsh-manuscript')
-const proofreadTarball = stageTarball('dsh-proofread')
 const zhihuTarball = stageTarball('@klarkxy/dsh-zhihu')
 const browser = await chromium.launch({ headless: true })
 
@@ -867,12 +758,8 @@ try {
   await probeWeb(browser, '01-manuscript-only', ['dsh-manuscript'], 0)
   transition('remove','dsh-manuscript');
   const states = [
-    ['add','dsh-proofread',proofreadTarball,'06-proofread-only',['dsh-proofread']],
-    ['add','@klarkxy/dsh-zhihu',zhihuTarball,'07-proofread-then-zhihu',['dsh-proofread','@klarkxy/dsh-zhihu']],
-    ['remove','dsh-proofread',null,'08-zhihu-after-remove-proofread',['@klarkxy/dsh-zhihu']],
-    ['add','dsh-proofread',proofreadTarball,'09-zhihu-then-proofread',['dsh-proofread','@klarkxy/dsh-zhihu']],
-    ['remove','@klarkxy/dsh-zhihu',null,'10-proofread-after-remove-zhihu',['dsh-proofread']],
-    ['remove','dsh-proofread',null,'11-empty',[]],
+    ['add','@klarkxy/dsh-zhihu',zhihuTarball,'07-zhihu-only',['@klarkxy/dsh-zhihu']],
+    ['remove','@klarkxy/dsh-zhihu',null,'08-empty',[]],
     ['add','@klarkxy/dsh-zhihu',zhihuTarball,'12-zhihu-only',['@klarkxy/dsh-zhihu']],
   ];
   // Data outside package installation must survive both removal directions and restarts.
@@ -883,9 +770,8 @@ try {
     inspectState(name,expected);await probeWeb(browser,name,expected,report.states.length);
     if(fs.readFileSync(retained,'utf8')!=='retained across package changes')throw new Error('persistent data lost');
   }
-  transition('add','dsh-proofread','file:'+proofreadTarball);
   transition('add','dsh-manuscript','file:'+manuscriptTarball);
-  const all=['dsh-proofread','@klarkxy/dsh-zhihu','dsh-manuscript'];
+  const all=['@klarkxy/dsh-zhihu','dsh-manuscript'];
   inspectState('13-all-public',all);await probeWeb(browser,'13-all-public',all,13);
 
 } catch (error) {

@@ -112,7 +112,7 @@ function Preview() {
             <span className="editor-doc-title">第二章　来信</span><span data-testid="paper-save-state">已保存</span>
           </div>
           <textarea aria-label="Manuscript fixture" className="preview-paper" defaultValue={'第二章　来信\n\n雨停的时候，信还没有拆。\n\n她将台灯向桌边移了半寸。信封上的字迹很轻，最后一笔却划破了纸，露出一道细白的口子。\n\n“你确定是今天送来的？”\n\n门口的人没有回答，只把湿透的外套搭在椅背上。\n\n窗外最后一滴雨，从檐角落下。'} />
-          <div className="editor-tools" style={{ display: 'flex' }}><Button size="sm" variant="ghost">补全</Button><Button size="sm" variant="ghost">改写</Button><Button size="sm" variant="ghost">校对</Button></div>
+          <div className="editor-tools" style={{ display: 'flex' }}><Button size="sm" variant="ghost">补全</Button><Button size="sm" variant="ghost">改写</Button></div>
         </main></div>
         <aside className="chat">
           <div className="chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>

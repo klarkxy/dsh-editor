@@ -153,9 +153,9 @@ function parseManagedOverridePatch(text: string): Record<string, boolean> | unde
 }
 
 /**
- * Stale plugin toggles used to re-enable host-wide novel-kernel / workbench
- * / standalone proofread. Those entries stay disabled so presets can remount
- * them; leftover `disabled: false` overlays crash DSH boot.
+ * Stale plugin toggles used to re-enable host-wide novel-kernel / workbench.
+ * Those entries stay disabled so presets can remount them; leftover
+ * `disabled: false` overlays crash DSH boot.
  * The retired Tavily entry is removed from managed state with a backup; its
  * credentials and the web-search settings domain remain in place.
  */

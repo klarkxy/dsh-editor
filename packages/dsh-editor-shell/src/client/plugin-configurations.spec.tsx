@@ -362,7 +362,7 @@ const CATALOG_SECTIONS: PluginCatalogSection[] = [
     { key: 'bundle:@klarkxy/dsh-terminal', title: '终端', description: '在应用内运行命令', packageName: '@klarkxy/dsh-terminal', badges: ['preinstalled'], action: 'detail' },
   ] },
   { id: 'builtin', items: [
-    { key: 'bundle:dsh-editor-proofread', title: '文稿校对', description: '检查错别字与标点', badges: ['builtin', 'session-managed'], action: 'config' },
+    { key: 'bundle:dsh-editor-workbench', title: '文稿工作台', description: '文稿编辑工具', badges: ['builtin', 'session-managed'], action: 'config' },
   ] },
   { id: 'user', items: [] },
 ]
@@ -425,7 +425,7 @@ describe('plugin catalog', () => {
     expect(html).toContain('内置')
     expect(html).toContain('由会话控制')
     expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
-    expect(html).toContain('data-testid="plugins-catalog-config-bundle:dsh-editor-proofread"')
+    expect(html).toContain('data-testid="plugins-catalog-config-bundle:dsh-editor-workbench"')
     expect(html).toContain('data-testid="plugins-catalog-detail-bundle:@klarkxy/dsh-terminal"')
     const rows = html.match(/data-testid="plugins-catalog-row-[^"]+"/g) ?? []
     expect(rows).toHaveLength(3)
@@ -460,7 +460,7 @@ describe('plugin catalog', () => {
 
   it('filters every section by title, description and package name', () => {
     const byTitle = catalog({ query: '文稿' })
-    expect(sectionHtml(byTitle, 'builtin')).toContain('文稿校对')
+    expect(sectionHtml(byTitle, 'builtin')).toContain('文稿工作台')
     expect(sectionHtml(byTitle, 'official')).not.toContain('网络搜索')
     const byPackage = catalog({ query: 'TERMINAL' })
     expect(sectionHtml(byPackage, 'official')).toContain('终端')

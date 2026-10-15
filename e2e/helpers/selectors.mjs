@@ -211,12 +211,8 @@ export const S = Object.freeze({
   // ---- in-rail panels --------------------------------------------------------
   overviewPanel: '[data-testid="overview-panel"]',
   overviewPanelSurface: '.overview-panel',
-  proofreadPanelSurface: '.proofread-panel',
   overviewBody: '.overview-body',
   overviewLoading: '.overview-loading',
-  editorProofreadPanel: '[data-testid="editor-proofread-panel"]',
-  proofreadSummary: '.proofread-summary',
-  proofreadLoading: '.proofread-loading[role="status"]',
   memoryPanel: '[data-testid="memory-panel"]',
   memoryList: '.memory-list',
   memoryStatus: '.memory-status',
@@ -281,14 +277,6 @@ export const S = Object.freeze({
   summaryScope: ':scope > summary',
 
   // ---- contributed widgets (fixture plugins) ----------------------------------
-  proofreadOpen: '[data-testid="proofread-open"]',
-  proofreadPanel: '[data-testid="proofread-panel"]',
-  proofreadInput: '[data-testid="proofread-input"]',
-  proofreadCheck: '[data-testid="proofread-check"]',
-  proofreadResult: '[data-testid="proofread-result"]',
-  proofreadDock: '.dsh-proofread-dock',
-  proofreadFindingMessage: '.dsh-proofread-finding-message',
-  proofreadResultSummary: '.dsh-proofread-result-summary',
   zhihuOpen: '[data-testid="zhihu-open"]',
   zhihuPanel: '[data-testid="zhihu-panel"]',
   zhihuSearch: '[data-testid="zhihu-search"]',

@@ -263,11 +263,9 @@ try {
         await page.waitForFunction(({theme,sel}) => document.querySelector(sel)?.classList.contains(theme), {theme,sel:S.shellTheme})
       }
       await page.waitForTimeout(350)
-      // The overview is a floating card; the proofread panel is a flat sidebar
-      // section by design (校对与记忆面板成为侧栏区段).
+      // The overview is a floating card.
       for (const [command, selector, close, radius] of [
         ['文档概览',S.overviewPanelSurface,'关闭概览','20px'],
-        ['校对当前文档',S.proofreadPanelSurface,'关闭文稿校对','0px'],
       ]) {
         await openCommand(command)
         const panel = page.locator(selector)
@@ -279,10 +277,10 @@ try {
         await panel.waitFor({state:'hidden'})
       }
     }
-    report.checks.push('real overview and proofread panels opened and closed in both themes')
-    // The sidebar renders no 文档概览 / 校对当前文档 buttons: both commands stay
-    // reachable through the palette (verified above) and their registered
-    // shortcuts, with the editor focused so the keydown reaches the workspace.
+    report.checks.push('real overview panel opened and closed in both themes')
+    // The sidebar renders no 文档概览 button: the command stays reachable
+    // through the palette (verified above) and its registered shortcut, with
+    // the editor focused so the keydown reaches the workspace.
     for (const theme of ['light', 'dark']) {
       if (!await page.locator(S.shellTheme).evaluate((el, value) => el.classList.contains(value), theme)) {
         await toggleTheme(page)
@@ -292,7 +290,6 @@ try {
       await editor.focus()
       for (const [shortcut, selector, close] of [
         ['Control+Shift+O', S.overviewPanelSurface, '关闭概览'],
-        ['Control+Shift+L', S.proofreadPanelSurface, '关闭文稿校对'],
       ]) {
         await page.keyboard.press(shortcut)
         const panel = page.locator(selector)
@@ -302,7 +299,7 @@ try {
         await panel.waitFor({ state: 'hidden' })
       }
     }
-    report.checks.push('sidebar document tool buttons removed; overview and proofread panels open via Ctrl+Shift+O / Ctrl+Shift+L in both themes')
+    report.checks.push('sidebar document tool buttons removed; overview panel opens via Ctrl+Shift+O in both themes')
     report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     // 4.1: the composer lives in the aux rail's partner tab and may be adopted

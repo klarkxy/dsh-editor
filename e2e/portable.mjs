@@ -136,24 +136,17 @@ async function revealPaperEditor(page) {
   await editor.click({ force: true })
 }
 
-async function openAndCloseProofreadPanel(page) {
+async function openAndCloseOverviewPanel(page) {
   await page.getByRole('button', { name: '搜索与命令' }).click()
   await page.locator(S.paletteOverlay).waitFor({ state: 'visible', timeout: 10_000 })
   const input = page.locator(S.paletteInput)
   await input.waitFor({ state: 'visible', timeout: 5_000 })
-  await input.fill('校对当前文档')
-  await page.getByRole('option', { name: /校对当前文档/ }).first().click()
+  await input.fill('文档概览')
+  await page.getByRole('option', { name: /文档概览/ }).first().click()
   await page.locator(S.paletteOverlay).waitFor({ state: 'detached', timeout: 8_000 }).catch(() => undefined)
-  const panel = page.getByRole('region', { name: '文稿校对' })
+  const panel = page.locator(S.overviewPanel)
   await panel.waitFor({ state: 'visible', timeout: 15_000 })
-  if (await page.locator(S.editorProofreadPanel).count() === 0) {
-    throw new Error('shared proofread panel did not mount')
-  }
-  const kinds = panel.getByRole('group', { name: '问题类型' })
-  await kinds.waitFor({ state: 'visible', timeout: 10_000 })
-  const kindText = (await kinds.innerText()).replace(/\s+/g, ' ')
-  if (/人物卡|\bcard\b/i.test(kindText)) throw new Error(`proofread still exposes card kind: ${kindText}`)
-  await panel.getByRole('button', { name: '关闭文稿校对' }).click()
+  await panel.getByRole('button', { name: '关闭概览' }).click()
   await panel.waitFor({ state: 'hidden', timeout: 10_000 })
 }
 
@@ -239,7 +232,7 @@ try {
   if (!state.shell || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.homeSidebar || !state.homeStage || !clientBoundaryReady) {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
-  if (await window.locator(S.proofreadOpen).count() || await window.locator(S.zhihuOpen).count()) throw new Error('retired desktop launchers appeared in portable artifact')
+  if (await window.locator(S.zhihuOpen).count()) throw new Error('retired Zhihu launcher appeared in portable artifact')
   const smoke = process.env.DSH_PORTABLE_SMOKE === '1'
   if (smoke) {
     state.operations = ['smoke: packed wrapper started and home identity passed']
@@ -267,8 +260,8 @@ try {
   await window.keyboard.press('Control+s')
   await window.locator(S.paperSaveState,{hasText:'已保存'}).waitFor()
   if(!(await readFile(resolve(portableWorkspace,'正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
-  await openAndCloseProofreadPanel(window)
-  state.operations=['proofreading and Zhihu desktop launchers absent','native plugin manager lists the default web-search bundle and opens its configuration','create ordinary 正文 from tree, then document, and save to disk','open and close 文稿校对 from command palette without card UI']
+  await openAndCloseOverviewPanel(window)
+  state.operations=['Zhihu desktop launcher absent','native plugin manager lists the default web-search bundle and opens its configuration','create ordinary 正文 from tree, then document, and save to disk','open and close 文档概览 from command palette']
   }
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin

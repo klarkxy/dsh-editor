@@ -110,7 +110,6 @@ for (const name of packageNames) {
     ? ['proposal.list', 'proposal.accept', 'proposal.reject']
     : [
       ...desktopOnlyNames.filter((item) => item !== name),
-      ...(name === 'dsh-proofread' ? ['dsh-manuscript', 'node:fs', '@deepseek-ai/dsh-tools'] : []),
       ...(name === '@klarkxy/dsh-zhihu' ? ['dsh-manuscript'] : []),
     ]
   for (const token of runtimeForbidden) {

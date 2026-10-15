@@ -289,7 +289,6 @@ try {
  }
  evidence.delivery='copied native profile artifacts; exact package roster and no workspace package links';
 
- if(await page.locator(S.proofreadOpen).count())throw new Error('paused proofreading launcher is visible');
  if(await page.locator(S.zhihuOpen).count())throw new Error('Zhihu must not contribute a desktop launcher');
  const openSettings=async(section)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'visible'});await page.locator(S.settingsNavSection(section)).click();await page.waitForTimeout(250)};
  const closeSettings=async()=>{await page.locator(S.settingsBack).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
@@ -344,8 +343,8 @@ try {
  await toggleTheme(page);evidence.checks.push('light/dark settings and native web-search configuration');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator(S.chatRail).waitFor();evidence.checks.push('optional Chat mounts');
- await page.reload();await page.locator(S.shell).waitFor();await dismissNativeOnboarding(page);if(await page.locator(S.proofreadOpen).count()||await page.locator(S.zhihuOpen).count())throw new Error('removed desktop launcher returned after reload');
- if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload keeps desktop launchers absent and has no browser errors');
+ await page.reload();await page.locator(S.shell).waitFor();await dismissNativeOnboarding(page);if(await page.locator(S.zhihuOpen).count())throw new Error('removed desktop launcher returned after reload');
+ if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload keeps the Zhihu launcher absent and has no browser errors');
 } catch(error){evidence.failures.push(String(error));await page?.screenshot({path:resolve(output,'failure.png')}).catch(()=>{});await writeFile(resolve(output,'failure.html'),await page?.content().catch(()=> '')||'');}
 finally{await browser?.close();await stop(dshChild)}
 evidence.ok=evidence.failures.length===0;await writeFile(resolve(output,'report.json'),JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence,null,2));if(!evidence.ok)process.exitCode=1;

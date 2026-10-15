@@ -13,7 +13,6 @@ const PRESET_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 /** Historical desktop bundle order; unknown packages append alphabetically. */
 const STABLE_PACKAGE_ORDER = [
   'dsh-manuscript',
-  'dsh-proofread',
   'dsh-editor-workbench',
   'dsh-editor-novel-kernel',
   'dsh-editor-writing-presets',
@@ -458,11 +457,10 @@ export function catalogFromManifests(manifests, packagesDir = resolve(dirname(fi
       catalog[row.id] = {
         title: row.title,
         description: row.description,
-        locked: Boolean(row.locked) || session || row.id === 'proofread',
+        locked: Boolean(row.locked) || session,
         packageName: manifest.name,
         builtin: local,
         ...(session ? { managedBy: 'session' } : {}),
-        ...(row.id === 'proofread' ? { managedBy: 'feature' } : {}),
         ...(row.feature ? { feature: row.feature } : {}),
       }
     }

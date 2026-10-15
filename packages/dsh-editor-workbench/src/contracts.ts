@@ -75,16 +75,6 @@ export type { RestoreProbeResponse, SnapshotChange, SnapshotResponse } from './c
 export type { ArchiveListResponse, ArchiveResponse } from './contracts/archive.ts'
 
 export {
-  PROOFREAD_KINDS,
-  type ProofreadFinding,
-  type ProofreadHabitStat,
-  type ProofreadKind,
-  type ProofreadScanRequest,
-  type ProofreadScanResponse,
-  type ProofreadSeverity,
-} from './contracts/proofread.ts'
-
-export {
   PROJECT_CONTEXT_CURRENT_VERSION,
   PROJECT_CONTEXT_MAX_CHARS_PER_FILE,
   PROJECT_CONTEXT_MAX_TOTAL_CHARS,

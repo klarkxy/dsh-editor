@@ -36,13 +36,12 @@ describe('plugin overlay persistence', () => {
         zhihu: false,
         'editor-novel-kernel': true,
         'editor-workbench-tools': true,
-        proofread: true,
-        'editor-proofread-panel': true,
+        'author-panel': true,
       },
       installed: [],
     })).toEqual({
       schema: 1,
-      overrides: { zhihu: false, 'editor-proofread-panel': true },
+      overrides: { zhihu: false, 'author-panel': true },
       presets: {},
       installed: [],
     })

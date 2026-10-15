@@ -38,9 +38,9 @@ function defaultCatalog(): RuntimeCatalog {
         title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true, packageName,
       }])),
       'editor-shell': { title: '编辑器外壳', description: '编辑器主界面。', locked: true, builtin: true, packageName: 'dsh-editor-shell' },
-      manuscript: { title: '文稿校对', description: '文稿编辑内核。', locked: true, builtin: true, packageName: 'dsh-manuscript' },
+      manuscript: { title: '文稿内核', description: '文稿编辑内核。', locked: true, builtin: true, packageName: 'dsh-manuscript' },
       'editor-novel-kernel': { title: '小说内核', description: '小说模式。', locked: true, builtin: true, packageName: 'dsh-editor-novel-kernel', managedBy: 'session' },
-      proofread: { title: '校对', description: '校对面板。', locked: true, builtin: true, packageName: 'dsh-proofread', managedBy: 'feature' },
+      'writing-tools': { title: '写作工具', description: '写作功能条目。', locked: true, builtin: true, packageName: 'dsh-editor-workbench', managedBy: 'feature' },
     },
   }
 }
@@ -170,7 +170,7 @@ describe('plugin catalog classification', () => {
   it('projects catalog managedBy onto session and feature badges', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
     expect(byTitle(catalog, 'builtin', '小说内核')[0]?.badges).toContain('session-managed')
-    expect(byTitle(catalog, 'builtin', '校对')[0]?.badges).toContain('feature-managed')
+    expect(byTitle(catalog, 'builtin', '写作工具')[0]?.badges).toContain('feature-managed')
   })
 
   it('titles author-installed bundles from the inventory meta before the package name', () => {

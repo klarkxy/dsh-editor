@@ -156,12 +156,12 @@ describe('native profile merge', () => {
 
   it('does not keep a previously disabled ui-plugin-manager row', () => {
     const merged = mergeProfilePatch(
-      '- id: ui-layout\n  disabled: true\n- id: proofread\n  disabled: true\n',
-      '- id: ui-plugin-manager\n  disabled: true\n- id: proofread\n  disabled: true\n- id: native-acceptance-legacy\n  disabled: true\n',
+      '- id: ui-layout\n  disabled: true\n- id: author-legacy\n  disabled: true\n',
+      '- id: ui-plugin-manager\n  disabled: true\n- id: author-legacy\n  disabled: true\n- id: native-acceptance-legacy\n  disabled: true\n',
     )
     expect(merged).not.toMatch(/ui-plugin-manager/)
     expect(merged).toMatch(/native-acceptance-legacy/)
-    expect(merged).toMatch(/proofread/)
+    expect(merged).toMatch(/author-legacy/)
   })
 
   it('keeps executable tags, anchors and author comments from the previous patch', () => {

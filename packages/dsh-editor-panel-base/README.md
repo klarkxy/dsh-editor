@@ -1,6 +1,6 @@
 # dsh-editor-panel-base
 
-面板公共基础设施，供 `dsh-editor-memory-panel`、`dsh-editor-overview-panel`、`dsh-editor-proofread-panel` 使用。
+面板公共基础设施，供 `dsh-editor-memory-panel`、`dsh-editor-overview-panel` 使用。
 
 ## 用途
 

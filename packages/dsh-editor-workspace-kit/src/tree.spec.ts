@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { GENERATED_DIRECTORIES, isAuxiliaryAuthorFile, isGeneratedPath, isHiddenPath, MAX_FILES } from './tree.ts'
 
 describe('workspace tree constants', () => {
-  it('keeps the shared walk bounds used by overview, cards, proofread and snapshot', () => {
+  it('keeps the shared walk bounds used by overview, cards and snapshot', () => {
     expect(MAX_FILES).toBe(2_000)
     expect([...GENERATED_DIRECTORIES].sort()).toEqual(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
     expect(isHiddenPath('正文/.hidden.md')).toBe(true)

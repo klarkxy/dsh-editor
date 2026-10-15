@@ -7,7 +7,6 @@
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
         "dsh-manuscript",
-        "dsh-proofread",
         "dsh-editor-workbench",
         "dsh-editor-novel-kernel",
         "@klarkxy/dsh-zhihu",

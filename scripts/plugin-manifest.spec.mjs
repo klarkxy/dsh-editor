@@ -74,7 +74,6 @@ describe('plugin manifests and composition resolver', () => {
   it('loads the product packages with unique entry ids', () => {
     expect(desktopPackageNames(manifests)).toEqual([
       'dsh-manuscript',
-      'dsh-proofread',
       'dsh-editor-workbench',
       'dsh-editor-novel-kernel',
       'dsh-editor-writing-presets',
@@ -83,10 +82,9 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
-      'dsh-editor-proofread-panel',
       '@klarkxy/dsh-web-search-manager',
     ])
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', '@klarkxy/dsh-web-search-manager'])
+    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', '@klarkxy/dsh-web-search-manager'])
     expect(corePackageNames(manifests)).toEqual([
       'dsh-manuscript',
       'dsh-editor-workbench',
@@ -95,13 +93,11 @@ describe('plugin manifests and composition resolver', () => {
     ])
     expect(clientPackages(manifests)).toEqual([
       'dsh-manuscript',
-      'dsh-proofread',
       'dsh-editor-shell',
       'dsh-editor-plugins',
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
-      'dsh-editor-proofread-panel',
       '@klarkxy/dsh-web-search-manager',
     ])
     expect(catalogFromManifests(manifests)['zhihu-tools']).toBeUndefined()
@@ -136,12 +132,12 @@ describe('plugin manifests and composition resolver', () => {
 
   it('resolves desktop and the basic/smart/full aliases as one capability set, differing only by id and label', async () => {
     const labels = { desktop: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
-    const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
-    const core = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench']
+    const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel']
+    const core = ['dsh-manuscript', 'dsh-editor-workbench']
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, '@klarkxy/dsh-web-search-manager']
     const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'],
+      features: ['assistant', 'completion', 'overview-panel', 'writing-presets', 'web-search'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       runtimeDependencies: ['@deepseek-ai/dsh-web-search-exa', '@klarkxy/dsh-plugin-kit', 'react'],
@@ -167,12 +163,10 @@ describe('plugin manifests and composition resolver', () => {
     for (let index = 1; index < stripped.length; index += 1) {
       expect(stripped[index]).toEqual(stripped[0])
     }
-    expect(capability.features).toContain('proofread-panel')
     expect(capability.features).not.toContain('cards')
     expect(capability.features).not.toContain('memory-panel')
     expect(capability.packages).toContain('dsh-editor-novel-kernel')
     expect(capability.packages).toContain('dsh-editor-writing-presets')
-    expect(capability.packages).toContain('dsh-editor-proofread-panel')
     expect(capability.packages).toContain('dsh-editor-cards')
     expect(capability.packages).toContain('dsh-editor-memory-panel')
     expect(capability.disabledEntries).toEqual(['editor-cards', 'editor-memory-panel'])
@@ -212,7 +206,7 @@ describe('plugin manifests and composition resolver', () => {
       expect(composition.bundles).not.toContain(name)
       expect(manifests.some(item => item.name === name)).toBe(false)
     }
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', '@klarkxy/dsh-web-search-manager'])
+    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', '@klarkxy/dsh-web-search-manager'])
     expect(composition.features).not.toContain('zhihu')
     expect(composition.features).not.toContain('zhihu-tools')
     expect(composition.extraInserts).toEqual([])
@@ -386,7 +380,6 @@ describe('plugin conversation preset manifests', () => {
     expect(catalogue.manuscript.builtin).toBe(true)
     expect(catalogue['editor-cards']).toMatchObject({ builtin: true, locked: false })
     expect(catalogue['editor-novel-kernel']).toMatchObject({ builtin: true, locked: true, managedBy: 'session' })
-    expect(catalogue.proofread).toMatchObject({ builtin: true, locked: true, managedBy: 'feature' })
     expect(catalogue['model-center']).toBeUndefined()
     expect(catalogue['ai-services']).toBeUndefined()
     expect(catalogue.memory).toBeUndefined()

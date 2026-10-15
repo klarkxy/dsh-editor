@@ -249,7 +249,7 @@ describe('first-party writing preset RPC', () => {
     const paths = await presetFixture()
     const authorPatch = '\uFEFF# author comments\r\n- id: custom\r\n  config: &author\r\n    expression: !!js () => 42\r\n'
     await writeFile(paths.patchFile, authorPatch)
-    const previous = { schema: 1, overrides: { proofread: true, unknown: false }, installed: [{ name: 'author-plugin', spec: 'file:author', version: '1' }], authorField: { retained: true }, presets: { 'other-mode': false } }
+    const previous = { schema: 1, overrides: { 'custom-tool': true, unknown: false }, installed: [{ name: 'author-plugin', spec: 'file:author', version: '1' }], authorField: { retained: true }, presets: { 'other-mode': false } }
     await writeFile(paths.stateFile, JSON.stringify(previous))
     const result = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { paths })
     expect(result).toMatchObject({ ok: true, value: { restartRequired: true } })

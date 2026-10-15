@@ -53,7 +53,7 @@ describe('production plugin visual boundaries', () => {
        app/shell/shell.styles.ts（dsh.surfaces 层），collectStyles 读出。 */
     return import('../app/shell/shell.styles.ts').then(async () => {
       const { collectStyles } = await import('../design-system/layers.ts')
-      expect(collectStyles()).toContain(':is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel)')
+      expect(collectStyles()).toContain(':is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel)')
     })
   })
 })

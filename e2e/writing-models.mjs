@@ -204,7 +204,7 @@ try {
     const response=await page.request.post(new URL(channel+'/'+method,url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload}});
     return response.ok()?(await response.json()).result:undefined;
   };
-  for(const id of ['editor-novel-kernel','editor-workbench-tools','proofread']){
+  for(const id of ['editor-novel-kernel','editor-workbench-tools']){
     const row=find(id);assert.ok(row?.readOnlyReason,id);
     const value=await native('setPluginEnabled',{id:row.entryId,enabled:!row.enabled});
     assert.equal(value?.changed,false,id);

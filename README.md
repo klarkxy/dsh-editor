@@ -8,7 +8,7 @@ Windows / macOS 桌面写作应用。作者在稿纸上写正文，AI 搭档在�
 
 [下载](https://github.com/klarkxy/dsh-editor/releases) · [使用指南](docs/user-guide.md) · [变更记录](CHANGELOG.md)
 
-支持查找替换、章节导航、校对、版本回滚和 Markdown / TXT / DOCX / EPUB 导出。新对话可选通用写作、小说创作、文章与自媒体、技术文档。
+支持查找替换、章节导航、版本回滚和 Markdown / TXT / DOCX / EPUB 导出。新对话可选通用写作、小说创作、文章与自媒体、技术文档。
 
 首页「继续写作」直接回到上次的章节；工作台左侧栏分「文件 / 搜索」页签，右侧辅助栏分「搭档 / 资料 / 工具」页签，窄窗下侧栏变成抽屉。命令面板按写作 / 视图 / 作品 / 插件命令 / 跳转到文档分组，可切换浅色 / 深色 / 跟随系统。设置与插件是同一个全页视图，导出前可按目录勾选文档。界面由仓库自有「原稿」设计系统驱动，支持明暗主题。
 
@@ -28,7 +28,6 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | [@klarkxy/dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 由当前 Agent 记录和更新需求 | npm，按需安装 |
 | [@klarkxy/dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与 Agent 检查点 | npm，按需安装 |
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
-| [dsh-proofread](packages/dsh-proofread/README.md) | 中文文本校对 | 本地 tarball，尚未发布到 npm |
 | DSH 原生会话管理 | 对话归档、恢复、置顶与列表筛选 | 内置 DSH 0.2.0-rc.2 |
 | @deepseek-ai/dsh-client-ui-shortcuts | 搜索、录制、重置快捷键；桌面设置持久化 | 内置官方插件 |
 | @deepseek-ai/dsh-client-ui-sidebar-documentpreview | 文件栏资料预览 | 内置官方插件 |

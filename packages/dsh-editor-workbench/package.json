@@ -46,7 +46,7 @@
       {
         "id": "editor-workbench",
         "title": "工作台",
-        "description": "作品目录、概览、校对与快照",
+        "description": "作品目录、概览与快照",
         "locked": true
       },
       {
@@ -72,8 +72,7 @@
   },
   "dependencies": {
     "dsh-editor-workspace-kit": "workspace:*",
-    "dsh-manuscript": "workspace:*",
-    "dsh-proofread": "workspace:*"
+    "dsh-manuscript": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",

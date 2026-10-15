@@ -8,7 +8,7 @@ import { checkWorkingTree, findings, isUiSource, regressions } from './check-ui-
 
 const path = 'packages/dsh-editor-shell/src/client/example.tsx'
 test('covers shell, plugin and app UI, but not tests or generated files', () => {
-  for (const p of [path, 'packages/dsh-proofread/src/client.ts', 'packages/plugin/src/panel.tsx', 'apps/desktop/src/theme.ts', 'packages/plugin/src/styles.css']) assert(isUiSource(p), p)
+  for (const p of [path, 'packages/dsh-editor-cards/src/client.ts', 'packages/plugin/src/panel.tsx', 'apps/desktop/src/theme.ts', 'packages/plugin/src/styles.css']) assert(isUiSource(p), p)
   for (const p of ['docs/guide.md', 'packages/plugin/src/test.spec.tsx', 'packages/plugin/lib/client.js', 'packages/plugin/fixtures/ui.tsx', 'packages/dsh-editor-shell/src/design-system/tokens.ts', 'packages/dsh-editor-shell/src/design-system/styles.ts']) assert(!isUiSource(p), p)
 })
 test('tokens, Radix props and structural values are allowed', () => {

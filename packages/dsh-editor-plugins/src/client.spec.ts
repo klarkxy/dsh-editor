@@ -187,8 +187,8 @@ describe('plugin discovery', () => {
   it('hands an uninstalled listing to the native dialog with its exact spec and opens known bundles instead', () => {
     const onInstall = vi.fn()
     const onOpen = vi.fn()
-    const local: MarketplaceListing = { spec: 'link:/profile/optional', source: 'local', packageName: 'optional', title: '文稿校对',
-      owner: '', repo: 'optional', description: '检查稿件', stars: 0, url: '', updatedAt: '', topics: [] }
+    const local: MarketplaceListing = { spec: 'link:/profile/optional', source: 'local', packageName: 'optional', title: '文稿助手',
+      owner: '', repo: 'optional', description: '文稿辅助', stars: 0, url: '', updatedAt: '', topics: [] }
     const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[]) => PluginDiscovery({
       query: '', listings: [local], searching: false, note: '', error: '', inventory: { status: 'ready', packages },
       onInstall, onOpen, onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn(),

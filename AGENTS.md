@@ -22,7 +22,7 @@ DSH 是会话、模型、权限与运行时状态的权威；Editor 保持稿纸
 - **私有包与公开包分开。** `dsh-editor-*` 等私有包的 README 用简体中文；发布到 npm 的公开包（`@klarkxy/` scope、`publishConfig.access: public`）根 `README.md` 用英文，中文放 `docs/README.zh-CN.md`，两者互链且信息量对等（详见 [PUBLISHING](packages/PUBLISHING.md)）。
 - **公开包必须声明安装命令。** 每个公开包 README 的安装小节写出 `npm install @klarkxy/<包名>`；需要宿主显式加载的，并列 `dsh plugin --profile web add @klarkxy/<包名>`。
 - **公开包文档不得专属于本编辑器。** 公开插件面向任意 DSH 宿主，README 不写"DSH Editor 预装/内置/在 Editor 中"这类说法，一律用宿主（host）、发行版（distribution）、应用私有包（application-private packages）等通用措辞。预装关系只写在本仓库自己的顶层文档（根 README、packages/README、docs/）里。
-- **命名统一。** 使用产品内真实名称：「文档概览」（不是"作品概览"）、「文稿校对」、「小说工具」；模型档位只有 Quick／Chat／Thinking／Fantasy（快速／对话／思考／幻想），不借用其他产品的档位命名。
+- **命名统一。** 使用产品内真实名称：「文档概览」（不是"作品概览"）、「小说工具」；模型档位只有 Quick／Chat／Thinking／Fantasy（快速／对话／思考／幻想），不借用其他产品的档位命名。
 - **发行组合变化同步顶层文档。** 新插件进入 Editor 发行组合时，同一改动内更新：根 README 插件表、packages/README 表格、docs/README 索引、CHANGELOG、docs/user-guide.md。其他插件变化按实际影响更新相关说明；外部插件独立首次发布不自动要求更新这些文档。
 - **公开面要文档化。** 公开包的 README 列出 agent 工具名、子路径导出（`./contracts`、`./client` 等）与 RPC 端点概览；私有核心包至少写清入口、命令与权限边界。
 - **历史文档加标注。** 已完成使命的升级审计、预生产方案等保留时，在文首加历史留档说明并仍登记进 docs/README 索引；文档间链接与锚点保持有效。

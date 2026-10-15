@@ -4,7 +4,6 @@ import { lifecycleHandlers } from './lifecycle.ts'
 import { memoryHandlers } from './memory.ts'
 import { overviewHandlers } from './overview.ts'
 import { projectHandlers } from './project.ts'
-import { proofreadHandlers } from './proofread.ts'
 import { proposalHandlers } from './proposal.ts'
 import { snapshotHandlers } from './snapshot.ts'
 import type { WorkbenchHandler, WorkbenchHandlers } from './types.ts'
@@ -12,7 +11,6 @@ import type { WorkbenchHandler, WorkbenchHandlers } from './types.ts'
 const clusters: WorkbenchHandlers[] = [
   projectHandlers,
   overviewHandlers,
-  proofreadHandlers,
   lifecycleHandlers,
   snapshotHandlers,
   importHandlers,
@@ -35,7 +33,6 @@ assertUniqueHandlerKeys(clusters)
 export const workbenchHandlers = {
   ...projectHandlers,
   ...overviewHandlers,
-  ...proofreadHandlers,
   ...lifecycleHandlers,
   ...snapshotHandlers,
   ...importHandlers,

@@ -10,7 +10,6 @@ import { SnapshotError } from './lifecycle/snapshot.ts'
 import { OverviewError } from './integrations/overview.ts'
 import { MetadataIoError } from './io/metadata-io.ts'
 import { WritingLogError } from './lifecycle/writing-log.ts'
-import { ProofreadError } from './integrations/proofread.ts'
 import { ProposalOpsError } from './proposals/proposal-ops.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 
@@ -51,7 +50,7 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
     if (error.code === 'IO' || error.code === 'UNSUPPORTED') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     return badRequest(error.message)
   }
-  if (error instanceof OverviewError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError) {
+  if (error instanceof OverviewError || error instanceof WritingLogError || error instanceof MetadataIoError) {
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
     if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH' || error.code === 'INVALID') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }

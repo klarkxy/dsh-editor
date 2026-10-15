@@ -46,7 +46,7 @@ token 作用域内还带两组别名：
 
 唯一允许未分层的宿主规则是 `app/shell/shell.styles.ts` 导出的 `pluginBoundaryStyles`：官方 rightbar 面板根是 `pointer-events:none` 的未分层声明，宿主用类+属性选择器（0,2,0）恢复其子树命中，不用 `!important`。它追加在 `collectStyles()` 之后注入；新增同类规则必须写进同一份导出并说明压过哪条插件声明。
 
-产品样式中的 `!important` 总数为零（shell、manuscript、官方插件、proofread 与私有面板全部覆盖在 `check-ui-design` 的扫描内）。需要压过时用层序或特异性（如 `html ` 前缀），不用 `!important`。
+产品样式中的 `!important` 总数为零（shell、manuscript、官方插件与私有面板全部覆盖在 `check-ui-design` 的扫描内）。需要压过时用层序或特异性（如 `html ` 前缀），不用 `!important`。
 
 ## 组件库 `src/ui/`
 

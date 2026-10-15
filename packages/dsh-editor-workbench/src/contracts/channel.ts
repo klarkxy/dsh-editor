@@ -11,7 +11,6 @@ import type {
 import type { ImportProbeResponse } from './import.ts'
 import type { RestoreProbeResponse, SnapshotResponse } from './snapshot.ts'
 import type { ArchiveListResponse, ArchiveResponse } from './archive.ts'
-import type { ProofreadScanRequest, ProofreadScanResponse } from './proofread.ts'
 import type { ProjectContextCompilation, TaskContextCompilation } from './context.ts'
 import type { OperationRecovery } from './recovery.ts'
 import type { WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
@@ -58,7 +57,6 @@ export type WorkbenchEndpoint =
   | 'entry.move'
   | 'entry.delete'
   | 'entry.rename'
-  | 'proofread.scan'
 
 export type ProposalRename = { from: string; to: string }
 export type ProposalPayload =
@@ -116,7 +114,6 @@ export type WorkbenchRequestMap = {
   'entry.move': { sessionId: string; path: string; targetDir: string }
   'entry.delete': { sessionId: string; path: string }
   'entry.rename': { sessionId: string; path: string; name: string }
-  'proofread.scan': ProofreadScanRequest
 }
 
 export type WorkbenchResponseMap = {
@@ -158,7 +155,6 @@ export type WorkbenchResponseMap = {
   'entry.move': { path: string }
   'entry.delete': { path: string }
   'entry.rename': { path: string }
-  'proofread.scan': ProofreadScanResponse
 }
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }

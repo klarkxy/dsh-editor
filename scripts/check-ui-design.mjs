@@ -225,8 +225,8 @@ check('accent location selection and unchanged editor typography contract', () =
   assert(collected.includes('.dsh-button:disabled { background: var(--dsh-ui-hover); color: var(--dsh-ui-muted);'))
   assert(!collected.includes('rt-BaseButton'))
 })
-/* 产品源码边界：shell、manuscript 与私有面板。官方插件包和 seats/proofread
-   的 standalone 兜底声明文件不在此列 —— 它们给没有本编辑器主题作用域的宿主
+/* 产品源码边界：shell、manuscript 与私有面板。官方插件包和 seats 的
+   standalone 兜底声明文件不在此列 —— 它们给没有本编辑器主题作用域的宿主
    提供字面量回退，是定义侧而不是消费侧。 */
 const PRODUCT_STYLE_DIRS = [
   'packages/dsh-editor-shell/src',
@@ -234,18 +234,16 @@ const PRODUCT_STYLE_DIRS = [
   'packages/dsh-editor-panel-base/src',
   'packages/dsh-editor-memory-panel/src',
   'packages/dsh-editor-overview-panel/src',
-  'packages/dsh-editor-proofread-panel/src',
   'packages/dsh-editor-cards/src',
   'packages/dsh-editor-novel-kernel/src',
 ]
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
-/* !important 的扫描范围比 PRODUCT_STYLE_DIRS 宽：官方插件与 proofread 的
-   standalone 样式允许调色板字面量回退（见上面的边界注释），但 !important
-   对它们同样是绝对禁令。 */
+/* !important 的扫描范围比 PRODUCT_STYLE_DIRS 宽：官方插件的 standalone
+   样式允许调色板字面量回退（见上面的边界注释），但 !important 对它们同样
+   是绝对禁令。 */
 const IMPORTANT_STYLE_DIRS = [
   ...PRODUCT_STYLE_DIRS,
   'packages/dsh-editor-plugins/src',
-  'packages/dsh-proofread/src',
 ]
 function collectProductSources(dirs = PRODUCT_STYLE_DIRS) {
   const sources = []
@@ -268,7 +266,7 @@ function collectProductSources(dirs = PRODUCT_STYLE_DIRS) {
 check('no Radix palette variables remain in product sources', () => {
   /* 6a-2：旧 Radix 调色板变量在产品源码里退役为 --dsh-ui-* 语义 token；
      6a-3 已把 tokens.ts 里的颜色桥也删掉（字号/间距度量别名仍保留，因为
-     manuscript 挂件样式还在读）。seats/proofread 的 standalone 兜底链不在
+     manuscript 挂件样式还在读）。seats 的 standalone 兜底链不在
      扫描范围（见 PRODUCT_STYLE_DIRS）。 */
   const palette = /--(?:accent|gray|red|green|amber|blue|iris|indigo|violet|teal|cyan|purple|plum|pink|crimson|tomato|ruby|orange|yellow|lime|mint|grass|sky|jade|brown|bronze|gold|slate|mauve|olive|sage|sand|color)-/
   for (const absolute of collectProductSources()) {

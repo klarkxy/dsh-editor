@@ -53,8 +53,7 @@ const DOM = {
   PAPER_SAVE: S.paperSaveState, PAPER_WORDS: S.paperWordcount, PAPER_PATH: S.paperPath,
   CHAT: S.chatRail, COMPOSER: S.composerInputInner, THEME: S.themeToggle,
   SHELL_THEME: S.shellTheme, OVERVIEW: S.overviewPanel, OVERVIEW_BODY: S.overviewBody,
-  OVERVIEW_LOADING: S.overviewLoading, PROOFREAD: S.editorProofreadPanel,
-  PROOFREAD_SUMMARY: S.proofreadSummary, PROOFREAD_LOADING: S.proofreadLoading,
+  OVERVIEW_LOADING: S.overviewLoading,
   MEMORY: S.memoryPanel, MEMORY_LIST: S.memoryList, MEMORY_STATUS: S.memoryStatus,
 }
 
@@ -354,9 +353,8 @@ try {
   const savedChapter = await readFile(chapterPath, 'utf8')
   if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
-  // Three-panel validation: overview (文档概览), proofread (文稿校对), memory (记忆).
+  // Two-panel validation: overview (文档概览) and memory (记忆).
   // Overview: center overlay opened with Ctrl+Shift+O, data-testid="overview-panel".
-  // Proofread: center overlay opened with Ctrl+Shift+L, data-testid="editor-proofread-panel".
   // Memory: sidebar tool, requires enabling via plugin manager first (defaultEnabled: false).
 
   // Open overview panel via Ctrl+Shift+O
@@ -388,37 +386,6 @@ try {
   if (!(await overviewCloseButton.isVisible())) failures.push('overview panel close button not found')
   await overviewCloseButton.click()
   await overviewPanel.waitFor({ state: 'detached', timeout: 3_000 })
-
-  // Open proofread panel via Ctrl+Shift+L
-  await page.keyboard.press('Control+Shift+l')
-  const proofreadPanel = page.locator(S.editorProofreadPanel)
-  await proofreadPanel.waitFor({ state: 'visible', timeout: 5_000 })
-
-  // Wait for scan complete (not busy loading)
-  // proofread state: result=null initially, then object after scan
-  // Success: .proofread-summary appears AND .proofread-loading disappears
-  await page.waitForFunction(({ PROOFREAD, PROOFREAD_SUMMARY, PROOFREAD_LOADING }) => {
-    const panel = document.querySelector(PROOFREAD)
-    if (!panel) return false
-    // Must have summary (scan completed)
-    if (!panel.querySelector(PROOFREAD_SUMMARY)) return false
-    // Must not be in loading state during initial scan
-    const loading = panel.querySelector(PROOFREAD_LOADING)
-    if (loading && !panel.querySelector(PROOFREAD_SUMMARY)) return false
-    return true
-  }, DOM, { timeout: 10_000 })
-
-  await page.screenshot({ path: resolve(output, '04-proofread-panel.png') })
-
-  // Verify header
-  const proofreadTitle = await proofreadPanel.locator(S.h2).innerText()
-  if (!proofreadTitle.includes('文稿校对')) failures.push(`proofread panel title unexpected: ${proofreadTitle}`)
-
-  // Close via close button and verify detachment
-  const proofreadCloseButton = proofreadPanel.getByRole('button', { name: /关闭/ })
-  if (!(await proofreadCloseButton.isVisible())) failures.push('proofread panel close button not found')
-  await proofreadCloseButton.click()
-  await proofreadPanel.waitFor({ state: 'detached', timeout: 3_000 })
 
   // Memory panel: sidebar tool, defaultEnabled: false in package.json.
   // Already enabled via configureProfile with enabledEntries before DSH startup.

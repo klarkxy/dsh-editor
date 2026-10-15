@@ -14,7 +14,7 @@ describe('finite distribution ownership', () => {
     expect(CORE_PLUGIN_ENTRY_IDS.has('ui-layout')).toBe(false)
     expect(CORE_PLUGIN_ENTRY_IDS.has('editor-shell')).toBe(true)
     expect(HOST_LOCKED_ENTRY_IDS.has('editor-shell')).toBe(false)
-    expect(HOST_LOCKED_ENTRY_IDS.has('proofread')).toBe(true)
+    expect(HOST_LOCKED_ENTRY_IDS.has('editor-workbench-tools')).toBe(true)
     expect(RETIRED_PLUGIN_PACKAGES.has('dsh-web-search-tavily')).toBe(true)
     expect(REQUIRED_CORE_BUNDLES.has('dsh-web-search-tavily')).toBe(false)
   })
@@ -31,9 +31,9 @@ describe('finite distribution ownership', () => {
   it('keeps stale JSON host guards after migration without writing the old home overlay again', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-migrated-overlay-'))
     await writeNativeMigrationMarker(home)
-    const patch = '\uFEFF# managed-by: dsh-editor-plugins\r\n- id: proofread\r\n  disabled: false\r\n'
+    const patch = '\uFEFF# managed-by: dsh-editor-plugins\r\n- id: editor-workbench-tools\r\n  disabled: false\r\n'
     await writeFile(join(home, 'cordis.patch.yml'), patch)
-    await writeFile(join(home, 'dsh-plugins.json'), JSON.stringify({ schema: 1, overrides: { proofread: true, 'author-extra': false }, presets: { 'dsh-editor-novel': false }, installed: [] }))
+    await writeFile(join(home, 'dsh-plugins.json'), JSON.stringify({ schema: 1, overrides: { 'editor-workbench-tools': true, 'author-extra': false }, presets: { 'dsh-editor-novel': false }, installed: [] }))
     await sanitizeHostLockedPluginOverrides(home)
     expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe(patch)
     expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toMatchObject({ overrides: { 'author-extra': false }, presets: { 'dsh-editor-novel': false } })

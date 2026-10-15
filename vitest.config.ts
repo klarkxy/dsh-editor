@@ -27,9 +27,6 @@ export default defineConfig({
   }],
   resolve: {
     alias: {
-      'dsh-proofread/engine': `${root}packages/dsh-proofread/src/engine.ts`,
-      'dsh-proofread/contracts': `${root}packages/dsh-proofread/src/contracts.ts`,
-      'dsh-proofread/defaults': `${root}packages/dsh-proofread/src/defaults.ts`,
       'dsh-manuscript/host-api': `${root}packages/dsh-manuscript/src/host-api.ts`,
       'dsh-manuscript/client/editor-core': `${root}packages/dsh-manuscript/src/client/editor-core/index.ts`,
       'dsh-editor-workbench/contracts': `${root}packages/dsh-editor-workbench/src/contracts.ts`,

@@ -127,7 +127,7 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
    必须保持原始选择器（不走 uiRule 的插件排除）——与下方 pluginBoundaryStyles
    同一类边界例外，但它仍是分层规则，slot 内插件自有样式可覆盖它。 */
 :is(.shell, .dsh-drawer) .sidebar-tools { min-width: 0; gap: var(--dsh-ui-space-2); }
-:is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+:is(.shell, .dsh-drawer) .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel) { animation: shell-panel-enter 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* 窄窗（≤760px）：快捷键提示先让位；作品菜单截断但保留真实命中区。 */
 @media (max-width: 760px) {

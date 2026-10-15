@@ -7,7 +7,6 @@
 | [dsh-zhihu](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎资料；npm 包名 `@klarkxy/dsh-zhihu` |
 | [dsh-web-search-manager](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索；npm 包名 `@klarkxy/dsh-web-search-manager` |
 | [dsh-manuscript](dsh-manuscript/README.md) | 稿纸编辑；独立 Web 使用本地 tarball |
-| [dsh-proofread](dsh-proofread/README.md) | 中文校对；独立 Web 使用本地 tarball |
 | [dsh-current-title](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题，保留手动命名；npm 包名 `@klarkxy/dsh-current-title` |
 | [dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 由当前 Agent 记录和更新需求，不额外调用模型；npm 包名 `@klarkxy/dsh-mood` |
 | [dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与独立开关的 Agent 检查点；npm 包名 `@klarkxy/dsh-recap` |
@@ -19,7 +18,6 @@
 | [dsh-editor-cards](dsh-editor-cards/README.md) | 人物卡与世界书目录快捷入口 |
 | [dsh-editor-memory-panel](dsh-editor-memory-panel/README.md) | 记忆维护 |
 | [dsh-editor-overview-panel](dsh-editor-overview-panel/README.md) | 文档概览 |
-| [dsh-editor-proofread-panel](dsh-editor-proofread-panel/README.md) | 桌面校对 |
 | [dsh-editor-panel-base](dsh-editor-panel-base/README.md) | 面板公共基础设施（RPC / 请求 / 国际化） |
 | [dsh-editor-seats](dsh-editor-seats/README.md) | 界面扩展合同 |
 | [dsh-editor-workspace-kit](dsh-editor-workspace-kit/README.md) | 工作区共享库 |

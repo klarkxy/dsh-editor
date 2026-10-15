@@ -32,7 +32,7 @@ const groups = (platform: string): { title: [string, string]; rows: Row[] }[] =>
   ] },
   { title: ['对话与弹窗', 'Chat and dialogs'], rows: [
     ['Enter / Shift+Enter', '助手输入框：发送 / 换行', 'Assistant input: send / new line'],
-    ['Mod+Enter', '自定义改写 / 校对输入框：提交', 'Custom rewrite / proofread input: submit'],
+    ['Mod+Enter', '自定义改写输入框：提交', 'Custom rewrite input: submit'],
     ['Enter', '知乎搜索框 / 人物卡与世界书输入框：提交', 'Zhihu search / character and worldbook input: submit'],
     ['↑ / ↓ / Enter', '命令面板：选择并执行', 'Command palette: select and run'],
     ['Tab / Shift+Tab', '移动到下一个 / 上一个控件', 'Focus next / previous control'],

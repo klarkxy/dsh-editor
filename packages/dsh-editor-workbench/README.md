@@ -15,7 +15,6 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 - 快照与回滚：`snapshot.list` / `create` / `rollback` / `restoreProbe` / `restoreApply` / `restoreCleanup`
 - 归档：`archive.list` / `apply` / `restore`
 - 提案：`proposal.prepare` / `apply`（支持 create、章节计划/小结、拆分、合并、批量改名与写作 V2 提案）
-- 校对：`proofread.scan`
 
 `project.homeDirectory` 只读返回实际新作品根目录，不创建文件，也不接受客户端指定根目录。
 

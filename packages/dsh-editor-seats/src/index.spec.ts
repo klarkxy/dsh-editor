@@ -32,10 +32,10 @@ function seat(extra: Partial<ShellToolSeatContext> = {}): ShellToolSeatContext {
 }
 
 const sample: ShellCommand = {
-  id: 'proofread-document',
+  id: 'summarize-document',
   group: 'writing',
-  label: { zh: '校对当前文档', en: 'Proofread current document' },
-  hint: { zh: 'Ctrl+Shift+L · 标点、错别字、敏感词、重复与口癖', en: 'Ctrl+Shift+L' },
+  label: { zh: '总结当前文档', en: 'Summarize current document' },
+  hint: { zh: 'Ctrl+Shift+L · 概要', en: 'Ctrl+Shift+L' },
   shortcut: { key: 'l', ctrl: true, shift: true },
   when: 'workspace',
   enabled: (context) => Boolean(context.activePath),
@@ -50,7 +50,7 @@ describe('shell command registry', () => {
     const dispose = registry.register(sample)
     expect(listener).toHaveBeenCalledTimes(1)
     expect(registry.list()).toEqual([sample])
-    expect(() => registry.register({ ...sample, run: vi.fn() })).toThrow(/duplicate shell command id: proofread-document/)
+    expect(() => registry.register({ ...sample, run: vi.fn() })).toThrow(/duplicate shell command id: summarize-document/)
     dispose()
     expect(registry.list()).toEqual([])
     expect(listener).toHaveBeenCalledTimes(2)
@@ -69,7 +69,7 @@ describe('shell command registry', () => {
     expect(matchRegistryShortcut([command], { key: 'l', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe(command)
 
     const [item] = registryPaletteItems([command], 'zh', context, true)
-    expect(item).toMatchObject({ id: 'proofread-document', group: 'writing', label: '校对当前文档', disabled: false })
+    expect(item).toMatchObject({ id: 'summarize-document', group: 'writing', label: '总结当前文档', disabled: false })
     item!.run()
     expect(context.revealSidebar).toHaveBeenCalled()
     expect(run).toHaveBeenCalledWith(context)

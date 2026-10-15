@@ -69,12 +69,6 @@
   config:
     default: dsh-editor-writing
 
-# Desktop proofreading runs through the proofread panel via workbench
-# `proofread.scan`, not dsh-proofread's standalone text-check route or dock.
-# This entry stays disabled to keep the standalone `/proofread` text.check
-# route and dock out of the desktop.
-- id: proofread
-  disabled: true
 # Scoped writing tools stay resolvable for app-owned presets. The locked
 # editor-workbench core still loads host-wide and owns fail-closed guard/RPC.
 # editor-novel-kernel likewise stays resolvable for app-owned presets

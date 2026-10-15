@@ -110,7 +110,6 @@ describe('profile deployment', () => {
       overrides: {
         'editor-novel-kernel': true,
         'editor-workbench-tools': true,
-        proofread: true,
         zhihu: false,
       },
       presets: { 'dsh-editor-novel': true },
@@ -121,8 +120,6 @@ describe('profile deployment', () => {
       '- id: editor-novel-kernel',
       '  disabled: false',
       '- id: editor-workbench-tools',
-      '  disabled: false',
-      '- id: proofread',
       '  disabled: false',
       '- id: zhihu',
       '  disabled: true',
@@ -387,11 +384,9 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'])
-      expect(item.features).toContain('proofread-panel')
+      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'writing-presets', 'web-search'])
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
-      expect(item.packages).toContain('dsh-editor-proofread-panel')
       expect(item.packages).toContain('dsh-editor-writing-presets')
       expect(item.packages).toContain('dsh-editor-cards')
       expect(item.disabledEntries).toContain('editor-cards')

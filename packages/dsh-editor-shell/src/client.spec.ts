@@ -353,17 +353,17 @@ describe('shell manuscript RPC safety', () => {
     const run = vi.fn()
     const registry = createCommandRegistry()
     registry.register({
-      id: 'proofread-document',
+      id: 'summarize-document',
       group: 'writing',
-      label: { zh: '校对当前文档', en: 'Proofread current document' },
-      hint: { zh: 'Ctrl+Shift+L · 标点、错别字、敏感词、重复与口癖', en: 'Ctrl+Shift+L' },
+      label: { zh: '总结当前文档', en: 'Summarize current document' },
+      hint: { zh: 'Ctrl+Shift+L · 概要', en: 'Ctrl+Shift+L' },
       shortcut: { key: 'l', ctrl: true, shift: true },
       when: 'workspace',
       run,
     })
     const event = { key: 'l', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true }
     const matched = matchRegistryShortcut(registry.list(), event)
-    expect(matched?.id).toBe('proofread-document')
+    expect(matched?.id).toBe('summarize-document')
     const context = {
       sessionId: 's1',
       activePath: '正文/001.md',
@@ -386,8 +386,8 @@ describe('shell manuscript RPC safety', () => {
     /* §8：插件命令进独立分组,不再按注册 group 并入写作组。 */
     const group = registryCommandGroup(items)
     expect(group?.id).toBe('plugins')
-    expect(group?.items.map((item) => item.id)).toEqual(['proofread-document'])
-    expect(group?.items.at(-1)?.label).toBe('校对当前文档')
+    expect(group?.items.map((item) => item.id)).toEqual(['summarize-document'])
+    expect(group?.items.at(-1)?.label).toBe('总结当前文档')
     group?.items.at(-1)?.run()
     expect(run).toHaveBeenCalledWith(context)
     expect(context.revealSidebar).toHaveBeenCalled()
@@ -398,17 +398,17 @@ describe('shell manuscript RPC safety', () => {
     const manuscriptRun = vi.fn()
     const registry = createCommandRegistry()
     registry.register({
-      id: 'proofread-document',
+      id: 'summarize-document',
       group: 'writing',
-      label: { zh: '校对当前文档', en: 'Proofread current document' },
+      label: { zh: '总结当前文档', en: 'Summarize current document' },
       when: 'workspace',
       enabled: (context) => Boolean(context.activePath),
       run: documentRun,
     })
     registry.register({
-      id: 'proofread-manuscript',
+      id: 'summarize-manuscript',
       group: 'writing',
-      label: { zh: '校对全书', en: 'Proofread manuscript' },
+      label: { zh: '总结全书', en: 'Summarize manuscript' },
       when: 'workspace',
       run: manuscriptRun,
     })
@@ -441,27 +441,27 @@ describe('shell manuscript RPC safety', () => {
     const byId = (items: ReturnType<typeof project>) => Object.fromEntries(items.map((item) => [item.id, item]))
 
     const empty = byId(project(true))
-    expect(empty['proofread-document']?.disabled).toBe(true)
-    expect(empty['proofread-manuscript']?.disabled).toBe(false)
+    expect(empty['summarize-document']?.disabled).toBe(true)
+    expect(empty['summarize-manuscript']?.disabled).toBe(false)
 
     seatRef.current = { ...seatRef.current, activePath: '正文/001.md' }
     const opened = byId(project(true))
-    expect(opened['proofread-document']?.disabled).toBe(false)
-    expect(opened['proofread-manuscript']?.disabled).toBe(false)
-    opened['proofread-document']?.run()
+    expect(opened['summarize-document']?.disabled).toBe(false)
+    expect(opened['summarize-manuscript']?.disabled).toBe(false)
+    opened['summarize-document']?.run()
     expect(documentRun).toHaveBeenCalledWith(proxy)
     expect(seatRef.current.activePath).toBe('正文/001.md')
 
     seatRef.current = { ...seatRef.current, activePath: '' }
     const afterClose = byId(project(true))
-    expect(afterClose['proofread-document']?.disabled).toBe(true)
-    expect(afterClose['proofread-manuscript']?.disabled).toBe(false)
-    afterClose['proofread-document']?.run()
+    expect(afterClose['summarize-document']?.disabled).toBe(true)
+    expect(afterClose['summarize-manuscript']?.disabled).toBe(false)
+    afterClose['summarize-document']?.run()
     expect(documentRun).toHaveBeenCalledTimes(1)
 
     const noWorkspace = byId(project(false))
-    expect(noWorkspace['proofread-document']?.disabled).toBe(true)
-    expect(noWorkspace['proofread-manuscript']?.disabled).toBe(true)
+    expect(noWorkspace['summarize-document']?.disabled).toBe(true)
+    expect(noWorkspace['summarize-manuscript']?.disabled).toBe(true)
   })
 
   it('leaves character and worldbook cards to the cards plugin seats and registry commands', () => {
