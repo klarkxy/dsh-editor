@@ -33,12 +33,30 @@ import {
   type ProposalPrepared,
   type WorkbenchPrepareResponse,
 } from '../model/chat-proposal.ts'
+import type { ProposalBoard, ProposalCardStatus } from '../model/proposal-board.ts'
+import { ProposalDiffView } from './proposal-diff-view.tsx'
 
-export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: AuthorProposal; receiptId?: string; onApplied(path: string): void }) {
+export function ProposalCard(props: {
+  ctx: ShellContext
+  sessionId: string
+  proposal: AuthorProposal
+  receiptId?: string
+  onApplied(path: string): void
+  /* 会话提案板：挂上后 pill 计数、滚动定位与「全部应用」都看得见这张卡。 */
+  board?: ProposalBoard
+  boardId?: string
+  boardTurnKey?: number
+  /* 首个待处理卡收到的批量入口；只有同回合全部核对安全时父级才传。 */
+  applyAll?: { count: number; busy: boolean; run(): void }
+}) {
   const [prepared, setPrepared] = useState<ProposalPrepared | null>(null)
   const [appliedVersion, setAppliedVersion] = useState('')
   const [undoText, setUndoText] = useState('')
-  const [state, setState] = useState<'checking' | 'ready' | 'applying' | 'applied' | 'deferred' | 'ignored' | 'undoing' | 'undone' | 'expired'>('checking')
+  const [state, setCardState] = useState<ProposalCardStatus>('checking')
+  /* 批量应用跑完一条立刻读 status()，不能等 React 下一帧渲染：
+     状态提交同步写 ref，组件内所有 setState 都走这个包装。 */
+  const statusRef = useRef(state)
+  const setState = (next: ProposalCardStatus) => { statusRef.current = next; setCardState(next) }
   /* 可恢复失败（传输中断、一般核对/应用失败、部分写入后的谨慎回读）允许重新核对，不需要新的模型请求；
      stale（含章纲/章末小结 sourceVersion 过期）必须重新生成提案，不提供重新核对。 */
   const [canRecheck, setCanRecheck] = useState(false)
@@ -247,6 +265,28 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     }
   }
 
+  /* 提案板登记：status 读同步提交的 statusRef（不是等渲染的 React state），
+     元素/apply 走 ref；state 每变一次 notify 一次，pill 与「全部应用」实时跟随。 */
+  const cardRef = useRef<HTMLElement | null>(null)
+  const applyRef = useRef(apply)
+  applyRef.current = apply
+  const board = props.board
+  const boardId = props.boardId
+  const boardTurnKey = props.boardTurnKey
+  useEffect(() => {
+    if (!board || !boardId) return
+    return board.register({
+      id: boardId,
+      turnKey: boardTurnKey ?? -1,
+      status: () => statusRef.current,
+      element: () => cardRef.current,
+      apply: () => applyRef.current(),
+    })
+  }, [board, boardId, boardTurnKey])
+  useEffect(() => {
+    board?.notify()
+  }, [board, state])
+
   /* 头部右侧的标识:renames 展示"N 个文件",其它仍展示 path(已经在 kind 上 narrow 过)。 */
   const settled = state === 'applied' || state === 'ignored' || state === 'deferred' || state === 'undone'
   const headerPathLabel = props.proposal.kind === 'renames'
@@ -320,34 +360,13 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
   const renderKindBody = () => {
     if (props.proposal.kind === 'edit') {
+      /* 既有文件的编辑提案只渲染 hunk 差异（3 行上下文、未改动段折叠），
+         不再把整份文档前后各贴一遍；新建文件仍保留全文块。 */
       const editPrepared = prepared?.kind === 'edit' ? prepared : null
       return (
-        <Flex className="proposal-diff" direction="column" gap="3">
-          <Box asChild>
-            <section>
-              <Text size="1" color="gray">
-                {t('chat.original')}
-              </Text>
-              <Box asChild mt="1" overflow="auto">
-                <pre>
-                  {editPrepared?.before ?? props.proposal.oldText}
-                </pre>
-              </Box>
-            </section>
-          </Box>
-          <Box asChild>
-            <section>
-              <Text size="1" color="gray">
-                {t('chat.revised')}
-              </Text>
-              <Box asChild mt="1" overflow="auto">
-                <pre>
-                  {editPrepared?.after ?? props.proposal.newText}
-                </pre>
-              </Box>
-            </section>
-          </Box>
-        </Flex>
+        <ProposalDiffView
+          before={editPrepared?.before ?? props.proposal.oldText}
+          after={editPrepared?.after ?? props.proposal.newText} />
       );
     }
     if (props.proposal.kind === 'create') {
@@ -514,6 +533,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   const footer = <Flex asChild direction="column" gap="2" mt="3">
     <footer>
       {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
+        {/* 同回合全部核对安全时，首个待处理卡操作行头部给「全部应用」批量入口。 */}
+        {state === 'ready' && props.applyAll ? <Button
+          type="button"
+          variant="secondary"
+          disabled={props.applyAll.busy}
+          onClick={props.applyAll.run}>
+          {t('chat.applyAll', { count: props.applyAll.count })}
+        </Button> : null}
         {state === 'ready' ? <Button type="button" variant="primary" onClick={() => void apply()}>
           {t('chat.applyChanges')}
         </Button> : null}
@@ -569,7 +596,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     /* §5：已结算卡折叠成单行 Disclosure —— chevron + 路径/标题/状态一行，
        展开后仍是 diff + 操作行（deferred 的重新核对在展开内容里）。 */
     return (
-      <Card className={`proposal-card ${state} proposal-card-settled`} size="2" aria-label={t('chat.fileProposal')}>
+      <Card
+        className={`proposal-card ${state} proposal-card-settled`}
+        size="2"
+        aria-label={t('chat.fileProposal')}
+        data-proposal-id={boardId}
+        ref={cardRef}>
         <Disclosure
           className="proposal-settled"
           summary={<Flex className="proposal-settled__row" align="center" gap="2" minWidth="0">
@@ -587,7 +619,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     );
   }
   return (
-    <Card className={`proposal-card ${state}`} size="2" aria-label={t('chat.fileProposal')}>
+    <Card
+      className={`proposal-card ${state}`}
+      size="2"
+      aria-label={t('chat.fileProposal')}
+      data-proposal-id={boardId}
+      ref={cardRef}>
       <Flex asChild align="start" direction="column" gap="1" mb="3">
         <header>
           {metaBlock}

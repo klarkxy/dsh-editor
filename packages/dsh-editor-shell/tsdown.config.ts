@@ -106,6 +106,8 @@ export default defineConfig([
         // tsdown would otherwise leave them as runtime require() calls.
         'docx',
         'jszip',
+        // diff 是提案行级 diff 的 production dep,同样必须打进 bundle。
+        'diff',
         /^echarts(?:\/|$)/,
         /^zrender(?:\/|$)/,
       ],

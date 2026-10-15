@@ -4,6 +4,7 @@ import { ScrollArea, Text } from '../ui/index.ts'
 import { ChatHistory } from './chat-history.tsx'
 import { ChatEntry, ChatProcessStack, ChatRowView, ChatStepItem, PendingCard } from './chat-cards.tsx'
 import { clusterChatRows } from '../model/chat-cards.ts'
+import { createProposalBoard } from '../model/proposal-board.ts'
 import { PluginChatEvents } from './plugin-surfaces.tsx'
 import type { SessionFace } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
@@ -31,6 +32,7 @@ function props(overrides: Partial<Props> = {}): Props {
     partial: { text: '', thinking: '' }, hasPartial: false,
     visibleCalls: [], queuedSubmissions: [], pendingItems: [],
     outgoing: null, outgoingIsCanonical: false, hasTurnError: false, initGuide: null,
+    board: createProposalBoard(), proposalTurnKeys: new Map(),
     ...overrides,
   }
 }

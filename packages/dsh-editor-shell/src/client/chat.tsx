@@ -75,6 +75,11 @@ import { PartnerEmptyState } from '../app/assistant/partner-empty.tsx'
 import { useChatConversationControls } from './chat-conversation-controls.ts'
 import { ChatHistory } from './chat-history.tsx'
 import type { ChatOutgoing } from '../model/chat-history.ts'
+import {
+  createProposalBoard,
+  pendingProposalEntries,
+  proposalTurnKeys,
+} from '../model/proposal-board.ts'
 import { ModelPicker } from './chat-model-picker.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { ProposalCard } from './chat-proposal.tsx'
@@ -197,13 +202,33 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
   const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
   const historyBlocks = useMemo(() => clusterChatRows(rows, messageCards), [rows, messageCards, messageCardTick])
   const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
+  /* 会话内提案板：各提案卡注册自己的状态/元素/apply；
+     pill 计数、回合分组与「全部应用」都读这张板。 */
+  const proposalBoard = useMemo(() => createProposalBoard(), [])
+  const proposalTurnKeyMap = useMemo(() => proposalTurnKeys(rows), [rows])
   /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
      依赖全部是记忆化数据:只有历史内容真的变化才补 scrollTop,draft 输入等
-     无关重渲染不再触发;用 layout effect 在绘制前完成,避免跟随时闪一帧。 */
+     无关重渲染不再触发;用 layout effect 在绘制前完成,避免跟随时闪一帧。
+     回合刚结束且有待处理提案时,跟随目标改为第一张待处理卡——
+     不再滚过卡片把提案按钮推出视野;之后该卡不在底部,跟随自然松开。 */
+  const prevRunningForScroll = useRef(false)
   useLayoutEffect(() => {
     const el = historyRef.current
-    if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [rows, partial, outgoing, visibleCalls, queuedSubmissions, pendingItems])
+    const turnEnded = prevRunningForScroll.current && !snapshot.running
+    prevRunningForScroll.current = snapshot.running
+    if (!el || !bottomPinnedRef.current) return
+    const firstPending = turnEnded
+      ? pendingProposalEntries(proposalBoard.entries())
+          .map((entry) => entry.element())
+          .find((node): node is HTMLElement => node != null)
+      : null
+    if (firstPending) {
+      firstPending.scrollIntoView({ block: 'start' })
+      bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+      return
+    }
+    el.scrollTop = el.scrollHeight
+  }, [rows, partial, outgoing, visibleCalls, queuedSubmissions, pendingItems, snapshot.running, proposalBoard])
   const historyPrimed = useRef(false)
   const primedEmpty = useRef(false)
   const initialMessageIds = useRef(new Set<string>())
@@ -522,6 +547,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
         snapshot={snapshot} historyRef={historyRef} bottomPinnedRef={bottomPinnedRef}
         historyBlocks={historyBlocks} messageCards={messageCards} messageCardTick={messageCardTick}
         messageCardContext={messageCardContext} handleApplied={handleApplied} isNewMessage={isNewMessage}
+        board={proposalBoard} proposalTurnKeys={proposalTurnKeyMap}
         partial={partial} hasPartial={Boolean(chatLegacy.partial)} visibleCalls={visibleCalls}
         queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
         outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}

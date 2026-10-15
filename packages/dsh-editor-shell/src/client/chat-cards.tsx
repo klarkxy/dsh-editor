@@ -32,6 +32,7 @@ import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { Disclosure } from '../ui/disclosure.tsx'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
+import { useProposalRowBoard } from './chat-proposal-board.tsx'
 import { displayTreeFileName } from '../project-files.ts'
 import type { ShellContext } from './shared.ts'
 
@@ -480,13 +481,20 @@ type ChatRowViewProps = {
    locale/cardTick 变化会破坏 memo,保证 t() 文案与插件卡及时更新。 */
 export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
   const { row } = props
+  /* 提案板派生值走 context（ChatHistory 外层的 ProposalBoardScope）：
+     board 登记、回合 turnKey、首个待处理行的「全部应用」入口。 */
+  const rowBoard = useProposalRowBoard(row.id)
   if (row.proposal) return (
     <ProposalCard
       ctx={props.ctx}
       sessionId={props.sessionId}
       proposal={row.proposal}
       receiptId={row.id}
-      onApplied={props.onApplied} />
+      onApplied={props.onApplied}
+      board={rowBoard.board}
+      boardId={row.id}
+      boardTurnKey={rowBoard.turnKey}
+      applyAll={rowBoard.applyAll} />
   );
   const registered = row.toolName ? props.messageCards?.get(row.toolName) : undefined
   const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: props.messageCardContext })

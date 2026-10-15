@@ -128,6 +128,7 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@radix-ui/react-visually-hidden": "1.2.11",
     "cmdk": "^1.1.1",
+    "diff": "9.0.0",
     "docx": "^9.7.1",
     "echarts": "^6.1.0",
     "jszip": "^3.10.1",

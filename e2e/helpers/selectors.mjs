@@ -227,6 +227,11 @@ export const S = Object.freeze({
   proposalCardSettled: (mode) => `.proposal-card.${mode}.proposal-card-settled`,
   proposalCardSummary: '.proposal-card .dsh-disclosure__summary',
   proposalStatus: '.proposal-status',
+  proposalPill: '.chat-proposal-pill',
+  proposalHunks: '.proposal-hunks',
+  proposalHunkAdd: '.proposal-hunk-line.is-add',
+  proposalHunkDel: '.proposal-hunk-line.is-del',
+  proposalHunkGap: '.proposal-hunk-gap',
 
   // ---- plugins (settings page 插件分区) ---------------------------------------
   pluginsPage: '.dsh-settings-page',

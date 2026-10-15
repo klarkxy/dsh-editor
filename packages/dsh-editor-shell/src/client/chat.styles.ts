@@ -101,6 +101,42 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
 :is(.shell, .dsh-drawer) .proposal-settled__row .proposal-status { flex: none; }
 :is(.shell, .dsh-drawer) .proposal-card-settled .dsh-disclosure__content { min-width: 0; margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line); }
 
+/* 待处理提案粘性条：钉在滚动口顶部居中，浮于行内容之上。 */
+:is(.shell, .dsh-drawer) .chat-proposal-pill {
+  position: sticky; top: var(--dsh-ui-space-2); z-index: var(--dsh-ui-z-sticky);
+  align-self: center; display: flex; flex-wrap: wrap; justify-content: center;
+  gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-1);
+  background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong);
+  border-radius: var(--dsh-ui-radius-full); box-shadow: var(--dsh-ui-elevation-soft);
+}
+
+/* 编辑提案 hunk 差异：3 行上下文、加删按 token 着色、未改动段折叠，
+   超过 max-height 内部滚动（新建文件提案仍是全文块，不走这里）。 */
+:is(.shell, .dsh-drawer) .proposal-hunks {
+  max-height: min(48dvh, 28rem); overflow: auto; scrollbar-gutter: stable;
+  border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md);
+  background: var(--dsh-ui-surface); color: var(--dsh-ui-text);
+  font-family: var(--dsh-ui-font-mono); font-size: var(--dsh-ui-text-sm);
+  line-height: var(--dsh-ui-leading-normal);
+}
+:is(.shell, .dsh-drawer) .proposal-hunk-line {
+  display: flex; min-width: 0; padding-inline: var(--dsh-ui-space-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+:is(.shell, .dsh-drawer) .proposal-hunk-line.is-context { color: var(--dsh-ui-muted); }
+:is(.shell, .dsh-drawer) .proposal-hunk-line.is-del { background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); }
+:is(.shell, .dsh-drawer) .proposal-hunk-line.is-add { background: var(--dsh-ui-success-soft); color: var(--dsh-ui-success); }
+:is(.shell, .dsh-drawer) .proposal-hunk-sign { flex: none; width: 1ch; user-select: none; }
+:is(.shell, .dsh-drawer) .proposal-hunk-gap {
+  display: block; width: 100%; min-height: var(--dsh-ui-control-sm);
+  padding-inline: var(--dsh-ui-space-3); border: 0;
+  border-block: 0.5px solid var(--dsh-ui-line);
+  background: var(--dsh-ui-raised); color: var(--dsh-ui-muted);
+  font: inherit; font-size: var(--dsh-ui-text-xs); text-align: center; cursor: pointer;
+}
+:is(.shell, .dsh-drawer) .proposal-hunk-gap:hover { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); }
+:is(.shell, .dsh-drawer) .proposal-hunk-gap:focus-visible { outline: 2px solid var(--dsh-ui-accent); outline-offset: -2px; }
+
 /* 迁移提示横幅（chat-cards.tsx）。 */
 .radix-themes .migration-banner .migration-banner-actions { display: inline-flex; align-items: center; gap: var(--dsh-ui-space-2); margin-top: var(--dsh-ui-space-2); }
 
