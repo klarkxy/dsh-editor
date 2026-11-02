@@ -38,6 +38,14 @@
   disabled: true
 - id: ui-model-selection
   disabled: true
+# DSH 0.2.1 adds harness-development prompt context (checkout + GUI URL for an
+# agent that inspects the harness itself). It does not belong in a writing app.
+- id: harness-dev-context
+  disabled: true
+# DSH 0.2.1 adds official region-local "More" menus for plugin launchers. The
+# editor takes over the layout chrome those regions live in.
+- id: entry-customization
+  disabled: true
 - id: ui-permission
   disabled: true
 - id: ui-agent-preset
@@ -78,14 +86,10 @@
 - id: editor-novel-kernel
   disabled: true
 
-# Never revive automatic native search when the optional manager is disabled
-# or removed. Managed providers and tools require explicit user authorization.
-- id: web
-  config: {}
-- id: web-search-deepseek
-  disabled: true
-- id: web-fetch-http
-  disabled: true
+# Native search is the editor's web story: upstream `web` already resolves the
+# DeepSeek official search route and the anonymous HTTP fetch route with the
+# shared DEEPSEEK_API_KEY credential, and dsh-web-app also disables tool-web
+# host-wide. Keep that guard so only the app-owned presets mount it per scope.
 - id: tool-web
   disabled: true
 

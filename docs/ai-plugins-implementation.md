@@ -1,6 +1,6 @@
 # AI 插件与写作模型
 
-当前桌面发行组合只预装网页搜索。当前标题、需求记录、会话纪要和知乎改为通过插件市场按需安装。版本以 [外部插件清单](../apps/desktop/resources/external-plugins.json) 为准，源码与公开插件独立测试由 dsh-plugins 维护。安装后的制品离线随包交付，应用启动不下载插件。
+当前桌面发行组合不预装任何第三方公共插件：网页搜索由 DSH 原生搜索工具承担（官方 DeepSeek 后端），网页搜索管理器、当前标题、需求记录、会话纪要和知乎均通过插件市场按需安装。版本以 [外部插件清单](../apps/desktop/resources/external-plugins.json) 为准，源码与公开插件独立测试由 dsh-plugins 维护。安装后的制品离线随包交付，应用启动不下载插件。
 
 AI Services、Model Center、Memory、Self-improvement 与 Fusion 已移除。人物卡、私有写作记忆面板和作者文件保留；旧公共插件的持久化数据不删除。共享库 @klarkxy/dsh-plugin-kit 提供原生调用辅助与合同，不是需要启用的插件服务。
 
@@ -8,7 +8,7 @@ AI Services、Model Center、Memory、Self-improvement 与 Fusion 已移除。�
 
 新对话、正文补全、选区改写分别使用现有写作偏好的 chatModel、completionModel、rewriteModel，在「设置 → 模型」管理。新对话未指定时跟随原生默认模型；补全与改写未指定时先跟随当前会话的模型选择，再使用原生默认模型。公共插件在自己的原生配置页保存模型选择。没有新的全局用途路由、模型档位或政策存储。
 
-稿纸直接调用固定版本 DSH 0.2.0-rc.2 的 LLM。请求仍需经过工作区权限检查，候选不会自动改写正文；作者接受后才应用。取消、插件停用和同一会话同一用途的新请求会丢弃旧结果；超时、模型失败、工具调用和未完成输出不返回半段候选。补全最多 240 字符、改写最多 1200 字符，写作请求只尝试一次。用量保留在稿纸 usage.summary 与请求日志中，不估算未返回的 token。
+稿纸直接调用固定版本 DSH 0.2.1-rc.5 的 LLM。请求仍需经过工作区权限检查，候选不会自动改写正文；作者接受后才应用。取消、插件停用和同一会话同一用途的新请求会丢弃旧结果；超时、模型失败、工具调用和未完成输出不返回半段候选。补全最多 240 字符、改写最多 1200 字符，写作请求只尝试一次。用量保留在稿纸 usage.summary 与请求日志中，不估算未返回的 token。
 
 ## 验证边界
 
@@ -23,7 +23,7 @@ This implementation follows the accepted six-plugin design: current title, requi
 
 ## Fixed boundaries
 
-- DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.2.0-rc.2`.
+- DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.2.1-rc.5`.
 - The portable design contains six feature bundles. In Editor, current title, Mood, Recap, Memory and self-improvement remain independently switchable; the existing Model Center service is adopted as the essential built-in model configuration carrier. Loading their UI does not start inference. Mood, current title, Recap, and self-improvement have no extra settings pages: enable them under Plugins → Installed and Market and they use fixed automatic defaults (Mood auto, title locale auto, Recap cards/checkpoints/semantic/idle-return on). Memory and web search have configuration views in the Plugins page. Dream still defaults on with an independent Memory switch. The shared service is inert until a feature explicitly calls it.
 - The shared package owns model roles/purpose routing, bounded auxiliary calls, cancellation, usage receipts, and shared types. It does not own a parallel task engine, chat history, credential store, or generic artifact database.
 - Normal/weak/strong are configured aliases; session-following is a distinct target. Unconfigured weak/strong can inherit normal; an explicitly broken route fails visibly without silently changing providers. Manuscript completion and rewrite keep dedicated purposes in the same policy; their settings UI edits that policy, while generation calls the pinned official LLM directly.
@@ -43,13 +43,13 @@ The npm packages are published from this repository's main branch after compatib
 
 ## 使用
 
-桌面组合只预装网页搜索。知乎、当前标题、需求记录和会话纪要改为在「插件 → 发现插件」复制规格，由官方「添加插件」按需安装；人物卡与写作记忆面板随包提供，默认关闭，可在「设置 → 插件 → 记忆维护」开启。Self-improvement 与 Fusion 已退役，其历史数据不删除。模型配置为必需内置模块；归属与升级边界见[内置插件与设置](builtin-plugins.md)。
+桌面组合不预装第三方公共插件，网页搜索由写作预设内的 DSH 原生工具提供。知乎、当前标题、需求记录、会话纪要与网页搜索管理器改为在「插件 → 发现插件」复制规格，由官方「添加插件」按需安装；人物卡与写作记忆面板随包提供，默认关闭，可在「设置 → 插件 → 记忆维护」开启。Self-improvement 与 Fusion 已退役，其历史数据不删除。模型配置为必需内置模块；归属与升级边界见[内置插件与设置](builtin-plugins.md)。
 
 1. 在「设置 → 模型」为对话、补全和改写选择模型；供应商支持时可为每个选择指定思考强度。取消、超时与输出长度是固定边界，不在设置中调整。
 2. 知乎、当前标题、需求记录和会话纪要按需安装后默认可用；不需要的功能可在插件页关闭，停用不删除其数据。写作记忆面板开启后，经侧栏工具项或命令面板查看搭档的维护历史，写入需作者确认、可撤销。
 3. 规则类内容只来自作者的明确表述，不从正文推断。作者明确的维护要求由搭档记录到 AGENTS.md、人物卡或世界书，均以待确认提案呈现，作者确认后才落盘。
 
-DSH 0.2.0-rc.2 支持客户端模块图动态更新。插件设置订阅原生加载状态；正常启停无需重启，仅实际加载失败时提示保存工作后重试。安装、卸载或宿主明确返回需要重启的变更，仍按提示处理。关闭后的后台任务和注入立即取消。
+DSH 0.2.1-rc.5 支持客户端模块图动态更新。插件设置订阅原生加载状态；正常启停无需重启，仅实际加载失败时提示保存工作后重试。安装、卸载或宿主明确返回需要重启的变更，仍按提示处理。关闭后的后台任务和注入立即取消。
 
 公共插件的安装规格在「插件 → 发现插件」复制，粘贴到官方「添加插件」执行；源码与发布由 dsh-plugins 仓库维护，本仓库只维持发行组合与离线制品清单。
 
@@ -71,7 +71,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 ## 升级前验证（2026-09-22，DSH 0.1.5-rc.2）
 
-下面记录保留原验证范围；0.2.0-rc.2 的现行结果见 [升级审计](dsh-0.1.7-upgrade.md)。
+下面记录保留原验证范围；0.2.1-rc.5 的现行结果见 [升级审计](dsh-0.1.7-upgrade.md)。
 
 - 全仓类型检查与构建通过；全量自动化为 261 个测试文件、1857 项通过、3 项跳过；写作调用统一的增量验收见下方。
 - 独立审查完成，已报告问题均修复并复核。

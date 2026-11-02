@@ -10,7 +10,7 @@ catch {
   ;({ default: AxeBuilder } = createRequire(toolkit)('@axe-core/playwright'))
 }
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, closePluginsPage, openListingSpec, openPluginDiscovery, openPluginManager, openPluginsPage, openWebSearchSettings, showPluginList } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openListingSpec, openPluginDiscovery, openPluginManager, openPluginsPage, showPluginList } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -19,7 +19,7 @@ const output = resolve(root, 'e2e/out/settings-ui', stage)
 const home = resolve(root, '.dev', 'settings-ui-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -115,12 +115,11 @@ try {
       await dialog.waitFor({ state: 'hidden' })
       const plugins = await openPluginsPage(page)
       await assertDefaultPluginPage(page, plugins)
-      const surfaces = ['插件总览', '发现插件', '安装与卸载', '网页搜索']
+      const surfaces = ['插件总览', '发现插件', '安装与卸载']
       for (const [i, tab] of surfaces.entries()) {
         await showPluginList(plugins)
         if (tab === '发现插件') await openPluginDiscovery(plugins)
         if (tab === '安装与卸载') await openPluginManager(plugins)
-        if (tab === '网页搜索') await openWebSearchSettings(plugins)
         await page.waitForTimeout(300)
         const content = plugins.locator(S.pluginsPageContent)
         const metrics = await content.evaluate(el => {
@@ -285,18 +284,6 @@ try {
     const scan = await new AxeBuilder({ page }).setLegacyMode().include(S.pluginsPage).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()
     report.interactions.push({ name, accessibility: scan.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})) })
   }
-  await openWebSearchSettings(plugins)
-  for (const details of await plugins.locator(S.webSearchSettingsDetails).all()) {
-    if (!await details.evaluate(el => el.open)) await details.locator(S.summaryScope).click()
-  }
-  const feeLinks = plugins.locator(S.webSearchFeeLink)
-  assert(await feeLinks.count() > 0)
-  assert(await feeLinks.evaluateAll(nodes => nodes.every(node => node.href.startsWith('https://') && node.rel.includes('noopener'))))
-  const signupLinks=plugins.locator(S.webSearchSignupLink)
-  const expectedUrls=await signupLinks.evaluateAll(nodes=>nodes.map(n=>n.href))
-  for(const link of await signupLinks.all())await link.click()
-  assert.ok(expectedUrls.length > 0, 'web search must expose provider signup links')
-  assert.deepEqual(await app.evaluate(()=>globalThis.settingsExternalUrls),expectedUrls)
   const discovery = await openPluginDiscovery(plugins)
   const query = discovery.getByRole('textbox')
   await app.evaluate(({ ipcMain }) => {

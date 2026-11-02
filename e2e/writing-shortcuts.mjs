@@ -12,7 +12,7 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'writing-shortcuts-' + runId)
 const output = resolve(root, 'e2e/out/writing-shortcuts', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5')
 const report = { ok: false, checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })
 const delay = ms => new Promise(done => setTimeout(done, ms))

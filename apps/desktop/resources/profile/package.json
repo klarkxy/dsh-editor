@@ -9,7 +9,6 @@
         "dsh-manuscript",
         "dsh-editor-workbench",
         "dsh-editor-novel-kernel",
-        "@klarkxy/dsh-zhihu",
         "dsh-editor-shell",
         "dsh-editor-plugins"
       ],

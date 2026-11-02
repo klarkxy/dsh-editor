@@ -16,7 +16,6 @@ const STABLE_PACKAGE_ORDER = [
   'dsh-editor-workbench',
   'dsh-editor-novel-kernel',
   'dsh-editor-writing-presets',
-  '@klarkxy/dsh-zhihu',
   'dsh-editor-shell',
   'dsh-editor-plugins',
 ]

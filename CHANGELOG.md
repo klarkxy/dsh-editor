@@ -4,6 +4,16 @@
 
 ## 未发布
 
+### DSH 0.2.1-rc.5 升级与第三方预装清零
+
+- 捆绑 DSH 由 0.2.0-rc.2 升至 0.2.1-rc.5：升级脚本改写 51 个文件 143 处版本钉住；overrides 覆盖全部 `@deepseek-ai/dsh-*` 钉住并新增 `zod@4.4.3` 统一上游精确版本；锁文件重建后 0.2.0 / 0.1.7 上游快照为零。三个版本钉住的 pnpm 补丁中插件管理器与 web-frontend 的意图沿用至 0.2.1-rc.5（最小字号 12px 与高级组件折叠区），primitives 的 Tag 字号补丁因官方包改由 web-frontend 内联发布而不再单独存在。
+- 移除全部第三方预装：`@klarkxy/dsh-web-search-manager` 不再随包提供并移出外部插件钉住（钉住集合为空），模板中残留的 `@klarkxy/dsh-zhihu` 一并清理；两者与当前标题、需求记录、会话纪要一样改为 npm 按需安装。随包保留 `@deepseek-ai/dsh-experimental-voice-input-bundle`、卡片与记忆面板及全部 Editor 包。
+- 网页搜索改为 DSH 原生能力：恢复上游 `web` / `web-search-deepseek` / `web-fetch-http` 行，官方 DeepSeek 搜索后端沿用 `DEEPSEEK_API_KEY` 凭据；五个写作预设各挂载一条 `@deepseek-ai/dsh-tool-web` 行（`fetch` 开启、搜索超时 60 秒）。原网页搜索预设改写器及其调用点删除。
+- 上游新行处置：`harness-dev-context` 与 `entry-customization` 在发行补丁中关闭（开发上下文与官方「更多」菜单不属于写作发行版）；`ui-schedule`、`ui-secret-mask`、`schedule`、`ui-deepseek-model-label-1017` 保持上游默认（schedule 系列沿用既有 `ui-schedule` 关闭约定）。官方扫描变量表随制品更新（421 个）。
+- 新增第四份版本钉住补丁 `@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.1-rc.5`：上游在查看语音准备页时即请求麦克风做电平预览，补丁改为仅点击「测试麦克风」才采集，再点、换设备、离开页面即释放；录音入口行为不变。
+- 修复五个写作预设 persona prefix 引用未注册变量 `{{cwd}}`（0.2.1 的注册集为 provider / model / editor_global_preferences / editor_project_rules）导致每轮对话报错的回归；配套 `desktop-profile.spec.ts` 断言防回归。
+- 修复 `pnpm test:e2e:portable` 的退出码 9：`portableEnv` 未剥离 VS Code 终端注入的 `ELECTRON_RUN_AS_NODE=1`，打包后的 Electron 以纯 Node 运行并拒绝 `--remote-debugging-port`。完整打包（pack:desktop）、portable e2e 与真机模型走查（本机 OpenAI 兼容网关）均在 0.2.1-rc.5 上验证通过。
+
 ### 界面重写（「原稿」设计系统）
 
 - 整个界面迁到仓库自有的「原稿」设计系统：青灰外框、纸白稿纸、黛蓝主色（浅色 `#2E4F7A` / 深色 `#8FB0DE`），标题与作品名用楷体；自选主题色移除，旧的保存值不再生效但数据保留。菜单与对话框改为实色无模糊，模态遮罩不模糊。

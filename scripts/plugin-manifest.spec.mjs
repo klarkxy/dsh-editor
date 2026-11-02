@@ -50,7 +50,7 @@ describe('desktop dev prepare', () => {
     expect(runtime).toContain("await rename(resolve(profileOutput, 'bundled-packages', 'node_modules'), resolve(profileOutput, 'bundled-packages', 'vendor-dependencies'))")
     const afterPack = readFileSync(resolve(root, 'scripts/after-pack-desktop.cjs'), 'utf8')
     expect(afterPack).toContain("profile-template', 'bundled-packages', 'vendor-dependencies'")
-    const source = resolve(root, 'node_modules/@klarkxy/dsh-web-search-manager')
+    const source = resolve(root, 'node_modules/@deepseek-ai/dsh')
     const filter = packageCopyFilter(source, { omitMaps: true })
     expect(filter(source)).toBe(true)
     expect(filter(resolve(source, 'lib/client.js'))).toBe(true)
@@ -82,9 +82,8 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
-      '@klarkxy/dsh-web-search-manager',
     ])
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', '@klarkxy/dsh-web-search-manager'])
+    expect(publicPackages(manifests)).toEqual(['dsh-manuscript'])
     expect(corePackageNames(manifests)).toEqual([
       'dsh-manuscript',
       'dsh-editor-workbench',
@@ -98,16 +97,14 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
-      '@klarkxy/dsh-web-search-manager',
     ])
     expect(catalogFromManifests(manifests)['zhihu-tools']).toBeUndefined()
     expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-seats', 'dsh-editor-workspace-kit'])
     // The resolver preserves the established desktop/library order, then appends new packages.
     expect(desktopCopiedPackageNames(manifests)).toEqual([
-      ...desktopPackageNames(manifests).filter((name) => !name.includes('dsh-web-search-')),
+      ...desktopPackageNames(manifests),
       'dsh-editor-seats',
       'dsh-editor-workspace-kit',
-      '@klarkxy/dsh-web-search-manager',
     ])
   })
 
@@ -134,16 +131,16 @@ describe('plugin manifests and composition resolver', () => {
     const labels = { desktop: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
     const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel']
     const core = ['dsh-manuscript', 'dsh-editor-workbench']
-    const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, '@klarkxy/dsh-web-search-manager']
+    const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]
     const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'overview-panel', 'writing-presets', 'web-search'],
+      features: ['assistant', 'completion', 'overview-panel', 'writing-presets'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
-      runtimeDependencies: ['@deepseek-ai/dsh-web-search-exa', '@klarkxy/dsh-plugin-kit', 'react'],
+      runtimeDependencies: ['@klarkxy/dsh-plugin-kit', 'react'],
       disabledEntries: ['editor-cards', 'editor-memory-panel'],
       extraInserts: [],
-      shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', 'web-search': 'webSearchManager' },
+      shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist' },
       presets: [
         { id: 'dsh-editor-article', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-article' },
         { id: 'dsh-editor-novel', packageName: 'dsh-editor-novel-kernel', path: 'presets/dsh-editor-novel' },
@@ -206,7 +203,7 @@ describe('plugin manifests and composition resolver', () => {
       expect(composition.bundles).not.toContain(name)
       expect(manifests.some(item => item.name === name)).toBe(false)
     }
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', '@klarkxy/dsh-web-search-manager'])
+    expect(publicPackages(manifests)).toEqual(['dsh-manuscript'])
     expect(composition.features).not.toContain('zhihu')
     expect(composition.features).not.toContain('zhihu-tools')
     expect(composition.extraInserts).toEqual([])

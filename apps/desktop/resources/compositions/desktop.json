@@ -5,8 +5,7 @@
     "assistant",
     "completion",
     "overview-panel",
-    "writing-presets",
-    "web-search"
+    "writing-presets"
   ],
   "preinstalled": [
     "dsh-editor-cards",

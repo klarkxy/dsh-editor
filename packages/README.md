@@ -28,7 +28,7 @@
 
 | 官方包或能力 | Editor 中的用途 |
 | --- | --- |
-| DSH 0.2.0-rc.2 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
+| DSH 0.2.1-rc.5 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
 | `@deepseek-ai/dsh-client-ui-shortcuts` | 「设置 → 快捷键」搜索、录制和重置；桌面修改持久化 |
 | `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` | 文件栏图片、PDF、Office 文档和表格预览 |
 | `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源，默认关闭 |
@@ -38,7 +38,7 @@ Editor 保留稿纸布局，以官方公有布局合同和界面槽位承载这�
 
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
-网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在「插件 → 发现插件」复制规格，到官方「添加插件」粘贴，例如 `@klarkxy/dsh-zhihu`。私有适配只提供发现搜索与写作模式开关；安装、清单与启停由官方管理器负责。内置模型设置使用 DSH 原生供应商与现有写作偏好，公共插件各自保存模型选择。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已从组合和依赖中移除；私有写作记忆面板及作者记录保留。共享库 `@klarkxy/dsh-plugin-kit@0.1.0` 提供合同和原生调用辅助，没有插件开关。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。`dsh-editor-panel-base` 是客户端构建时内联的 devDependency，运行时 manifest 的 libraries 只包括 seats 和 workspace-kit。
+写作会话默认携带 DSH 原生网页搜索工具，通过官方 DeepSeek 搜索后端取回资料。知乎、当前标题、需求记录、会话纪要、网络搜索管理器与其他公共插件不预装，可在「插件 → 发现插件」复制规格，到官方「添加插件」粘贴，例如 `@klarkxy/dsh-zhihu`。私有适配只提供发现搜索与写作模式开关；安装、清单与启停由官方管理器负责。内置模型设置使用 DSH 原生供应商与现有写作偏好，公共插件各自保存模型选择。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已从组合和依赖中移除；私有写作记忆面板及作者记录保留。共享库 `@klarkxy/dsh-plugin-kit@0.1.0` 提供合同和原生调用辅助，没有插件开关。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。`dsh-editor-panel-base` 是客户端构建时内联的 devDependency，运行时 manifest 的 libraries 只包括 seats 和 workspace-kit。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)
 

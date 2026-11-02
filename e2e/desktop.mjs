@@ -6,12 +6,12 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWritingPresets } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
-resolveDshInstallation('0.2.0-rc.2')
+resolveDshInstallation('0.2.1-rc.5')
 const e2eHomeRoot = resolve(root, '.dev', 'desktop-e2e-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const electronDist = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
@@ -189,7 +189,7 @@ const baseEnv = {
   ...process.env,
   DSH_TELEMETRY_DISABLED: '1',
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime-0.2.0-rc.2', 'lib', 'bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime-0.2.1-rc.5', 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
   DSH_EDITOR_PROJECTS_ROOT: resolve(e2eHomeRoot, 'projects'),
 }
@@ -232,7 +232,10 @@ async function launchPhase(name, extraEnv, inspect) {
     window.on('console', (message) => {
       const text = message.text()
       const acceptedDevelopmentWarning = message.type() === 'warning'
-        && text.includes('Electron Security Warning (Insecure Content-Security-Policy)')
+        && (text.includes('Electron Security Warning (Insecure Content-Security-Policy)')
+          // DSH 0.2.1 adds a soft handshake diagnostic that races cold Electron
+          // startup in keyless dev homes; the hard deadline still governs.
+          || text.includes('[connection] generation is still not ready after'))
       if (!acceptedDevelopmentWarning && (message.type() === 'error' || message.type() === 'warning')) browserErrors.push(`${message.type()}: ${text}`)
     })
     window.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`))
@@ -363,7 +366,6 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
     const bundle = bundles.find(item => item.name === name)
     if (!bundle?.enabled || bundle.readOnlyReason !== 'management-required') throw new Error(`native manager lost the required core guard: ${name}`)
   }
-  await openWebSearchSettings(pluginsPage)
   const presets = await openWritingPresets(pluginsPage)
   const presetSwitch = presets.locator(S.pluginsPresetToggleNovel)
   await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })

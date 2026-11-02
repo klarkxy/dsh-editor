@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWritingPresets } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -13,7 +13,7 @@ const output = resolve(root, 'e2e/out/settings-ui', stage)
 const home = resolve(root, '.dev', 'settings-ui-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -50,7 +50,6 @@ try {
     })))
     assert.ok(switches.length > 0, 'writing mode controls must be visible after expanding their group')
     assert.ok(switches.every(control => control.width === 36 && control.height === 20), JSON.stringify(switches))
-    await openWebSearchSettings(plugins)
     const styles = await page.locator(S.dshPluginStyles).evaluateAll(elements => elements.map(element => ({
       owner: element.getAttribute('data-plugin'), length: element.textContent.length,
     })))
@@ -65,13 +64,13 @@ try {
 
   // Exercise the pinned upstream owner/cleanup functions, including a real
   // unrelated style. Correctly owned application styles must survive both steps.
-  const runtimeModules = resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/node_modules')
+  const runtimeModules = resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/node_modules')
   const modulesSource = await readFile(resolve(runtimeModules, '@deepseek-ai/dsh-client-modules/lib/client.js'), 'utf8')
-  const cleanup = modulesSource.match(/function removeOwnedStyles\(id\) \{[\s\S]*?\n\t\t\}/)?.[0]
-  const claim = modulesSource.match(/const claimStyles = \(id\) => \{[\s\S]*?\n\t\t\};/)?.[0]
+  const cleanup = modulesSource.match(/function removeOwnedStyles\(id\) \{[\s\S]*?\n\t+\}/)?.[0]
+  const claim = modulesSource.match(/const claimStyles = \(id(?:, before)?\) => \{[\s\S]*?\n\t+\};/)?.[0]
   assert.ok(cleanup && claim, 'pinned DSH style ownership implementation must be available')
-  const ids = ['dsh-editor-plugins', '@klarkxy/dsh-web-search-manager']
-  const selectors = [S.stylePlugins, S.styleWebSearch]
+  const ids = ['dsh-editor-plugins']
+  const selectors = [S.stylePlugins]
   const ownership = await page.evaluate(({ claim, cleanup, selectors }) => {
     const before = selectors.map(selector => {
       const matches = document.querySelectorAll(selector)
@@ -80,8 +79,14 @@ try {
     })
     const sentinel = document.createElement('style')
     sentinel.textContent = '.test-unrelated-style { display: block; }'
+    // DSH 0.2.1 scopes the claim by the untagged set captured before the
+    // factory ran; only newly added tags are claimed for the late plugin.
+    const untaggedBefore = new Set(document.querySelectorAll('style:not([data-plugin])'))
     document.head.append(sentinel)
-    new Function(claim + ';claimStyles("unrelated-late-plugin")')()
+    // The extracted closure also references the module-local untaggedStyles
+    // helper; the page supplies an equivalent one.
+    const prelude = 'const untaggedStyles = () => new Set(document.querySelectorAll("style:not([data-plugin])"));'
+    new Function('before', prelude + claim + ';claimStyles("unrelated-late-plugin", before)')(untaggedBefore)
     const claimed = sentinel.getAttribute('data-plugin')
     new Function(cleanup + ';removeOwnedStyles("unrelated-late-plugin")')()
     return {
@@ -93,7 +98,7 @@ try {
   assert.deepEqual(ownership.owners, ids)
   assert.equal(ownership.claimed, 'unrelated-late-plugin')
   assert.equal(ownership.unrelatedRemoved, true)
-  assert.deepEqual(ownership.retained, [true, true])
+  assert.deepEqual(ownership.retained, [true])
   report.ownership = ownership
   await sample('after-owner-cleanup')
   await sample('reopen')

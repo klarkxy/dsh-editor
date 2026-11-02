@@ -76,7 +76,7 @@
 - `settings-1440-light-writing` / `settings-1440-dark-writing` / `settings-1440-light-installed` / `settings-390-writing`
 - `focus-1440-light`
 - `drawer-1024-aux` / `drawer-760-aux` / `drawer-390-aux`
-- `desktop-light.png` / `desktop-dark.png`：真实构建的 Electron 应用（`apps/desktop/dist` + 运行时 `0.2.0-rc.2`，默认窗口 1440×900，隔离 `DSH_HOME`），主题为命令面板「切换到深色」实切验证
+- `desktop-light.png` / `desktop-dark.png`：真实构建的 Electron 应用（`apps/desktop/dist` + 运行时 `0.2.1-rc.5`，默认窗口 1440×900，隔离 `DSH_HOME`），主题为命令面板「切换到深色」实切验证
 
 ## 已知失败
 

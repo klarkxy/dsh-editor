@@ -12,7 +12,7 @@ afterEach(() => {
   temp = undefined
 })
 
-function fixture(version = '0.2.0-rc.2') {
+function fixture(version = '0.2.1-rc.5') {
   temp = mkdtempSync(join(tmpdir(), 'dsh-cli-physical-'))
   const physical = join(temp, 'store', 'node_modules', '@deepseek-ai', 'dsh')
   mkdirSync(join(physical, 'lib'), { recursive: true })
@@ -41,7 +41,7 @@ describe('DSH installation physical module root', () => {
 
   it('keeps the pinned-version rejection before returning a physical root', () => {
     fixture('0.1.0')
-    expect(() => resolveDshInstallation()).toThrow('DSH version mismatch: expected 0.2.0-rc.2, found 0.1.0')
+    expect(() => resolveDshInstallation()).toThrow('DSH version mismatch: expected 0.2.1-rc.5, found 0.1.0')
   })
 
   it('rejects a missing explicitly configured CLI without falling back to PATH', () => {

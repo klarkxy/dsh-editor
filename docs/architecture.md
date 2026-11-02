@@ -10,7 +10,7 @@ DSH 管理 Agent、会话、模型、审批、文件权限与对话历史。Edit
 
 ## 官方插件管理器与 native profile
 
-已安装清单、官方插件页与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.0-rc.2` 官方管理器为唯一权威。Editor 用私有座位 `dsh-editor.native-plugin-manager` 托管其主页面，不占用全局 `main`，以免激活原生对话输入条。私有适配保留发现搜索、写作模式、有限核心守卫，以及自身生成的工具声明同步。
+已安装清单、官方插件页与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.1-rc.5` 官方管理器为唯一权威。Editor 用私有座位 `dsh-editor.native-plugin-manager` 托管其主页面，不占用全局 `main`，以免激活原生对话输入条。私有适配保留发现搜索、写作模式、有限核心守卫，以及自身生成的工具声明同步。
 
 按需插件的工具声明由当前 bundle 选择及其所需组件的有效开关派生。Editor 在原生禁用、卸载前更新这份声明，在安装、启用成功后同步并通过公开启动接口重新协调，避免工具留在已卸下的服务上。声明写入与写作模式复用同一应用内队列；原生锁、包操作、进度与取消仍归 DSH。失败恢复依据实际保留的依赖与选择，不把部分卸载声称为完整回滚，也不改写作者补丁、预设或插件数据。外部 CLI 不参与应用内队列；下次启动会按原生状态重建声明。
 
@@ -36,4 +36,4 @@ commit、push、tag、release 与签名须获授权。桌面发布先建 draft R
 
 ## 公共插件源码归属
 
-公共插件由 dsh-plugins 维护。Editor 仅预装网页搜索，使用精确版本的外部 npm 制品参与离线组合；当前标题、需求记录、会话纪要与知乎按需经官方「添加插件」安装。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已退役；写作模型选择使用原生 DSH 接口和现有写作偏好。仓库归属与随包交付独立；详见[迁移与发布交接](public-plugin-migration.md)。
+公共插件由 dsh-plugins 维护。Editor 不预装第三方公共插件；网页搜索由 DSH 原生工具承担，网页搜索管理器、当前标题、需求记录、会话纪要与知乎按需经官方「添加插件」安装。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已退役；写作模型选择使用原生 DSH 接口和现有写作偏好。仓库归属与随包交付独立；详见[迁移与发布交接](public-plugin-migration.md)。

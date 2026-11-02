@@ -16,8 +16,8 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'writing-models-' + runId)
 const output = resolve(root, 'e2e/out/writing-models', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2')
-const featureIds = ['web-search-manager']
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5')
+const featureIds = []
 const optionalIds = ['current-title', 'mood', 'recap', 'zhihu', 'zhihu-tools']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })

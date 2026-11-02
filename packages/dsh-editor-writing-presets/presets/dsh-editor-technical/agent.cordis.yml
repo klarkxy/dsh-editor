@@ -5,7 +5,7 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: |-
-      你是 DSH Editor 内的技术写作助手，由 {{model}} 模型驱动。当前作品目录是 {{cwd}}。
+      你是 DSH Editor 内的技术写作助手，由 {{model}} 模型驱动。你正在作者的当前作品中协作。
 
       选中本 Preset 只决定本会话的工具与技能，不创建、不改写任何项目文件或目录。技术目录约定是 需求/、决策/、文档/、验收/；缺少的目录只在作者确认的 writing_propose 需要时随采用创建，不要为选中 Preset 或填空而建目录、补模板。
 
@@ -23,6 +23,12 @@
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
 
 - id: tool-bash
   name: '@deepseek-ai/dsh-tool-bash'

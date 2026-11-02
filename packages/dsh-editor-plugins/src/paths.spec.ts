@@ -56,7 +56,7 @@ describe('plugin paths', () => {
     const hoisted = pluginModule(join(tmpdir(), 'repo'), ['node_modules', 'dsh-editor-plugins', 'lib', 'index.js'])
     expect(profileDirFromPluginModule(hoisted)).toBeUndefined()
     const sdk = pluginModule(
-      join(tmpdir(), 'desktop-dsh-runtime-0.2.0-rc.2'),
+      join(tmpdir(), 'desktop-dsh-runtime-0.2.1-rc.5'),
       ['node_modules', '.pnpm', 'dsh-editor-plugins@0.1.0', 'node_modules', 'dsh-editor-plugins', 'lib', 'index.js'],
     )
     expect(profileDirFromPluginModule(sdk)).toBeUndefined()

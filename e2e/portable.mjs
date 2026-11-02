@@ -9,7 +9,7 @@ import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { localArtifactName } from '../scripts/release-artifacts.mjs'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -172,6 +172,10 @@ try {
     DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
   }
   delete portableEnv.DSH_EDITOR_CUSTOM_API_KEY
+  // VS Code integrated terminals inject ELECTRON_RUN_AS_NODE=1; left in place
+  // the packaged Electron runs as plain Node, rejects the Chromium debug flag
+  // and exits 9 before any window exists (see e2e/desktop.mjs).
+  delete portableEnv.ELECTRON_RUN_AS_NODE
   child = spawn(executable, [`--remote-debugging-port=${debuggingPort}`], {
     env: portableEnv,
     stdio: 'ignore',
@@ -239,7 +243,6 @@ try {
   } else {
   const pluginsPage = await openPluginsPage(window)
   await assertDefaultPluginPage(window, pluginsPage)
-  await openWebSearchSettings(pluginsPage)
   await closePluginsPage(window)
   await window.getByRole('button',{name:'新建作品'}).first().click()
   const project = window.getByRole('dialog',{name:'新建作品'})
@@ -261,7 +264,7 @@ try {
   await window.locator(S.paperSaveState,{hasText:'已保存'}).waitFor()
   if(!(await readFile(resolve(portableWorkspace,'正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
   await openAndCloseOverviewPanel(window)
-  state.operations=['Zhihu desktop launcher absent','native plugin manager lists the default web-search bundle and opens its configuration','create ordinary 正文 from tree, then document, and save to disk','open and close 文档概览 from command palette']
+  state.operations=['Zhihu desktop launcher absent','native plugin manager lists no preinstalled public bundles','create ordinary 正文 from tree, then document, and save to disk','open and close 文档概览 from command palette']
   }
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin

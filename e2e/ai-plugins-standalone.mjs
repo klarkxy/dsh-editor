@@ -6,11 +6,9 @@ import { mkdir, readFile, writeFile, mkdtemp, copyFile } from 'node:fs/promises'
 import { resolve, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright'
-import { externalPluginDirectories } from '../scripts/external-plugins.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const packageDirectories = new Map(externalPluginDirectories(root).map(pkg => [pkg.name, pkg.dir]))
 const stamp = String(Date.now())
 const recordTitle = '独立安装记忆 ' + stamp
 const home = process.env.AI_STANDALONE_HOME ? resolve(process.env.AI_STANDALONE_HOME) : resolve(root, '.dev', 'ai-standalone-' + stamp)
@@ -18,9 +16,11 @@ assert.ok(relative(resolve(root, '.dev'), home) && !relative(resolve(root, '.dev
 const output = resolve(root, 'e2e/out/ai-standalone', stamp)
 const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
-const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js')
+const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
 const ids = ['web-search-manager']
+const fixtureVersions = { 'web-search-manager': '0.1.11' }
+const fixtureManifests = new Map()
 const report = { ok: false, home, output, checks: [], errors: [], calls: 0, observerCalls: 0, methodCalls: 0 }
 const meaning = '我说的蓝图指事件结构，不是正文。'
 const activity = '我最近正在修改第三章。'
@@ -118,13 +118,18 @@ try {
   if (!process.env.AI_STANDALONE_HOME) {
     for (const id of ids) {
       console.log('install:' + id)
-      const directory = packageDirectories.get('@klarkxy/dsh-' + id)
-      assert.ok(directory, 'standalone acceptance requires an approved external package: ' + id)
-      const packageManifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'))
-      const archiveName = packageManifest.name.replace(/^@/, '').replaceAll('/', '-') + '-' + packageManifest.version + '.tgz'
-      const archive = resolve(root, '.pack', archiveName)
+      // On-demand public plugin: acceptance installs its published npm artifact,
+      // not a distribution pin, mirroring the plugin-matrix optional fixtures.
+      const spec = '@klarkxy/dsh-' + id + '@' + fixtureVersions[id]
+      const npm = process.env.npm_execpath
+      assert.ok(npm, 'run the standalone acceptance through pnpm')
+      const packed = spawnSync(process.execPath, [npm, 'exec', 'npm', 'pack', spec, '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120000 })
+      assert.equal(packed.status, 0, 'optional fixture download failed: ' + packed.stderr)
+      const archiveName = JSON.parse(packed.stdout)[0].filename
       const staged = resolve(staging, archiveName)
-      await copyFile(archive, staged)
+      const contents = spawnSync('tar', ['--force-local', '-xOf', staged.replaceAll('\\', '/'), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
+      assert.equal(contents.status, 0, 'cannot read optional fixture manifest')
+      fixtureManifests.set('@klarkxy/dsh-' + id, JSON.parse(contents.stdout))
       command(['plugin', '--profile', 'web', 'add', 'file:' + staged.replaceAll('\\', '/')])
       {
         // Resolve this acceptance candidate from its exact archive.
@@ -151,7 +156,7 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.DSH_BROWSER_EXECUTABLE ? { executablePath: process.env.DSH_BROWSER_EXECUTABLE } : {}) })
   await boot('00-default-on')
   let entries = await page.evaluate(() => globalThis.__DSH_BOOT__?.entries?.map(row => row.id) ?? [])
-  const clientIds=[];for(const id of ids){const pkg=JSON.parse(await readFile(resolve(packageDirectories.get('@klarkxy/dsh-'+id),'package.json'),'utf8'));if(pkg.dsh?.client)clientIds.push(id);}
+  const clientIds=[];for(const id of ids){const pkg=fixtureManifests.get('@klarkxy/dsh-'+id);if(pkg?.dsh?.client)clientIds.push(id);}
   const verifyLoaded=async()=>{
     for(const id of clientIds)assert.ok(entries.includes('@klarkxy/dsh-'+id),id+' client');
     for(const [channel,method] of [['/web-search-manager','status']]){

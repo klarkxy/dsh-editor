@@ -36,7 +36,7 @@ for (const key of ['node', 'dsh', 'profile']) {
   }
 }
 const dsh = await json(resolve(resources, 'dsh', 'package.json'))
-if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.2.0-rc.2') throw new Error('packaged DSH identity mismatch')
+if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.2.1-rc.5') throw new Error('packaged DSH identity mismatch')
 const composition = await json(resolve(resources, 'profile-template', 'composition.json'))
 const { nativeDependencies, ...packagedRecipe } = composition
 const expectedComposition = await desktopComposition(composition.id)

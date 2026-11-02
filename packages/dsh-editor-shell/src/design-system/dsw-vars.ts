@@ -277,7 +277,6 @@ export const DSW_VARS = [
   '--dsw-font-s-strong-14-font-style',
   '--dsw-font-s-strong-14-font-weight',
   '--dsw-font-s-strong-14-line-height',
-  '--dsw-font-sm-13',
   '--dsw-font-xl-24',
   '--dsw-font-xl-24-font-family',
   '--dsw-font-xl-24-font-size',

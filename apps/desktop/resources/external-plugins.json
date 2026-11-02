@@ -1,6 +1,4 @@
 {
   "schema": 1,
-  "packages": {
-    "@klarkxy/dsh-web-search-manager": "0.1.11"
-  }
+  "packages": {}
 }

@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-app-boot": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.5"
   },
   "dependencies": {
     "dsh-manuscript": "workspace:*",
@@ -81,6 +81,6 @@
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
-    "@deepseek-ai/dsh-app-boot": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.5"
   }
 }

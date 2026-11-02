@@ -25,12 +25,12 @@ function pdfFixture() {
 const packaged = process.argv.includes('--packaged')
 const executable = packaged ? resolve(root,'.pack/desktop/win-unpacked/DSH Editor.exe') : resolve(root,'apps/desktop/node_modules/electron/dist/electron.exe')
 const launchArgs = packaged ? [] : [resolve(root,'apps/desktop/dist/main.js')]
-const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.2.0-rc.2')
+const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.2.1-rc.5')
 const output = resolve(root, packaged ? 'e2e/out/official-plugins-packaged' : 'e2e/out/official-plugins')
 const home = resolve(root, '.dev/official-plugins-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/profile-template') : resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -56,7 +56,7 @@ async function speechCatalog(page) {
   }
   return result
 }
-async function assertVoiceIdle(page, stage) {
+async function assertVoiceIdle(page, stage, { expectedMicRequests = 0 } = {}) {
   let provider
   for (let attempt = 0; attempt < 150; attempt++) {
     provider = (await speechCatalog(page)).providers.find(provider => provider.id === 'sensevoice-local')
@@ -66,8 +66,8 @@ async function assertVoiceIdle(page, stage) {
   }
   assert.equal(provider.preparation.phase, 'unprepared', `${stage}: no implicit recognition preparation`)
   const microphoneRequests = await page.evaluate(() => window.__e2eMicrophoneRequests)
-  assert.equal(microphoneRequests, 0, `${stage}: no microphone request`)
-  assert.equal(report.microphoneRequests, 0, `${stage}: no microphone request across client reloads`)
+  assert.equal(microphoneRequests, expectedMicRequests, `${stage}: no implicit microphone request`)
+  assert.equal(report.microphoneRequests, expectedMicRequests, `${stage}: no implicit microphone request across client reloads`)
   const modelFiles = await readdir(resolve(home, 'speech-to-text/sensevoice/models'), { recursive: true })
     .catch(error => { if (error.code === 'ENOENT') return []; throw error })
   assert.deepEqual(modelFiles, [], `${stage}: no downloaded model files`)
@@ -131,7 +131,10 @@ try {
     if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = async () => {
       window.__e2eMicrophoneRequests++
       await window.__e2eObserveMicrophone()
-      throw new Error('Unexpected microphone request during voice idle acceptance')
+      // Implicit mic acquisition is forbidden, but the explicit preview button
+      // must get a working stream: grant a silent one so upstream code paths
+      // (analyser, release) still run.
+      return new MediaStream()
     }
   })
   await page.reload()
@@ -202,15 +205,29 @@ try {
   await page.screenshot({path:resolve(output,'voice-preparation.png')})
   await assertVoiceIdle(page, 'preparation page visit')
   check('official voice preparation page does not download or record on visit')
+  // The patched picker starts the level preview only on an explicit click and
+  // releases it on a second click or when leaving the page.
+  const previewButton = voiceConfiguration.getByRole('button', {name:'测试麦克风',exact:true})
+  await previewButton.waitFor()
+  await previewButton.click()
+  await page.waitForTimeout(1500)
+  assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), 1, 'preview button requests the microphone exactly once')
+  await previewButton.click()
+  await page.waitForTimeout(1000)
+  assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), 1, 'stopping the preview does not request the microphone')
+  report.voice.explicitPreview = 'one request on click, stopped on second click'
+  const micBeforeToggle = await page.evaluate(() => window.__e2eMicrophoneRequests)
   await voiceSwitch.click()
-  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'false', S.switch('启用 语音输入'))
+  // Bundle teardown can take tens of seconds on a slow machine; the probe
+  // showed ~25s for the disable toggle to settle.
+  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'false', S.switch('启用 语音输入'), { timeout: 60000 })
   report.voice.disabled = await waitForVoiceState(page, false)
-  assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), 0, 'disabling voice does not request microphone')
+  assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), micBeforeToggle, 'disabling voice does not request microphone')
   await voiceSwitch.click()
-  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('启用 语音输入'))
+  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('启用 语音输入'), { timeout: 60000 })
   report.voice.reenabled = await waitForVoiceState(page, true)
   await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
-  await assertVoiceIdle(page, 'bundle off/on')
+  await assertVoiceIdle(page, 'bundle off/on', { expectedMicRequests: 1 })
   check('native voice bundle off/on restores active components without preparing or recording')
   await closePluginsPage(page)
   if (process.argv.includes('--staged')) { report.ok=true; throw Object.assign(new Error('staged checks complete'), { stagedComplete: true }) }

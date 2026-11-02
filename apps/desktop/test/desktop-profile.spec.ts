@@ -206,13 +206,14 @@ describe('profile deployment', () => {
     expect(legacy).toContain('dsh-tool-fs')
     expect(legacy).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
     expect(legacy).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
-    expect(legacy).not.toMatch(/dsh-tool-(web|todo|goal|subagent|workflow|ralph|skill)/)
+    expect(legacy).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph|skill)/)
     expect(legacy).not.toContain('dsh-plan-mode')
     expect(topLevelPluginRows(legacy)).toEqual([
       { id: 'persona', name: '@deepseek-ai/dsh-persona' },
       { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
       { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
       { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+      { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
       { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
       { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
       { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
@@ -292,13 +293,14 @@ describe('profile deployment', () => {
       expect(composition).toMatch(/不创建|不建目录/)
       expect(composition).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
       expect(composition).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
-      expect(composition).not.toMatch(/dsh-tool-(web|todo|goal|subagent|workflow|ralph)(?!-)/)
+      expect(composition).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph)(?!-)/)
       expect(composition).not.toContain('dsh-plan-mode')
       expect(topLevelPluginRows(composition)).toEqual([
         { id: 'persona', name: '@deepseek-ai/dsh-persona' },
         { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
         { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
         { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+        { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
         { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
         { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
         ...scopedTools[id],
@@ -314,6 +316,10 @@ describe('profile deployment', () => {
         expect(composition).not.toContain('dsh-editor-novel-kernel')
         expect(composition).not.toContain('knowledge-only')
       }
+      // The persona prefix renders under 0.2.1's registered variable set
+      // (provider, model, editor_global_preferences, editor_project_rules);
+      // {{cwd}} is unregistered and failed every chat turn on rc.5.
+      expect(composition).not.toContain('{{cwd}}')
       const skillNames = await skillDirectoryNames(join(presetSource(id), 'skills'))
       const expected = professionalSkill[id] ? ['prose-revision', professionalSkill[id]] : ['prose-revision']
       expect(skillNames).toEqual(expected.sort())
@@ -384,7 +390,7 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'writing-presets', 'web-search'])
+      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'writing-presets'])
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
       expect(item.packages).toContain('dsh-editor-writing-presets')
@@ -414,12 +420,16 @@ describe('profile deployment', () => {
     expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
-    for (const id of ['web-search-deepseek', 'web-fetch-http', 'tool-web']) {
-      expect(patch).toMatch(new RegExp(`- id: ${id}\\r?\\n  disabled: true`))
+    // Native search stays enabled: only the host-wide tool-web row is guarded,
+    // matching upstream dsh-web-app; presets mount the tool per scope instead.
+    for (const id of ['web-search-deepseek', 'web-fetch-http']) {
+      expect(patch).not.toMatch(new RegExp(`- id: ${id}\\r?\\n  disabled: true`))
     }
+    expect(patch).toMatch(/- id: tool-web\r?\n  disabled: true/)
     for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {
       const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')
-      expect(agent.match(/name: "@klarkxy\/dsh-web-search-manager\/tools"/g)).toHaveLength(1)
+      expect(agent.match(/name: '@deepseek-ai\/dsh-tool-web'/g)).toHaveLength(1)
+      expect(agent).not.toContain('dsh-web-search-manager')
     }
   })
   it('deploys app-owned agent presets into the harness-home user preset root', async () => {
@@ -655,7 +665,7 @@ function deployIdentity(partial: Partial<ProfileDeployIdentity> = {}): ProfileDe
   return {
     algorithm: PROFILE_DEPLOY_ALGORITHM,
     profileSha256: 'sha-template',
-    dsh: '@deepseek-ai/dsh@0.2.0-rc.2',
+    dsh: '@deepseek-ai/dsh@0.2.1-rc.5',
     nodePath: 'C:/runtime/node.exe',
     cliPath: 'C:/runtime/dsh/lib/bin.js',
     ...partial,

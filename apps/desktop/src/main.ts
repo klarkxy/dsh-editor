@@ -52,8 +52,8 @@ async function resolveRuntime(home: string): Promise<{
   const nodeVersion = execFileSync(nodePath, ['--version'], { encoding: 'utf8', windowsHide: true }).trim()
   if (nodeVersion !== 'v26.10.0') throw new Error(`Node runtime mismatch: expected v26.10.0, found ${nodeVersion || 'unknown'}`)
   const manifest = JSON.parse(readFileSync(join(dirname(dirname(cliPath)), 'package.json'), 'utf8')) as { name?: string; version?: string }
-  if (manifest.name !== '@deepseek-ai/dsh' || manifest.version !== '0.2.0-rc.2') {
-    throw new Error(`DSH runtime mismatch: expected @deepseek-ai/dsh@0.2.0-rc.2, found ${manifest.name ?? 'unknown'}@${manifest.version ?? 'unknown'}`)
+  if (manifest.name !== '@deepseek-ai/dsh' || manifest.version !== '0.2.1-rc.5') {
+    throw new Error(`DSH runtime mismatch: expected @deepseek-ai/dsh@0.2.1-rc.5, found ${manifest.name ?? 'unknown'}@${manifest.version ?? 'unknown'}`)
   }
   let deploy: ReturnType<typeof readProfileDeployIdentity> | undefined
   if (app.isPackaged) {

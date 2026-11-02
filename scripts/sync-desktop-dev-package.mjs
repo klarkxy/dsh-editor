@@ -199,7 +199,7 @@ export async function syncDesktopDevPackage(name, options = {}) {
   }
   if (!existsSync(join(source, 'package.json'))) throw new Error(`Missing artifact: ${join(source, 'package.json')}`)
   const wrap = options.wrapClient ?? clientPackages(loadPluginManifests(root)).includes(name)
-  const runtimeRoot = resolve(options.runtimeRoot ?? join(root, '.dev', 'desktop-dsh-runtime-0.2.0-rc.2'))
+  const runtimeRoot = resolve(options.runtimeRoot ?? join(root, '.dev', 'desktop-dsh-runtime-0.2.1-rc.5'))
   const templateRoot = resolve(options.templateRoot ?? join(root, '.dev', 'desktop-profile-template'))
   if (!existsSync(templateRoot)) throw new Error(`desktop profile template is missing: ${templateRoot}`)
   const profileRoot = resolve(options.profileRoot ?? join(root, '.dev', 'desktop-home', 'profiles', 'dsh-editor'))

@@ -82,7 +82,7 @@ Editor 保留稿纸和写作搭档界面，通过 DSH 的公有布局合同与�
 
 设置全页视图的「插件」分区常驻「插件总览」「发现插件」和「安装与卸载」，其下是插件配置入口与配置搜索。「插件总览」按来源分三类展示：DSH 官方插件、DSH-Editor 内置插件和用户插件；运行时与开发者组件收在「高级组件」，常用写作功能保持可见。安装、检查、进度、脚本批准、取消、启用和移除由「安装与卸载」页的官方插件管理器负责；顶栏「添加插件」直接打开官方安装窗口。必需模块只读。
 
-发现插件：进入页面即可搜索。留空点「搜索」列出本机可选包；也可输入关键词、npm 包名或 GitHub 仓库。结果显示官方管理器的安装与启用状态，未安装项点击「安装」会把所选规格填入官方安装窗口，核对后再确认；已安装项可直接打开配置。复制规格保留在「高级」中。未写版本的本机包名优先匹配本地绝对 `link:` 规格；写明 npm 版本或 GitHub 规格则走官方安装。作者移除的可选包升级后保持移除，自选版本予以保留；移除后的随包来源仍可搜到并再次添加。网页搜索随桌面版预装，列在「DSH-Editor 内置插件」。知乎、当前标题、需求记录和会话纪要不再预装，可搜索 `@klarkxy/dsh-zhihu` 后按官方流程安装。
+发现插件：进入页面即可搜索。留空点「搜索」列出本机可选包；也可输入关键词、npm 包名或 GitHub 仓库。结果显示官方管理器的安装与启用状态，未安装项点击「安装」会把所选规格填入官方安装窗口，核对后再确认；已安装项可直接打开配置。复制规格保留在「高级」中。未写版本的本机包名优先匹配本地绝对 `link:` 规格；写明 npm 版本或 GitHub 规格则走官方安装。作者移除的可选包升级后保持移除，自选版本予以保留；移除后的随包来源仍可搜到并再次添加。网页搜索由 DSH 原生搜索工具承担，走官方 DeepSeek 搜索后端，不再预装第三方搜索插件。知乎、当前标题、需求记录、会话纪要与网络搜索管理器不再预装，可搜索 `@klarkxy/dsh-zhihu` 后按官方流程安装。
 
 写作模式：列在「插件总览」的「DSH-Editor 内置插件」中，与官方安装清单分开，由 Editor 管理第一方 preset。通用写作不可关闭；其余模式只影响新对话。
 
@@ -94,7 +94,7 @@ Editor 保留稿纸和写作搭档界面，通过 DSH 的公有布局合同与�
 | 人物与世界书 | 文件树直接编辑；[可选目录快捷入口](../packages/dsh-editor-cards/README.md) |
 | 写作记忆 | 按需开启；查看规则、人物卡与世界书的维护历史并撤销写入，[面板说明](../packages/dsh-editor-memory-panel/README.md) |
 | 知乎资料 | 按需安装 `@klarkxy/dsh-zhihu` 后在插件页配置；[使用与上传须知](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) |
-| 网络搜索 | 预装，在插件页选择后端；[配置与费用](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) |
+| 网络搜索 | DSH 原生搜索工具，写作会话默认携带；走官方 DeepSeek 搜索后端，沿用 DeepSeek 凭据（`DEEPSEEK_API_KEY`）。其他搜索后端可按需安装 `@klarkxy/dsh-web-search-manager`：[配置与费用](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) |
 
 「通用设置」调整中英文、外观及搭档忙碌时的发送方式。「用量」显示本机模型调用记录，不是费用账单。
 

@@ -13,7 +13,6 @@ import {
   resolveComposition,
 } from './plugin-manifest.mjs'
 import { copyNativePackageArtifact } from './native-package-artifacts.mjs'
-import { configureWebSearchPresets } from './configure-web-search.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const compositionsDir = resolve(root, 'apps/desktop/resources/compositions')
@@ -237,5 +236,4 @@ export async function configureProfile(destination, composition) {
       await writeFile(join(target, '.dsh-editor-owner.json'), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`)
     }
   }
-  await configureWebSearchPresets(destination, composition)
 }

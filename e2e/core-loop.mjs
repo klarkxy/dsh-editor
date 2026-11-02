@@ -36,9 +36,9 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
   }
 }
 
-resolveDshInstallation('0.2.0-rc.2')
+resolveDshInstallation('0.2.1-rc.5')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.0-rc.2')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.1-rc.5')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 const failures = []

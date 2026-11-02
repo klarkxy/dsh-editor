@@ -43,24 +43,9 @@ export async function expandAllDetails(locator) {
   }
 }
 
-/** The preinstalled web search bundle is a distribution built-in, listed under the builtin catalog. */
-export function webSearchRow(plugins) {
-  return plugins.locator(S.pluginsCatalogBuiltin)
-    .locator(S.pluginsCatalogRow)
-    .filter({ hasText: '网页搜索' })
-}
-
-export async function openWebSearchSettings(plugins) {
-  await showPluginList(plugins)
-  const row = webSearchRow(plugins)
-  // A row carries one action: the configuration button, or the detail button
-  // when the bundle has no configuration of its own.
-  const configure = row.locator(S.pluginsCatalogConfig)
-  const detail = row.locator(S.pluginsCatalogDetail)
-  await (await configure.count() ? configure : detail).click()
-  const settings = plugins.locator(S.webSearchSettings)
-  await settings.waitFor()
-  return settings
+/** No public plugin is preinstalled; the builtin catalog only carries editor-owned rows. */
+export function builtinPluginRows(plugins) {
+  return plugins.locator(S.pluginsCatalogBuiltin).locator(S.pluginsCatalogRow)
 }
 
 export async function openWritingPresets(plugins) {
@@ -246,17 +231,15 @@ export async function assertDefaultPluginPage(page, plugins) {
   const builtin = plugins.locator(S.pluginsCatalogBuiltin)
   const user = plugins.locator(S.pluginsCatalogUser)
   for (const section of [official, builtin, user]) await section.waitFor()
-  // Rows populate after the sections mount; sample after the row exists.
-  await webSearchRow(plugins).first().waitFor()
-  assert.ok(await webSearchRow(plugins).count() > 0, 'web search is a preinstalled built-in, not an official or user card')
+  // Rows populate after the sections mount; sample after a builtin row exists.
+  await builtinPluginRows(plugins).first().waitFor()
   const userText = await user.innerText()
   assert.ok(userText.includes('还没有安装用户插件'), 'a default profile has no author-installed bundles: ' + userText)
   assert.ok(userText.includes('在「发现插件」里找找看'), 'the empty user catalog points at the discovery page: ' + userText)
   const bundles = await nativePluginRpc(page, 'listBundles')
   assert.ok(Array.isArray(bundles), 'native manager must return its installed bundle list')
   assert.deepEqual(bundles.filter(bundle => bundle.name.startsWith('@klarkxy/')).map(bundle => bundle.name).sort(),
-    ['@klarkxy/dsh-web-search-manager'], 'only web search is preinstalled from the public plugin repository')
-  assert.equal(bundles.find(bundle => bundle.name === '@klarkxy/dsh-web-search-manager')?.enabled, true)
+    [], 'no public plugin is preinstalled in the default distribution')
   assert.equal(await plugins.locator(S.pluginsPageNav).getByRole('button', { name: /^(知乎资料|知乎)$/ }).count(), 0,
     'Zhihu configuration is available after an explicit installation, not in the default distribution')
   return bundles

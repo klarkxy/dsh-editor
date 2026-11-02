@@ -17,7 +17,7 @@ import {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.2.0-rc.2')
+const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.2.1-rc.5')
 const composition = await desktopComposition()
 // The cached runtime can outlive a product recipe. Remove only packages owned
 // by the previous generated composition; source directories and user data stay intact.
@@ -31,7 +31,7 @@ try {
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '26.10.0') {
   throw new Error(`desktop development requires Windows x64 Node 26.10.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
-const dsh = resolveDshInstallation('0.2.0-rc.2')
+const dsh = resolveDshInstallation('0.2.1-rc.5')
 // The version alone cannot distinguish patched dependencies at the same DSH tag.
 const sourceKey = createHash('sha256').update(await realpath(dsh.packageRoot))
   .update(await readFile(resolve(root, 'pnpm-lock.yaml')))
@@ -46,7 +46,7 @@ let runtimeReady = false
 try {
   const manifest = JSON.parse(await readFile(resolve(devDshRuntime, 'package.json'), 'utf8'))
   const materialized = JSON.parse(await readFile(resolve(devDshRuntime, '.dsh-editor-materialized'), 'utf8'))
-  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.2.0-rc.2'
+  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.2.1-rc.5'
     && materialized.version === manifest.version && materialized.sourceKey === sourceKey
 } catch {}
 if (!runtimeReady) {

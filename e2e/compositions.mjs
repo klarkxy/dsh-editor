@@ -6,7 +6,7 @@ import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
 import { DESKTOP_PACKAGE_NAMES, desktopComposition, configureProfile } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, showPluginList } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -29,9 +29,9 @@ for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) 
   }
 }
 
-resolveDshInstallation('0.2.0-rc.2')
+resolveDshInstallation('0.2.1-rc.5')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.0-rc.2')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.1-rc.5')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 let browser
@@ -220,7 +220,7 @@ try {
  for (const item of aliases) {
   if (!sameJson(item.files.dependencies, item.files.nativeDependencies)) throw new Error(item.id+' native dependency baseline differs from its initial selection');
   const publicNames=Object.keys(item.files.nativeDependencies).filter(name=>name.startsWith('@klarkxy/')).sort();
-  if (!sameJson(publicNames,['@klarkxy/dsh-web-search-manager'])) throw new Error(item.id+' default public plugin roster mismatch: '+publicNames.join(','));
+  if (!sameJson(publicNames,[])) throw new Error(item.id+' default public plugin roster mismatch: '+publicNames.join(','));
   if (!Object.values(item.files.nativeDependencies).every(spec=>typeof spec==='string'&&spec.startsWith('link:'))) throw new Error(item.id+' native dependency baseline is not linked to bundled artifacts');
  }
  if(shared.features.includes('cards') || shared.features.includes('memory-panel'))throw new Error('on-demand builtin panels must not be forced on');
@@ -292,8 +292,8 @@ try {
  if(await page.locator(S.zhihuOpen).count())throw new Error('Zhihu must not contribute a desktop launcher');
  const openSettings=async(section)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'visible'});await page.locator(S.settingsNavSection(section)).click();await page.waitForTimeout(250)};
  const closeSettings=async()=>{await page.locator(S.settingsBack).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
- let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await openWebSearchSettings(plugins);await closePluginsPage(page);
- evidence.checks.push('desktop launchers absent; native plugin manager lists the default web-search bundle and opens its configuration');
+ let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await closePluginsPage(page);
+ evidence.checks.push('desktop launchers absent; native plugin manager lists no preinstalled public bundles');
  await page.getByRole('button',{name:'新建作品'}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000});
  await page.locator(S.treeEmpty).waitFor({state:'visible',timeout:20000});
  const tree=page.locator(S.tree);const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
@@ -337,10 +337,10 @@ try {
  for(const theme of ['light','dark']){
    if(theme==='dark')await toggleTheme(page);
    await openSettings('appearance');panelColors.push(await page.locator(S.settingsDialog).evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
-   plugins=await openPluginsPage(page);await openWebSearchSettings(plugins);await page.screenshot({path:resolve(output,'web-search-settings-'+theme+'.png')});await closePluginsPage(page);
+   plugins=await openPluginsPage(page);await showPluginList(plugins);await page.screenshot({path:resolve(output,'plugins-'+theme+'.png')});await closePluginsPage(page);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await toggleTheme(page);evidence.checks.push('light/dark settings and native web-search configuration');
+ await toggleTheme(page);evidence.checks.push('light/dark settings and plugin catalog');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator(S.chatRail).waitFor();evidence.checks.push('optional Chat mounts');
  await page.reload();await page.locator(S.shell).waitFor();await dismissNativeOnboarding(page);if(await page.locator(S.zhihuOpen).count())throw new Error('removed desktop launcher returned after reload');

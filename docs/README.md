@@ -10,6 +10,8 @@
 - [UI 施工约定](ui-agent-guide.md)：给 Agent 的组件用法、改动边界、防偏移检查与验收证据。
 - [界面行为契约](ui-behavior-contracts.md)：外观改动不得改变的行为、实现位置、现有测试覆盖与缺口。
 - `redesign/` 重写过程文档（已完成，文首均有状态标注）：[UX 审计](redesign/ux-audit.md)、[视觉方案](redesign/visual-directions.md)、[G1 决策](redesign/decision.md)、[设计系统实施规格](redesign/design-system-spec.md)、[Shell 重写规格](redesign/shell-rewrite-spec.md)、[验收记录](redesign/acceptance.md)。
+- [DSH 0.2.1 升级审计](dsh-0.2.1-upgrade.md)：0.2.1-rc.5 依赖闭包、补丁移植、官方升级指南核对与第三方预装清零记录。
+- [DSH 0.2.0 升级审计](dsh-0.2.0-upgrade.md)（历史留档，已完成）：0.2.0-rc.2 依赖闭包、能力吸收与验收记录。
 - [DSH 0.1.7 升级审计](dsh-0.1.7-upgrade.md)（历史留档，已完成）：兼容性修复、能力重叠与验收范围。
 - [AI 插件](ai-plugins-implementation.md)：当前插件、原生模型设置、退役与历史验证边界。
 - [Fusion 协作实现](fusion-implementation.md)（历史留档，已移除）：旧的配对、任务与候选边界。
@@ -17,7 +19,7 @@
 - [H3 宣传片方案](h3-promo-preproduction.md)（历史留档，已完成）：品牌宣传片制作前的分镜与文案。
 - [实机演示方案](live-demo-preproduction.md)（历史留档，已完成）：实机录屏演示制作前的脚本与清单。
 - [内置插件与设置](builtin-plugins.md)：功能归类、必需模块、会话工具与模型设置归属。
-- [插件目录](../packages/README.md)：预装网页搜索、发现搜索复制规格、官方安装的按需公共插件及各包说明与发布维护。
+- [插件目录](../packages/README.md)：原生网页搜索、发现搜索复制规格、官方安装的按需公共插件及各包说明与发布维护。
 - [变更记录](../CHANGELOG.md)：版本历史。
 - [交互架构图](https://klarkxy.github.io/dsh-editor/)：跨包关系与写入流程；[规范源](diagrams/)。
 

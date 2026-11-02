@@ -14,9 +14,16 @@ export function OfficialSurfaceProvider({ value, children }: { value: OfficialRo
 
 const noCatalog = Object.freeze([])
 const emptyCatalog = { subscribe: () => () => {}, getSnapshot: () => noCatalog }
+// DSH 0.2.1 unpublished dsh-client-store from the dependency graph, so
+// Shortcuts['catalog'] resolves to unknown here; the runtime contract is the
+// same subscribe/getSnapshot store it always was.
+type ShortcutCatalogStore = {
+  subscribe(onStoreChange: () => void): () => void
+  getSnapshot(): readonly { id: string; keys: readonly string[] }[]
+}
 export function useOfficialShortcut(id: string): string | undefined {
   const { shortcuts } = useContext(OfficialRoot)
-  const source = shortcuts?.catalog ?? emptyCatalog
+  const source = (shortcuts?.catalog ?? emptyCatalog) as ShortcutCatalogStore
   const catalog = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
   return catalog.find(entry => entry.id === id)?.keys.join('')
 }

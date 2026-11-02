@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { bindingIssue, normalizeBinding, parseShortcutDefinitions } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 
-// Active 0.2.0-rc.2 UI modules: right sidebar, files tab, and shortcut reference.
+// Active 0.2.1-rc.5 UI modules: right sidebar, files tab, and shortcut reference.
 // The official layout command is intentionally absent from this composition.
 const officialDefinitions = [
   { id: 'sidebar.right.toggle', defaults: {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -12,7 +12,7 @@ const output = resolve(root, '.artifacts/plugin-page', stage)
 const home = resolve(root, '.dev', 'plugin-page-' + stage + '-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -78,8 +78,6 @@ try {
     await assertCatalogIconsRendered(pluginPage)
     await openWritingPresets(pluginPage)
     await shot(theme + '-overview-1440')
-    await openWebSearchSettings(pluginPage)
-    await shot(theme + '-web-search')
     if (theme === '浅色') {
       const nativePanel = await openPluginManager(pluginPage)
       const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()

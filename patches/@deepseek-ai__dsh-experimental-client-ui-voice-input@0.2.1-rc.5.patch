@@ -1,0 +1,62 @@
+diff --git a/lib/client.js b/lib/client.js
+index f0a7a91559b4922c58eec0b3ea5bc33a4e17b32e..f8528ea349fd1bce643e30c99c857e28e5de4052 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -2176,6 +2176,8 @@ window.__ModuleLoader__.load({
+ 			unnamedSelectedMicrophone: "麦克风",
+ 			unnamedMicrophone: "麦克风 {number}",
+ 			inputLevel: "麦克风输入电平",
++			previewStart: "测试麦克风",
++			previewStop: "停止测试",
+ 			deviceUnavailable: "不可用",
+ 			deviceMissing: "麦克风不可用，请选择其他输入设备",
+ 			auto: "自动识别",
+@@ -2288,6 +2290,8 @@ window.__ModuleLoader__.load({
+ 			unnamedSelectedMicrophone: "Microphone",
+ 			unnamedMicrophone: "Microphone {number}",
+ 			inputLevel: "Microphone input level",
++			previewStart: "Test microphone",
++			previewStop: "Stop test",
+ 			deviceUnavailable: "Unavailable",
+ 			deviceMissing: "Microphone unavailable. Choose another input device.",
+ 			auto: "Detect automatically",
+@@ -2400,6 +2404,7 @@ window.__ModuleLoader__.load({
+ 				label: selected.id === "" ? "" : selected.label
+ 			}]);
+ 			const [preview, setPreview] = (0, react.useState)(), [error, setError] = (0, react.useState)();
++			const [wanted, setWanted] = (0, react.useState)(false);
+ 			(0, react.useEffect)(() => {
+ 				const media = navigator.mediaDevices;
+ 				const lifetime = new AbortController();
+@@ -2472,7 +2477,7 @@ window.__ModuleLoader__.load({
+ 							release();
+ 							setPreview(void 0);
+ 							setError(void 0);
+-						} else if (!document.hidden && !capture) acquire();
++						} else if (wanted && !document.hidden && !capture) acquire();
+ 					} catch (failure) {
+ 						if (request === enumeration) fail(failure);
+ 					}
+@@ -2493,7 +2498,7 @@ window.__ModuleLoader__.load({
+ 					lifetime.abort();
+ 					release();
+ 				};
+-			}, [selected.id, createRecording]);
++			}, [selected.id, createRecording, wanted]);
+ 			const choices = devices.filter((device) => !device.unavailable || device.id === selected.id || device.id === "");
+ 			const missing = choices.find((device) => device.id === selected.id)?.unavailable;
+ 			const deviceName = (device, index) => {
+@@ -2532,7 +2537,12 @@ window.__ModuleLoader__.load({
+ 								recording: preview,
+ 								label: t("inputLevel")
+ 							})
+-						})]
++						}), (0, react_jsx_runtime.jsx)("button", {
++								type: "button",
++								className: VoiceInput_module_css_default.inlineAction,
++								onClick: () => setWanted((previous) => !previous),
++								children: preview ? t("previewStop") : t("previewStart")
++							})]
+ 					}),
+ 					error && (0, react_jsx_runtime.jsx)("span", {
+ 						className: VoiceInput_module_css_default.deviceError,

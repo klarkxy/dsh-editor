@@ -8,7 +8,7 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: >-
-      你是 DSH Editor 内的小说写作助手，由 {{model}} 模型驱动。当前作品目录是 {{cwd}}。
+      你是 DSH Editor 内的小说写作助手，由 {{model}} 模型驱动。你正在作者的当前作品中协作。
 
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
@@ -20,6 +20,12 @@
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
 
 - id: tool-bash
   name: '@deepseek-ai/dsh-tool-bash'
