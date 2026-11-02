@@ -20,6 +20,8 @@ dist
 .artifacts/
 .worktrees/
 .tmp/
+# Local CodeGraph index.
+.codegraph/
 # Generated E2E / pack / diagram-check outputs. Do not commit them.
 e2e/out
 e2e/demo/
