@@ -1,6 +1,6 @@
 import { REQUIRED_CORE_BUNDLES, RETIRED_PLUGIN_PACKAGES, HOST_LOCKED_ENTRY_IDS as HOST_LOCKED_PLUGIN_IDS, RESTORED_PATCH_IDS as CORE_PATCH_IDS } from './distribution-contract.js'
 export { REQUIRED_CORE_BUNDLES } from './distribution-contract.js'
-import { copyFile, cp, lstat, mkdir, readFile, readdir, readlink, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { copyFile, cp, lstat, mkdir, readFile, readdir, readlink, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { constants, existsSync } from 'node:fs'
 import { dirname, isAbsolute, join, posix, relative, resolve as resolvePath, sep, win32 } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -54,7 +54,7 @@ export type PreserveNativeProfileResult = {
 }
 
 type InstalledRecord = { name?: unknown; spec?: unknown; version?: unknown }
-type ModuleMergePolicy = { keepStaged: ReadonlySet<string>; skipTop: ReadonlySet<string> }
+type ModuleMergePolicy = { keepStaged: ReadonlySet<string>; skipTop: ReadonlySet<string>; runtimeNodeModules?: string }
 
 export type HomeFileSnapshot = { path: string; content: string | undefined }
 
@@ -354,7 +354,7 @@ async function copyRetargetedLink(source: string, dest: string, sourceRoot: stri
   const targetAbs = isAbsolute(raw) ? raw : resolvePath(dirname(source), raw)
   let directory = st.isDirectory()
   if (!directory) {
-    try { directory = (await lstat(targetAbs)).isDirectory() } catch { directory = true }
+    try { directory = (await stat(targetAbs)).isDirectory() } catch { directory = true }
   }
   const target = retargetedLink(source, raw, sourceRoot, dest, destRoot)
   await symlink(target, dest, symlinkKind(directory))
@@ -478,17 +478,50 @@ async function mergeModuleTree(
     if (store && bothDirs) await mergeModuleTree(from, to, sourceRoot, destRoot, policy)
     else if (scoped && bothDirs) await mergeModuleTree(from, to, sourceRoot, destRoot, policy, `${name}/`)
     else if (!store && !scoped && !isRequiredCoreBundle(packageName) && !policy?.keepStaged.has(packageName)) {
+      if (policy?.runtimeNodeModules && toStat.isSymbolicLink()) {
+        try {
+          const resolved = resolvePath(dirname(to), await readlink(to))
+          if (isPathInside(policy.runtimeNodeModules, resolved)) continue
+        } catch { /* unreadable staged link: overlay below */ }
+      }
       await overlayNativePackage(from, to, sourceRoot, destRoot)
     }
   }
 }
 
-async function copyRetainedArtifacts(previous: string, stage: string, currentBaseline: NativeBaseline): Promise<void> {
+/** Copy previous bundled artifacts still referenced by merged deps or by copied artifacts. */
+async function copyRetainedArtifacts(
+  previous: string,
+  stage: string,
+  currentBaseline: NativeBaseline,
+  mergedDeps: Record<string, string>,
+): Promise<void> {
   const sourceRoot = join(previous, BUNDLED_PACKAGES_DIR)
   const destRoot = join(stage, BUNDLED_PACKAGES_DIR)
   if (!existsSync(sourceRoot)) return
   await mkdir(destRoot, { recursive: true })
-  for (const name of await listMaterializedPackageNames(sourceRoot)) {
+  const retained = new Set<string>()
+  const queue: string[] = []
+  for (const [name, spec] of Object.entries(mergedDeps)) {
+    if (spec !== `link:./bundled-packages/node_modules/${name}`) continue
+    if (isRetiredPackage(name) || !existsSync(packageDir(previous, BUNDLED_PACKAGES_DIR, name))) continue
+    queue.push(name)
+  }
+  while (queue.length > 0) {
+    const name = queue.shift()!
+    if (retained.has(name)) continue
+    retained.add(name)
+    const artifact = packageDir(previous, BUNDLED_PACKAGES_DIR, name)
+    const manifest = await readJsonFile<ProfileManifest>(join(artifact, 'package.json'))
+    for (const spec of Object.values(asStringRecord(manifest?.dependencies))) {
+      if (!spec.startsWith('link:') && !spec.startsWith('file:')) continue
+      const resolved = resolvePath(artifact, spec.slice(spec.indexOf(':') + 1))
+      if (!isPathInside(sourceRoot, resolved) || !existsSync(resolved)) continue
+      const depName = relative(sourceRoot, resolved).split(sep).join(posix.sep)
+      if (!isRetiredPackage(depName) && !retained.has(depName)) queue.push(depName)
+    }
+  }
+  for (const name of retained) {
     if (name in currentBaseline && existsSync(packageDir(stage, BUNDLED_PACKAGES_DIR, name))) continue
     await copyTreeRetargeting(packageDir(previous, BUNDLED_PACKAGES_DIR, name), packageDir(stage, BUNDLED_PACKAGES_DIR, name), previous, stage)
   }
@@ -658,11 +691,20 @@ export async function preserveNativeProfileState(
     await copyIfPresent(join(previous, file), join(stage, file))
   }
   const mergedDeps = asStringRecord(merged.dependencies)
-  await copyRetainedArtifacts(previous, stage, templateBaseline)
+  await copyRetainedArtifacts(previous, stage, templateBaseline, mergedDeps)
   const artifacts = existsSync(join(stage, BUNDLED_PACKAGES_DIR))
     ? await listMaterializedPackageNames(join(stage, BUNDLED_PACKAGES_DIR))
     : []
-  const policy = overlayPolicy(mergedDeps, templateBaseline, previousBaseline, artifacts)
+  const runtimeModules = options.runtimeNodeModules
+  const staleRuntimeTops = runtimeModules
+    ? (await listMaterializedPackageNames(join(previous, RUNTIME_LINKS_DIR)))
+        .filter((name) => !existsSync(packageDir(runtimeModules, '', name)))
+    : []
+  const policy: ModuleMergePolicy = {
+    ...overlayPolicy(mergedDeps, templateBaseline, previousBaseline, artifacts),
+    runtimeNodeModules: options.runtimeNodeModules,
+  }
+  if (staleRuntimeTops.length > 0) policy.skipTop = new Set([...policy.skipTop, ...staleRuntimeTops])
   await mergeModuleTree(join(previous, 'node_modules'), join(stage, 'node_modules'), previous, stage, policy)
   await removeRemovedOptionalTops(stage, policy.skipTop)
   await linkInitialNativeModules(stage, merged)
@@ -765,6 +807,17 @@ export async function nativeReuseLayoutReady(
         if (resolved !== resolvePath(target)) return 'restage'
       } catch {
         return 'restage'
+      }
+      const top = packageDir(profilePath, 'node_modules', name)
+      if (existsSync(top)) {
+        try {
+          const topStat = await lstat(top)
+          if (topStat.isSymbolicLink() && resolvePath(dirname(top), await readlink(top)) !== resolvePath(target)) {
+            return 'restage'
+          }
+        } catch {
+          return 'restage'
+        }
       }
     }
     const scope = join(profilePath, 'node_modules', '@deepseek-ai')

@@ -14,7 +14,9 @@
     "@klarkxy/dsh-memory": { "retired": true },
     "@klarkxy/dsh-self-improvement": { "retired": true },
     "@klarkxy/dsh-fusion": { "retired": true },
-    "dsh-web-search-tavily": { "retired": true }
+    "dsh-web-search-tavily": { "retired": true },
+    "dsh-proofread": { "retired": true },
+    "dsh-editor-proofread-panel": { "retired": true }
   },
   "entries": {
     "editor-shell": { "coreLocked": true },
@@ -32,6 +34,8 @@
     "self-improvement": { "hostLocked": true, "retired": true },
     "fusion": { "hostLocked": true, "retired": true },
     "web-search-tavily": { "hostLocked": true, "retired": true },
+    "proofread": { "hostLocked": true, "retired": true },
+    "editor-proofread-panel": { "hostLocked": true, "retired": true },
     "current-title": { "optionalPackage": "@klarkxy/dsh-current-title" },
     "mood": { "optionalPackage": "@klarkxy/dsh-mood" },
     "recap": { "optionalPackage": "@klarkxy/dsh-recap" },

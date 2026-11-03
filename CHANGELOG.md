@@ -13,6 +13,8 @@
 - 新增第四份版本钉住补丁 `@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.1-rc.5`：上游在查看语音准备页时即请求麦克风做电平预览，补丁改为仅点击「测试麦克风」才采集，再点、换设备、离开页面即释放；录音入口行为不变。
 - 修复五个写作预设 persona prefix 引用未注册变量 `{{cwd}}`（0.2.1 的注册集为 provider / model / editor_global_preferences / editor_project_rules）导致每轮对话报错的回归；配套 `desktop-profile.spec.ts` 断言防回归。
 - 修复 `pnpm test:e2e:portable` 的退出码 9：`portableEnv` 未剥离 VS Code 终端注入的 `ELECTRON_RUN_AS_NODE=1`，打包后的 Electron 以纯 Node 运行并拒绝 `--remote-debugging-port`。完整打包（pack:desktop）、portable e2e 与真机模型走查（本机 OpenAI 兼容网关）均在 0.2.1-rc.5 上验证通过。
+- 修复从 0.2.0 升级的 profile 启动失败：复制指向链接的链接时误建文件级符号链接导致 Windows EPERM；旧运行时链接在保留合并中覆盖新投影，让 DSH 以「不兼容」拒载插件并启动超时。现在保留指向当前运行时的链接，复用检查发现顶层链接指向其他运行时即重建。
+- 升级清理：随包制品只保留仍被依赖引用（含传递）的项，上游已删除包的运行时顶层链接不再沿用；文稿校对的 `dsh-proofread` / `dsh-editor-proofread-panel` 及其插件条目标记为退役。
 
 ### 界面重写（「原稿」设计系统）
 

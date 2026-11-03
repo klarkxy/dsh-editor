@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CORE_PLUGIN_BUNDLE_NAMES, CORE_PLUGIN_ENTRY_IDS, HOST_LOCKED_ENTRY_IDS, REQUIRED_CORE_BUNDLES, RESTORED_PATCH_IDS, RETIRED_PLUGIN_PACKAGES } from '../src/distribution-contract.js'
+import { CORE_PLUGIN_BUNDLE_NAMES, CORE_PLUGIN_ENTRY_IDS, HOST_LOCKED_ENTRY_IDS, REQUIRED_CORE_BUNDLES, RESTORED_PATCH_IDS, RETIRED_PLUGIN_IDS, RETIRED_PLUGIN_PACKAGES } from '../src/distribution-contract.js'
 import { isSafeUserPackageName, writeNativeMigrationMarker } from '../src/native-profile.js'
 import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
 
@@ -17,6 +17,12 @@ describe('finite distribution ownership', () => {
     expect(HOST_LOCKED_ENTRY_IDS.has('editor-workbench-tools')).toBe(true)
     expect(RETIRED_PLUGIN_PACKAGES.has('dsh-web-search-tavily')).toBe(true)
     expect(REQUIRED_CORE_BUNDLES.has('dsh-web-search-tavily')).toBe(false)
+    expect(RETIRED_PLUGIN_PACKAGES.has('dsh-proofread')).toBe(true)
+    expect(RETIRED_PLUGIN_PACKAGES.has('dsh-editor-proofread-panel')).toBe(true)
+    expect(RETIRED_PLUGIN_IDS.has('proofread')).toBe(true)
+    expect(RETIRED_PLUGIN_IDS.has('editor-proofread-panel')).toBe(true)
+    expect(REQUIRED_CORE_BUNDLES.has('dsh-proofread')).toBe(false)
+    expect(REQUIRED_CORE_BUNDLES.has('dsh-editor-proofread-panel')).toBe(false)
   })
 
   it('allows unknown packages in familiar namespaces but protects finite core and retirement', () => {
