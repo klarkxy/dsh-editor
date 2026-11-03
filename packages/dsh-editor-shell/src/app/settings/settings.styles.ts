@@ -45,40 +45,44 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .dsh-settings-page__nav {
   display: flex; flex-direction: column; gap: var(--dsh-ui-space-1);
   padding: var(--dsh-ui-space-4) var(--dsh-ui-space-2);
-  overflow-y: auto; overflow-x: hidden;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: thin;
   background: var(--dsh-ui-sidebar); border-right: 0.5px solid var(--dsh-ui-line);
 }
 .dsh-settings-page__nav > * { flex-shrink: 0; }
 .dsh-settings-nav-group { display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); }
-.dsh-settings-nav-group + .dsh-settings-nav-group {
-  margin-top: var(--dsh-ui-space-5); padding-top: var(--dsh-ui-space-4);
-  border-top: 0.5px solid var(--dsh-ui-line);
-}
+.dsh-settings-nav-group + .dsh-settings-nav-group { margin-top: var(--dsh-ui-space-4); }
 .dsh-settings-nav-group__label {
-  padding: 0 var(--dsh-ui-space-3) var(--dsh-ui-space-1);
+  padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3) var(--dsh-ui-space-1);
   color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs);
   font-weight: var(--dsh-ui-weight-medium);
 }
 .dsh-settings-nav-item[data-warn] .dsh-list-row__leading { color: var(--dsh-ui-muted); }
 
-.dsh-settings-config { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-1) var(--dsh-ui-space-1) 0; }
-.dsh-settings-config__label {
-  padding: 0 var(--dsh-ui-space-2);
-  color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-medium);
-}
+/* 插件配置是跟随「插件」组的同级导航组；类名沿用旧嵌套实现。 */
+.dsh-settings-config .dsh-search-field { margin: var(--dsh-ui-space-1) var(--dsh-ui-space-1) var(--dsh-ui-space-2); }
 .dsh-settings-config__links { display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0; padding: 0; }
-.dsh-settings-config__links .dsh-list-row { padding-inline-start: var(--dsh-ui-space-4); }
 .dsh-settings-config__empty { margin: 0; padding: 0 var(--dsh-ui-space-2); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); }
 .dsh-settings-config__advanced > summary {
-  cursor: pointer; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs);
-  font-weight: var(--dsh-ui-weight-medium); padding: var(--dsh-ui-space-2);
+  list-style: none; display: flex; align-items: center; gap: var(--dsh-ui-space-2);
+  cursor: pointer; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);
+  font-weight: var(--dsh-ui-weight-medium);
+  padding: 0 var(--dsh-ui-space-2); min-height: 36px; border-radius: var(--dsh-ui-radius-sm);
+}
+.dsh-settings-config__advanced > summary::-webkit-details-marker { display: none; }
+.dsh-settings-config__advanced > summary:hover { background: var(--dsh-ui-hover); }
+.dsh-settings-config__advanced > summary > svg { flex: none; transition: transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out); }
+.dsh-settings-config__advanced[open] > summary > svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .dsh-settings-config__advanced > summary > svg { transition: none; }
 }
 
 .dsh-settings-page__content {
-  padding: var(--dsh-ui-space-5) var(--dsh-ui-space-6) var(--dsh-ui-space-8);
+  padding: var(--dsh-ui-space-6) var(--dsh-ui-space-8) var(--dsh-ui-space-8);
   overflow-y: auto; overflow-x: hidden; min-width: 0; min-height: 0; overflow-wrap: anywhere;
+  container-type: inline-size;
 }
-.dsh-settings-section { display: flex; flex-direction: column; gap: var(--dsh-ui-space-4); min-width: 0; max-width: 880px; }
+.dsh-settings-section { display: flex; flex-direction: column; gap: var(--dsh-ui-space-4); min-width: 0; max-width: var(--dsh-ui-content-max); }
+.dsh-settings-section[data-testid="plugins-manager-seat"] { max-width: 880px; }
 .dsh-settings-section__title {
   margin: 0; font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-medium);
 }
@@ -88,20 +92,51 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .dsh-settings-section__tools .dsh-search-field { width: 16rem; }
 .dsh-settings-error { margin: 0; color: var(--dsh-ui-danger, var(--dsh-ui-text)); font-size: var(--dsh-ui-text-sm); }
 
-/* ── 设置卡片：0.5px 描边无阴影的平面卡片，space-4 横向 / space-3-4 纵向内边距；
-     标题 text-sm 加粗、下方留 space-2；行分隔线自然缩进在内边距内。 ── */
+/* ── 设置组：标题在卡片外；卡片是 0.5px 描边无阴影的平面卡片，
+     行项以 hairline 分隔，非行内容用纵向 margin 呼吸。 ── */
+.dsh-settings-page .settings-group { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); }
+.dsh-settings-page .settings-group__title {
+  margin: 0; padding-inline: var(--dsh-ui-space-1);
+  font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-text);
+}
 .dsh-settings-page .settings-block {
-  padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4) var(--dsh-ui-space-4);
+  padding: var(--dsh-ui-space-1) var(--dsh-ui-space-4);
   border: 0.5px solid var(--dsh-ui-line-strong);
   border-radius: var(--dsh-ui-radius-xl);
   background: var(--dsh-ui-raised);
 }
-.dsh-settings-page .settings-block-head { margin-bottom: var(--dsh-ui-space-2); }
-.dsh-settings-page .settings-block-title {
-  font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);
+/* 模型分区仍用卡内标题（models-header），视觉与组标题同档。 */
+.dsh-settings-page .settings-block > .settings-block-head { margin-block: var(--dsh-ui-space-2); padding-inline: var(--dsh-ui-space-1); }
+.dsh-settings-page .settings-block .settings-block-title {
+  margin: 0; font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-text);
 }
-/* 分区页里的裸 h3 与卡片标题同一档（旧 settings-block-title/h3 规则的合并）。 */
-.radix-themes .dsh-settings-page h3 { margin: 0; font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); line-height: 1.5; }
+/* 卡片内的行类元素统一 52px 行高与 hairline 分隔。 */
+.dsh-settings-page .settings-block > :is(.settings-row, .dsh-switch-row, .dsh-slider-row, .settings-preview-slot) {
+  min-height: 52px; padding-block: var(--dsh-ui-space-3); box-sizing: border-box;
+}
+.dsh-settings-page .settings-block > :is(.settings-row, .dsh-switch-row, .dsh-slider-row, .settings-preview-slot)
+  + :is(.settings-row, .dsh-switch-row, .dsh-slider-row, .settings-preview-slot) {
+  border-top: 0.5px solid var(--dsh-ui-line);
+}
+.dsh-settings-page .settings-block > :not(:is(.settings-row, .dsh-switch-row, .dsh-slider-row, .settings-preview-slot)) {
+  margin-block: var(--dsh-ui-space-3);
+}
+/* 行文字统一：标题 text-base 常规、说明 text-sm muted、行高 1.5（卡片内局部覆盖，
+     不改 Switch 基础组件）。 */
+.dsh-settings-page .settings-block :is(.settings-row-title, .dsh-switch-row__label) {
+  font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-regular); color: var(--dsh-ui-text);
+}
+.dsh-settings-page .settings-block :is(.settings-row-description, .dsh-switch-row__desc) {
+  font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-muted); line-height: 1.5;
+}
+/* 滑杆行：标签与控件等宽对齐，三条滑杆列对齐。 */
+.dsh-settings-page .settings-block .dsh-slider-row__label {
+  flex: 1; font-size: var(--dsh-ui-text-base); color: var(--dsh-ui-text);
+}
+.dsh-settings-page .settings-block .dsh-slider-row .dsh-slider { flex: 0 0 clamp(140px, 40%, 260px); }
+.dsh-settings-page .settings-block .dsh-slider-row__value {
+  min-width: 6ch; text-align: end; font-variant-numeric: tabular-nums; font-size: var(--dsh-ui-text-sm);
+}
 /* 跳转型操作（查看全部快捷键等）按链接上色，不用 Radix 默认 accent。 */
 .dsh-settings-page .settings-link-button { color: var(--dsh-ui-link); }
 /* ghost 按钮自带 -8px 光学外溢 + 内边距（让文字对齐外缘）；卡片内的
@@ -137,21 +172,16 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
   .dsh-settings-nav-mobile { display: block; min-width: 0; }
 }
 
-/* ── 写作分区：控件列 + 实时预览列，预览与编辑器共用 --paper-* 变量 ── */
-.dsh-writing-settings {
-  display: grid; grid-template-columns: minmax(280px, 430px) minmax(0, 1fr);
-  gap: var(--dsh-ui-space-6); align-items: start;
-}
-.dsh-writing-settings__controls { display: flex; flex-direction: column; gap: var(--dsh-ui-space-4); min-width: 0; }
-.dsh-settings-preview { position: sticky; top: 0; min-width: 0; }
+/* ── 写作分区：稿纸预览作为「稿纸与排版」组内首行，与编辑器共用 --paper-* 变量 ── */
+.dsh-settings-preview { min-width: 0; width: 100%; }
 .dsh-settings-preview__paper {
   margin-inline: auto; width: 100%; max-width: var(--paper-max-width, none);
   padding: var(--dsh-ui-space-5) var(--dsh-ui-space-6);
-  background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong);
-  border-radius: var(--dsh-ui-radius-xl);
+  background: var(--dsh-ui-bg); border: 0.5px solid var(--dsh-ui-line);
+  border-radius: var(--dsh-ui-radius-lg);
   font-family: var(--paper-font-family); font-size: var(--paper-font-size);
   line-height: var(--paper-line-height); color: var(--dsh-ui-text);
-  max-height: 70vh; overflow: hidden;
+  max-height: 260px; overflow: hidden;
 }
 .dsh-settings-preview__para {
   margin: 0; text-indent: var(--paper-first-indent, 0);
@@ -167,10 +197,6 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .dsh-settings-preview__section--centered { text-align: center; }
 .dsh-settings-preview__mark + .dsh-settings-preview__para,
 .dsh-settings-preview__section + .dsh-settings-preview__para { margin-top: 0; }
-
-.writing-slider-group { display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding-block: var(--dsh-ui-space-3); }
-.writing-slider-group .dsh-slider-row { width: 100%; }
-.writing-slider-group .dsh-slider-row__value { font-variant-numeric: tabular-nums; }
 
 /* 用量统计卡与快捷键表（原 Radix Grid/Table 的原稿等价）：双列起步，
    ≥768px 四列；表格沿用 hairline 行分隔。 */
@@ -188,18 +214,15 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .dsh-shortcuts-table tbody tr:last-child th, .dsh-shortcuts-table tbody tr:last-child td { border-bottom: 0; }
 .dsh-shortcuts-table tbody th { font-weight: var(--dsh-ui-weight-regular); }
 
-/* 窄窗：内容内边距收窄、写作预览落回文档流；导航列在 <760px 换成触发行+抽屉。 */
+/* 窄窗：内容内边距收窄；导航列在 <760px 换成触发行+抽屉。 */
 @media (max-width: 900px) {
   .dsh-settings-page__content { padding: var(--dsh-ui-space-4) var(--dsh-ui-space-3) var(--dsh-ui-space-8); }
-  .dsh-writing-settings { grid-template-columns: minmax(0, 1fr); }
-  .dsh-settings-preview { position: static; }
-  .dsh-settings-preview__paper { max-width: none; }
 }
 
 /* ── 分区内容（自 legacy styles.ts 迁入）：行/块度量与控件高度的局部覆盖 ── */
 .radix-themes .dsh-settings-page { font: 400 var(--dsh-ui-text-base)/1.5 var(--dsh-ui-font-ui); color: var(--dsh-ui-text); --control-h: 34px; }
-.radix-themes .dsh-settings-section > :is(.settings-general,.models-page,.usage-page) { display: grid; gap: var(--dsh-ui-space-5); }
-.radix-themes .dsh-settings-page .settings-row { min-height: 56px; gap: var(--dsh-ui-space-4); padding-block: var(--dsh-ui-space-3); }
+.radix-themes .dsh-settings-section > :is(.settings-general,.models-page,.usage-page,.settings-shortcuts) { display: flex; flex-direction: column; gap: var(--dsh-ui-space-6); }
+.radix-themes .dsh-settings-page .settings-row { min-height: 52px; gap: var(--dsh-ui-space-4); padding-block: var(--dsh-ui-space-3); }
 .radix-themes .settings-row-title { font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-regular); }
 .radix-themes .settings-row-text { flex: 1; }
 .radix-themes .settings-row-description { font-size: var(--dsh-ui-text-sm); line-height: 1.5; color: var(--dsh-ui-muted); }
@@ -227,12 +250,16 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .radix-themes .about-error { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
 .radix-themes .app-mascot { display: block; height: auto; user-select: none; pointer-events: none; }
 .radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-block: var(--dsh-ui-space-2) var(--dsh-ui-space-3); }
+/* 行换行改由内容区容器宽度决定（content 即 container），窗口级媒体查询只管模型表单。 */
+@container (max-width: 520px) {
+  .radix-themes .dsh-settings-page .settings-row { align-items: flex-start; flex-direction: column; flex-wrap: wrap; gap: var(--dsh-ui-space-2); }
+  .radix-themes .dsh-settings-page .settings-block .dsh-slider-row { flex-wrap: wrap; }
+  .radix-themes .dsh-settings-page .settings-block .dsh-slider-row .dsh-slider { flex: 1 1 100%; }
+}
 @media(max-width:1100px) {
-  .radix-themes .dsh-settings-page .settings-row { flex-wrap: wrap; }
   .radix-themes .dsh-settings-page .models-writing-route { grid-template-columns: 96px minmax(0,1fr) 16px; }
 }
 @media(max-width:760px) {
-  .radix-themes .dsh-settings-page .settings-row { align-items: flex-start; flex-direction: column; gap: var(--dsh-ui-space-2); }
   .radix-themes .dsh-settings-page .models-writing-route { display: flex; }
   .radix-themes .dsh-settings-page .models-writing-route-controls { width: 100%; }
   .radix-themes .dsh-settings-page .models-field-row { grid-template-columns: minmax(0,1fr); }
@@ -240,9 +267,7 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 
 /* 写作/助手分区容器与排版预览行。 */
 .radix-themes .writing-settings,
-.radix-themes .assistant-settings { display: flex; flex-direction: column; gap: var(--dsh-ui-space-5); width: 100%; }
-.radix-themes .writing-settings .paper-typography .slider-row { width: 100%; padding-block: var(--dsh-ui-space-3); }
-.radix-themes .writing-settings .slider-value { font-variant-numeric: tabular-nums; }
+.radix-themes .assistant-settings { display: flex; flex-direction: column; gap: var(--dsh-ui-space-6); width: 100%; }
 .radix-themes .writing-progress-settings .goal-saving { display: inline-flex; align-items: center; margin-inline-start: 6px; color: var(--dsh-ui-muted); vertical-align: middle; }
 .radix-themes .writing-progress-settings .goal-saving .activity-dots { margin-inline-end: 0; }
 

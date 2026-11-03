@@ -1,6 +1,7 @@
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { useEffect, useState } from 'react'
-import { Card, Heading, Kbd, Text } from '../ui/index.ts'
+import { Card, Kbd, Text } from '../ui/index.ts'
+import { SettingsGroup } from './settings-layout.tsx'
 import { useLocale } from '../i18n/index.ts'
 import { runtimeShortcutHint, runtimeShortcutPlatform } from '../palette-shortcut.ts'
 import type { ShellCommandRegistry } from '../seats.ts'
@@ -99,15 +100,14 @@ export function ShortcutsSettings({ commands, renderSlot }: { commands?: ShellCo
       <td>{keys.split(' / ').map((key, i) => <span key={key}>{i > 0 ? ' / ' : ''}<Kbd>{runtimeShortcutHint(key)}</Kbd></span>)}</td>
     </tr>)}</tbody>
   </table>
-  return <section aria-label={locale === 'en' ? 'Keyboard shortcuts' : '快捷键'}>
+  return <section className="settings-shortcuts" aria-label={locale === 'en' ? 'Keyboard shortcuts' : '快捷键'}>
     <div data-dsh-plugin-surface="">{renderSlot?.('settings.general.item', {}, { only: 'shortcuts' })}</div>
     <Text as="p" size="2" color="gray" mb="4">{locale === 'en'
       ? 'Shortcuts apply to the focused area. Workspace commands require an open project; AI features must be enabled. Keys below follow your platform.'
       : '快捷键按当前焦点生效。工作区操作需要打开作品，AI 操作需要启用对应功能。下方按键随系统显示。'}</Text>
-    {all.map(group => <Card className="settings-block" key={group.title[0]}>
-      <Heading as="h3" size="3" mb="3">{group.title[language]}</Heading>
+    {all.map(group => <SettingsGroup key={group.title[0]} title={group.title[language]}>
       {renderRows(group.rows)}
-    </Card>)}
+    </SettingsGroup>)}
     <Card className="settings-block"><details>
       <summary>{locale === 'en' ? 'More editing and navigation shortcuts' : '更多编辑与光标快捷键'}</summary>
       {renderRows(advanced)}

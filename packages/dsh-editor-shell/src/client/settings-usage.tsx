@@ -5,7 +5,8 @@
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Box, Button, Card, Flex, Heading, Notice, Text } from '../ui/index.ts'
+import { Box, Button, Card, Flex, Notice, Text } from '../ui/index.ts'
+import { SettingsGroup } from './settings-layout.tsx'
 import { init, use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'
@@ -223,31 +224,22 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
   return (
     <section className="usage-page" aria-label={t('settings.usage')}>
       <Header />
-      <section className="usage-today settings-block" aria-label={text().todayHeading}>
-        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
-          {text().todayHeading}
-        </Heading>
+      <SettingsGroup title={text().todayHeading} className="usage-today" ariaLabel={text().todayHeading}>
         <div className="usage-cards">
           <UsageStatCard label={text().cacheHit} value={today?.cacheReadTokens ?? 0} />
           <UsageStatCard label={text().input} value={today?.inputTokens ?? 0} />
           <UsageStatCard label={text().output} value={today?.outputTokens ?? 0} />
           <UsageStatCard label={text().requests} value={today?.requests ?? 0} />
         </div>
-      </section>
-      <section className="usage-recent settings-block" aria-label={text().recentHeading}>
-        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
-          {text().recentHeading}
-        </Heading>
+      </SettingsGroup>
+      <SettingsGroup title={text().recentHeading} className="usage-recent" ariaLabel={text().recentHeading}>
         {!hasAny || series.length === 0
           ? <Text size="2" color="gray" className="usage-empty">
           {text().empty}
         </Text>
           : <UsageChart days={recent} series={series} />}
-      </section>
-      <section className="usage-log settings-block" aria-label={text().log}>
-        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
-          {text().log}
-        </Heading>
+      </SettingsGroup>
+      <SettingsGroup title={text().log} className="usage-log" ariaLabel={text().log}>
         {log.length === 0
           ? <Text size="2" color="gray" className="usage-empty">
           {text().logEmpty}
@@ -265,7 +257,7 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
             </Text>
           </li>)}
         </ul>}
-      </section>
+      </SettingsGroup>
     </section>
   );
 }

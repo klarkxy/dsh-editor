@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Button, Card, Flex, Heading, Notice, Text, TextArea } from '../ui/index.ts'
+import { Button, Flex, Notice, Text, TextArea } from '../ui/index.ts'
+import { SettingsGroup } from './settings-layout.tsx'
 import type { SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { AUTHOR_PREFERENCES_MAX_CHARS } from '../author-preferences.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
@@ -52,12 +53,7 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
 
   return (
     <section className="assistant-settings" aria-label={t('settings.assistant')}>
-      <Card className="settings-block">
-        <header className="settings-block-head">
-          <Heading as="h3" id="writing-author-pref" size="3" className="settings-block-title">
-            {t('writing.authorPref')}
-          </Heading>
-        </header>
+      <SettingsGroup title={t('writing.authorPref')} id="writing-author-pref">
         <Flex className="author-preferences" direction="column" gap="2">
           <TextArea
             value={authorDraft.value}
@@ -92,7 +88,7 @@ export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writ
             {t('common.saving')}
           </Fragment> : t('writing.saveAuthor')}
         </Button>
-      </Card>
+      </SettingsGroup>
       {writeFailure ? <Notice tone="danger">
         {writeFailure}
       </Notice> : null}

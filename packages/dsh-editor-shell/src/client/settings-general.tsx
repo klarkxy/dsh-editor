@@ -1,5 +1,6 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Card, Flex, Heading, Notice, Separator, Text } from '../ui/index.ts'
+import { Button, Notice } from '../ui/index.ts'
+import { SettingRow as Row, SettingsGroup } from './settings-layout.tsx'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
@@ -50,31 +51,8 @@ function usePreference<T>(scope: SettingsScope<{ preference: T }>, fallback: T):
   return [value, set, writable]
 }
 
-function Row(props: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
-      <Flex direction="column" className="settings-row-text" gap="1" minWidth="0">
-        <Text size="2" weight="medium" className="settings-row-title">
-          {props.title}
-        </Text>
-        {props.description ? <Text size="1" color="gray" className="settings-row-description">
-          {props.description}
-        </Text> : null}
-      </Flex>
-      {props.children}
-    </Flex>
-  );
-}
-
 export function SettingsBlock(props: { label: string; children: ReactNode }) {
-  return <Card className="settings-block">
-    <header className="settings-block-head">
-      <Heading as="h3" size="3" className="settings-block-title">
-        {props.label}
-      </Heading>
-    </header>
-    {props.children}
-  </Card>
+  return <SettingsGroup title={props.label}>{props.children}</SettingsGroup>
 }
 
 /** 外观与语言分区:语言 + 主题（ui-theme namespace,写契约不变）。 */
@@ -100,7 +78,6 @@ export function AppearanceSection(props: { ctx: ShellContext }) {
             options={[{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }]}
             onChange={(value) => setLocale(value as Locale)}
             aria-label={t('settings.language')} />} />
-        <Separator size="4" />
         <Row
           title={t('settings.appearance')}
           children={<SegmentedControl
@@ -180,7 +157,7 @@ export function AdvancedSection(props: {
       </SettingsBlock> : props.onRevealDeveloper ? <SettingsBlock label={t('settings.developer')}>
         <Button
           type="button"
-          variant="ghost"
+          variant="secondary"
           size="sm"
           className="settings-reveal-developer"
           onClick={props.onRevealDeveloper}>

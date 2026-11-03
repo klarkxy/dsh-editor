@@ -5,6 +5,7 @@
  * 配置、用量/关于/高级），Escape 或「返回写作」关闭并把焦点还给发起者。
  */
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -56,7 +57,7 @@ import {
 import { PLUGINS_SETTINGS_SLOT } from '../../root-registration.ts'
 import { titleBarDoubleClick } from '../../model/window-controls.ts'
 import { WindowControls } from '../../client/window-controls.tsx'
-import { Button, ChevronDownIcon, ChevronLeftIcon, Drawer, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
+import { Button, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, Drawer, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
 import { Button as SeatButton, Input as SeatInput } from '../../client/ui/index.ts'
 import './settings.styles.ts'
 
@@ -314,19 +315,21 @@ export function SettingsPage(props: SettingsPageProps) {
     return () => clearTimeout(timer)
   }, [navDrawerOpen])
 
-  const navTree = (onPick: (id: string) => void) => navGroups.map(group => <div key={group.label} className="dsh-settings-nav-group">
-    <div className="dsh-settings-nav-group__label" aria-hidden="true">{t(group.label)}</div>
-    {group.items.map(item => <ListRow
-      key={item.id}
-      label={t(item.label)}
-      leading={item.warn ? <WarningIcon /> : undefined}
-      selected={active === item.id}
-      onSelect={() => onPick(item.id)}
-      className="dsh-settings-nav-item"
-      data-warn={item.warn || undefined}
-      data-testid={`settings-nav-${item.id}`} />)}
-    {group.label === 'settings.plugins' ? <div className="dsh-settings-config">
-      <div className="dsh-settings-config__label">{t('plugins.configuration')}</div>
+  const navTree = (onPick: (id: string) => void) => navGroups.map(group => <Fragment key={group.label}>
+    <div className="dsh-settings-nav-group">
+      <div className="dsh-settings-nav-group__label" aria-hidden="true">{t(group.label)}</div>
+      {group.items.map(item => <ListRow
+        key={item.id}
+        label={t(item.label)}
+        leading={item.warn ? <WarningIcon /> : undefined}
+        selected={active === item.id}
+        onSelect={() => onPick(item.id)}
+        className="dsh-settings-nav-item"
+        data-warn={item.warn || undefined}
+        data-testid={`settings-nav-${item.id}`} />)}
+    </div>
+    {group.label === 'settings.plugins' ? <div className="dsh-settings-nav-group dsh-settings-config">
+      <div className="dsh-settings-nav-group__label" aria-hidden="true">{t('plugins.configuration')}</div>
       <SearchField
         aria-label={t('plugins.search')}
         placeholder={t('plugins.search')}
@@ -336,7 +339,6 @@ export function SettingsPage(props: SettingsPageProps) {
         onClear={() => setConfigQuery('')} />
       <ul className="dsh-settings-config__links">
         {ordinaryLinks.map(link => <li key={link.id}><ListRow
-          density="compact"
           label={link.label}
           selected={active === link.id}
           onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager'); return } onPick(link.id) }}
@@ -344,16 +346,15 @@ export function SettingsPage(props: SettingsPageProps) {
         {!filteredLinks.length ? <li><p className="dsh-settings-config__empty">{t('plugins.empty')}</p></li> : null}
       </ul>
       {advancedLinks.length ? <details className="dsh-settings-config__advanced" open={configQuery.trim() ? true : undefined}>
-        <summary>{t('plugins.catalogAdvanced')}</summary>
+        <summary><ChevronRightIcon size="sm" />{t('plugins.catalogAdvanced')}</summary>
         <ul className="dsh-settings-config__links">{advancedLinks.map(link => <li key={link.id}><ListRow
-          density="compact"
           label={link.label}
           selected={active === link.id}
           onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager') } else onPick(link.id) }}
           className="dsh-settings-nav-item" /></li>)}</ul>
       </details> : null}
     </div> : null}
-  </div>)
+  </Fragment>)
 
   const section = (id: string, title: string, children: ReactNode, opts?: { tools?: ReactNode }) => (
     <div hidden={active !== id} className="dsh-settings-section" data-testid={`settings-section-${id}`}>

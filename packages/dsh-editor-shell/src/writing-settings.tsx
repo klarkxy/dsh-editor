@@ -4,19 +4,19 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from 'react';
-import { Button, Card, Flex, Heading, Kbd, Notice, Separator, Text } from './ui/index.ts'
+import { Button, Kbd, Notice, Text } from './ui/index.ts'
 import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { COMPLETION_DELAY, normalizeWritingEffort, normalizeWritingModelRoute, object, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { normalizeTypography, typographyCssVariables } from 'dsh-manuscript/client/editor-core'
 import { t, useLocale } from './i18n/index.ts'
 import { ActivityDots } from './client/ui/index.ts'
-import { RadioGroup, SegmentedControl, Slider, Switch } from './ui/index.ts'
+import { SegmentedControl, Slider, Switch } from './ui/index.ts'
 import { Select } from './client/select.tsx'
 import type { CSSProperties } from 'react'
 import { runtimeShortcutHint } from './palette-shortcut.ts'
+import { SettingRow, SettingsGroup } from './client/settings-layout.tsx'
 
 
 export { WRITING_SETTINGS_NAMESPACE, normalizeWritingEffort, normalizeWritingModelRoute, writingModelRouteValue, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -221,22 +221,6 @@ export type WritingSettingsSlots = {
  * 分区；右侧预览与编辑器共用同一组 --paper-* 排版变量，不复制第二套排版实现。
  * 作者侧写不对作者暴露设置入口,由助手观察后静默写入,超限时自动淘汰最旧的自动条目。
  */
-function SettingRow(props: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
-      <Flex direction="column" className="settings-row-text" gap="1" minWidth="0">
-        <Text size="2" weight="medium" className="settings-row-title">
-          {props.title}
-        </Text>
-        {props.description ? <Text size="1" color="gray" className="settings-row-description">
-          {props.description}
-        </Text> : null}
-      </Flex>
-      {props.children}
-    </Flex>
-  )
-}
-
 /** 预览消费与编辑器相同的 --paper-* 变量:缩进、段距、行高、字号、字族、版心宽。 */
 function ManuscriptPreview(props: { preferences: WritingPreferences }) {
   const resolved = normalizeTypography(writingTypography(props.preferences))
@@ -336,124 +320,107 @@ export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
 
   return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <div className="dsh-writing-settings">
-        <div className="dsh-writing-settings__controls">
-          <Card className="settings-block">
-            <header className="settings-block-head">
-              <Heading as="h3" size="3" className="settings-block-title">
-                {t('writing.completion')}
-              </Heading>
-            </header>
-            <RadioGroup
-              value={values.completion}
-              name="completion-preference"
-              aria-label={t('writing.completion')}
-              disabled={saving !== null}
-              options={[
-                { value: 'manual', label: t('writing.manualOnly') },
-                { value: 'pause', label: t('writing.pauseHint') },
-              ]}
-              onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])} />
-            {values.completion === 'pause' ? <SettingRow title={t('writing.completionDelay')}>
-              <Select
-                value={String(values.completionDelayMs ?? COMPLETION_DELAY.default)}
-                options={Array.from(new Set([500, 1000, 1500, 2000, 3000, 5000, values.completionDelayMs ?? COMPLETION_DELAY.default])).sort((a, b) => a - b).map(value => ({ value: String(value), label: t('writing.seconds', { seconds: value / 1000 }) }))}
-                disabled={saving !== null}
-                onChange={value => void update('completionDelayMs', Number(value))}
-                aria-label={t('writing.completionDelay')} />
-            </SettingRow> : null}
-            {values.completion === 'pause' ? <Text as="p" size="2" color="gray">{t('writing.delayHelp')}</Text> : null}
-            <Flex direction="column" align="start" gap="2" mt="3">
-              <Text size="2"><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')}</Text>
-              <Text size="2"><Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</Text>
-              {onOpenShortcuts ? <Button variant="ghost" className="settings-link-button" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
-            </Flex>
-          </Card>
-          <Card className="paper-typography settings-block">
-            <header className="settings-block-head">
-              <Heading as="h3" size="3" className="settings-block-title">
-                {t('writing.paper')}
-              </Heading>
-            </header>
-            <Switch
-              id="writing-typewriter"
-              label={t('writing.typewriter')}
-              shortcut={runtimeShortcutHint('Mod+Alt+T')}
-              checked={values.typewriter}
-              onCheckedChange={(next) => void update('typewriter', next)} />
-            <Switch
-              id="writing-focus-paragraph"
-              label={t('writing.focusParagraph')}
-              shortcut={runtimeShortcutHint('Mod+Alt+P')}
-              checked={values.focusParagraph}
-              onCheckedChange={(next) => void update('focusParagraph', next)} />
-            <Separator size="4" />
-            <div className="writing-slider-group">
-              <Slider
-                label={t('writing.fontSizeAria')}
-                format={(value) => `${Math.round(value)}px`}
-                value={[values.fontSize]}
-                min={PAPER_FONT_SIZE.min}
-                max={PAPER_FONT_SIZE.max}
-                step={1}
-                onValueChange={(next) => { if (next[0] !== undefined) void update('fontSize', next[0]) }} />
-              <Slider
-                label={t('writing.lineHeightAria')}
-                format={(value) => value.toFixed(1)}
-                value={[values.lineHeight]}
-                min={PAPER_LINE_HEIGHT.min}
-                max={PAPER_LINE_HEIGHT.max}
-                step={0.1}
-                onValueChange={(next) => { if (next[0] !== undefined) void update('lineHeight', next[0]) }} />
-              <Slider
-                label={t('writing.paragraphSpacingAria')}
-                format={(value) => `${value.toFixed(2)}em`}
-                value={[values.paragraphSpacing]}
-                min={PAPER_PARAGRAPH_SPACING.min}
-                max={PAPER_PARAGRAPH_SPACING.max}
-                step={0.05}
-                onValueChange={(next) => { if (next[0] !== undefined) void update('paragraphSpacing', next[0]) }} />
-            </div>
-            <Separator size="4" />
-            <SettingRow title={t('writing.font')}>
-              <SegmentedControl
-                value={values.fontFamily}
-                options={[
-                  { value: 'serif', label: t('writing.serif') },
-                  { value: 'sans', label: t('writing.sans') },
-                  { value: 'mono', label: t('writing.mono') },
-                ]}
-                onValueChange={(value) => void update('fontFamily', value as PaperFontFamily)}
-                aria-label={t('writing.font')} />
-            </SettingRow>
-            <SettingRow title={t('writing.paperWidth')}>
-              <SegmentedControl
-                value={values.paperWidth}
-                options={[
-                  { value: 'narrow', label: t('writing.narrow') },
-                  { value: 'medium', label: t('writing.medium') },
-                  { value: 'wide', label: t('writing.wide') },
-                ]}
-                onValueChange={(value) => void update('paperWidth', value as PaperWidth)}
-                aria-label={t('writing.paperWidth')} />
-            </SettingRow>
-            <Separator size="4" />
-            <Switch
-              id="writing-first-line-indent"
-              label={t('writing.firstLineIndent')}
-              description={t('writing.firstLineIndentHint')}
-              checked={values.firstLineIndent}
-              onCheckedChange={(next) => void update('firstLineIndent', next)} />
-            <Switch
-              id="writing-center-section-marks"
-              label={t('writing.centerSectionMarks')}
-              description={t('writing.centerSectionMarksHint')}
-              checked={values.centerSectionMarks}
-              onCheckedChange={(next) => void update('centerSectionMarks', next)} />
-          </Card>
-        </div>
-        <ManuscriptPreview preferences={values} />
-      </div>
+      <SettingsGroup title={t('writing.completion')}>
+        <SettingRow title={t('writing.completionTrigger')}>
+          <SegmentedControl
+            aria-label={t('writing.completion')}
+            value={values.completion}
+            disabled={saving !== null}
+            options={[
+              { value: 'manual', label: t('writing.manualOnly') },
+              { value: 'pause', label: t('writing.pauseHint') },
+            ]}
+            onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])} />
+        </SettingRow>
+        {values.completion === 'pause' ? <SettingRow title={t('writing.completionDelay')} description={t('writing.delayHelp')}>
+          <Select
+            value={String(values.completionDelayMs ?? COMPLETION_DELAY.default)}
+            options={Array.from(new Set([500, 1000, 1500, 2000, 3000, 5000, values.completionDelayMs ?? COMPLETION_DELAY.default])).sort((a, b) => a - b).map(value => ({ value: String(value), label: t('writing.seconds', { seconds: value / 1000 }) }))}
+            disabled={saving !== null}
+            onChange={value => void update('completionDelayMs', Number(value))}
+            aria-label={t('writing.completionDelay')} />
+        </SettingRow> : null}
+        <SettingRow
+          title={t('writing.completionShortcuts')}
+          description={<><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')} · <Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</>}>
+          {onOpenShortcuts ? <Button variant="ghost" className="settings-link-button" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
+        </SettingRow>
+      </SettingsGroup>
+      <SettingsGroup title={t('writing.focusGroup')}>
+        <Switch
+          id="writing-typewriter"
+          label={t('writing.typewriter')}
+          shortcut={runtimeShortcutHint('Mod+Alt+T')}
+          checked={values.typewriter}
+          onCheckedChange={(next) => void update('typewriter', next)} />
+        <Switch
+          id="writing-focus-paragraph"
+          label={t('writing.focusParagraph')}
+          shortcut={runtimeShortcutHint('Mod+Alt+P')}
+          checked={values.focusParagraph}
+          onCheckedChange={(next) => void update('focusParagraph', next)} />
+      </SettingsGroup>
+      <SettingsGroup title={t('writing.paper')}>
+        <div className="settings-preview-slot"><ManuscriptPreview preferences={values} /></div>
+        <SettingRow title={t('writing.font')}>
+          <SegmentedControl
+            value={values.fontFamily}
+            options={[
+              { value: 'serif', label: t('writing.serif') },
+              { value: 'sans', label: t('writing.sans') },
+              { value: 'mono', label: t('writing.mono') },
+            ]}
+            onValueChange={(value) => void update('fontFamily', value as PaperFontFamily)}
+            aria-label={t('writing.font')} />
+        </SettingRow>
+        <Slider
+          label={t('writing.fontSizeAria')}
+          format={(value) => `${Math.round(value)}px`}
+          value={[values.fontSize]}
+          min={PAPER_FONT_SIZE.min}
+          max={PAPER_FONT_SIZE.max}
+          step={1}
+          onValueChange={(next) => { if (next[0] !== undefined) void update('fontSize', next[0]) }} />
+        <Slider
+          label={t('writing.lineHeightAria')}
+          format={(value) => value.toFixed(1)}
+          value={[values.lineHeight]}
+          min={PAPER_LINE_HEIGHT.min}
+          max={PAPER_LINE_HEIGHT.max}
+          step={0.1}
+          onValueChange={(next) => { if (next[0] !== undefined) void update('lineHeight', next[0]) }} />
+        <Slider
+          label={t('writing.paragraphSpacingAria')}
+          format={(value) => `${Number(value.toFixed(2))}em`}
+          value={[values.paragraphSpacing]}
+          min={PAPER_PARAGRAPH_SPACING.min}
+          max={PAPER_PARAGRAPH_SPACING.max}
+          step={0.05}
+          onValueChange={(next) => { if (next[0] !== undefined) void update('paragraphSpacing', next[0]) }} />
+        <SettingRow title={t('writing.paperWidth')}>
+          <SegmentedControl
+            value={values.paperWidth}
+            options={[
+              { value: 'narrow', label: t('writing.narrow') },
+              { value: 'medium', label: t('writing.medium') },
+              { value: 'wide', label: t('writing.wide') },
+            ]}
+            onValueChange={(value) => void update('paperWidth', value as PaperWidth)}
+            aria-label={t('writing.paperWidth')} />
+        </SettingRow>
+        <Switch
+          id="writing-first-line-indent"
+          label={t('writing.firstLineIndent')}
+          description={t('writing.firstLineIndentHint')}
+          checked={values.firstLineIndent}
+          onCheckedChange={(next) => void update('firstLineIndent', next)} />
+        <Switch
+          id="writing-center-section-marks"
+          label={t('writing.centerSectionMarks')}
+          description={t('writing.centerSectionMarksHint')}
+          checked={values.centerSectionMarks}
+          onCheckedChange={(next) => void update('centerSectionMarks', next)} />
+      </SettingsGroup>
       {writeFailure ? <Notice tone="danger">
         {writeFailure}
       </Notice> : null}
