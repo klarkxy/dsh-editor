@@ -42,6 +42,10 @@
 # agent that inspects the harness itself). It does not belong in a writing app.
 - id: harness-dev-context
   disabled: true
+# The official plugin-manager page is replaced by the editor's own plugin
+# sections; the plugin-manager service (install/enable/config authority) stays.
+- id: ui-plugin-manager
+  disabled: true
 # DSH 0.2.1 adds official region-local "More" menus for plugin launchers. The
 # editor takes over the layout chrome those regions live in.
 - id: entry-customization

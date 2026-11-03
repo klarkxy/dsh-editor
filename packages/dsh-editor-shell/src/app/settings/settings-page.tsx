@@ -28,8 +28,10 @@ import { normalizeAuthorPreferences } from '../../author-preferences.ts'
 import { completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from '../../model/settings-assistant.ts'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings, type DeveloperSettings } from '../../developer-settings.ts'
 import { composeSettingsNavGroups, isPluginsSection, persistTab } from '../../model/settings.ts'
-import { configTargetOf, mergeSections, secondaryConfigKeys, type ConfigLink } from '../../model/plugins-page.ts'
-import { advancedCatalogCard, type PluginCatalogCard } from '../../model/plugins-catalog.ts'
+import { configTargetOf, mergeSections, type ConfigLink } from '../../model/plugins-page.ts'
+import { type PluginCatalogCard } from '../../model/plugins-catalog.ts'
+import { PluginDetailPage } from '../../client/plugin-detail.tsx'
+import { PluginInstallDialog } from '../../client/plugin-install-dialog.tsx'
 import { AdvancedSection, AppearanceSection, AssistantBusyEnterRow, useDeveloperMode } from '../../client/settings-general.tsx'
 import { AssistantSettings } from '../../client/settings-assistant.tsx'
 import { SettingsChatModelRoute, SettingsEditorModelsSection, SettingsModelsSection } from '../../client/settings-models.tsx'
@@ -47,32 +49,43 @@ import { PluginModelSettingsSurface, usePluginModelSettings } from '../../client
 import { PluginConfigurationPage, usePluginConfigurations } from '../../client/plugin-configurations.tsx'
 import type { PluginConfigurationEntry } from '../../model/plugin-configurations.ts'
 import { PluginsCatalog, usePluginCatalog, useWritingPresets } from '../../client/plugins-catalog.tsx'
-import {
-  NATIVE_PLUGIN_MANAGER_KEY,
-  NATIVE_PLUGIN_MANAGER_SEAT,
-  nativePluginManagerBridge,
-  nativePluginManagerVersion,
-  subscribeNativePluginManager,
-} from '../../client/native-plugin-manager-seat.ts'
+import { pluginManagerStoreOf, usePluginManager } from '../../client/plugin-manager.ts'
 import { PLUGINS_SETTINGS_SLOT } from '../../root-registration.ts'
 import { titleBarDoubleClick } from '../../model/window-controls.ts'
 import { WindowControls } from '../../client/window-controls.tsx'
-import { Button, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, Drawer, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
+import { Button, ChevronDownIcon, ChevronLeftIcon, Drawer, ListRow, scheduleReturnFocus, SearchField, takeInvokerOnOpen, WarningIcon } from '../../ui/index.ts'
 import { Button as SeatButton, Input as SeatInput } from '../../client/ui/index.ts'
 import './settings.styles.ts'
 
-/** Cordis throws on uninjected service properties; a missing manager is a route change, not a crash. */
-function pluginNavigationOf(ctx: unknown): { openBundle?(packageName: string): unknown } | undefined {
-  if (!ctx || typeof ctx !== 'object') return undefined
-  const record = ctx as Record<string, unknown> & { get?: (name: string) => unknown }
-  try {
-    const value = record.pluginNavigation
-    if (value && typeof value === 'object') return value as { openBundle?(packageName: string): unknown }
-  } catch { /* Cordis throws on uninjected properties; fall through to ctx.get. */ }
-  try {
-    const value = typeof record.get === 'function' ? record.get('pluginNavigation') : undefined
-    return value && typeof value === 'object' ? value as { openBundle?(packageName: string): unknown } : undefined
-  } catch { return undefined }
+/** The discovery panel consumes the official inventory shape; the store projects bundles onto it. */
+function useManagerInventory(store: ReturnType<typeof pluginManagerStoreOf>): {
+  getSnapshot(): { status: string; packages: readonly { name: string; installed: boolean; optional: boolean; enabled: boolean }[]; install?: { phase: string } }
+  subscribe(listener: () => void): () => void
+} | undefined {
+  return useMemo(() => {
+    if (!store) return undefined
+    /* useSyncExternalStore compares snapshot identity; cache the projection on
+       the store's own immutable snapshot so identity is stable between ticks. */
+    let cached: { snap: unknown; out: { status: string; packages: readonly { name: string; installed: boolean; optional: boolean; enabled: boolean }[]; install: { phase: string } } } | undefined
+    return {
+      getSnapshot: () => {
+        const snap = store.getSnapshot()
+        if (cached?.snap !== snap) {
+          const phase = snap.install.phase === 'settled' ? 'done' : snap.install.phase === 'unknown' ? 'unconfirmed' : snap.install.phase
+          cached = {
+            snap,
+            out: {
+              status: snap.status,
+              packages: snap.bundles.map(bundle => ({ name: bundle.name, installed: bundle.installed, optional: bundle.optional, enabled: bundle.enabled })),
+              install: { phase },
+            },
+          }
+        }
+        return cached.out
+      },
+      subscribe: (listener: () => void) => store.subscribe(listener),
+    }
+  }, [store])
 }
 
 export type SettingsPageProps = {
@@ -100,12 +113,12 @@ export function SettingsPage(props: SettingsPageProps) {
   const models = usePluginModelSettings(props.ctx, locale)
   const catalog = usePluginCatalog(props.ctx)
   const presets = useWritingPresets(props.ctx)
-  const subscribeManager = useCallback((listener: () => void) => subscribeNativePluginManager(props.ctx, listener), [props.ctx])
-  const managerVersion = useCallback(() => nativePluginManagerVersion(props.ctx), [props.ctx])
-  useSyncExternalStore(subscribeManager, managerVersion, managerVersion)
-  const manager = nativePluginManagerBridge(props.ctx)
+  const managerStore = pluginManagerStoreOf(props.ctx)
+  const { snapshot: managerSnapshot } = usePluginManager(props.ctx)
+  const inventory = useManagerInventory(managerStore)
   const [managerError, setManagerError] = useState('')
-  const [configQuery, setConfigQuery] = useState('')
+  const [installOpen, setInstallOpen] = useState(false)
+  const [installRequest, setInstallRequest] = useState<{ spec?: string; inspect: boolean } | undefined>()
   const [installedQuery, setInstalledQuery] = useState('')
   const [note, setNote] = useState('')
   const [aboutBusy, setAboutBusy] = useState(false)
@@ -206,7 +219,8 @@ export function SettingsPage(props: SettingsPageProps) {
   const assistantEnabled = props.assistant !== false
   const navGroups = composeSettingsNavGroups(assistantEnabled)
   const fixedIds = new Set(navGroups.flatMap(group => group.items.map(item => item.id)))
-  const known = fixedIds.has(props.section as never) || links.some(link => link.id === props.section)
+  const known = fixedIds.has(props.section as never) || (typeof props.section === 'string' && props.section.startsWith('plugin:'))
+    || links.some(link => link.id === props.section)
   const active = known ? props.section : 'writing'
   const activeLink = links.find(link => link.id === active)
   const activeModel = models.sections.find(entry => 'model:' + entry.id === active)
@@ -222,13 +236,10 @@ export function SettingsPage(props: SettingsPageProps) {
   if (!mountedRef.current.has(active)) mountedRef.current.add(active)
   const mounted = (id: string) => isPluginsSection(id) || mountedRef.current.has(id)
 
-  const filteredLinks = links.filter(link => link.label.toLocaleLowerCase().includes(configQuery.trim().toLocaleLowerCase()))
   const sections = mergeSections(catalog.sections, official.entries, links)
-  const advancedLink = (link: ConfigLink) => sections.some(section => section.id !== 'user' && section.items.some(card =>
-    configTargetOf(card, links) === link.id && advancedCatalogCard(card)))
-  const ordinaryLinks = filteredLinks.filter(link => !advancedLink(link))
-  const advancedLinks = filteredLinks.filter(advancedLink)
-  const configKeys = secondaryConfigKeys(sections, links)
+  /* 配置页只从插件详情进入；没有任何卡片映射过去的链接保留为「其他插件配置」。 */
+  const orphanLinks = links.filter(link => !sections.some(section => section.items.some(card =>
+    configTargetOf(card, links) === link.id)))
 
   /* 安装/卸载后回到已安装或发现时刷新目录，不让清单停在旧状态。 */
   const seenActive = useRef(active)
@@ -237,40 +248,33 @@ export function SettingsPage(props: SettingsPageProps) {
     seenActive.current = active
     if ((active === 'plugins-installed' || active === 'plugins-discovery') && previous !== active) catalog.reload()
   }, [active, catalog.reload])
+  useEffect(() => {
+    if (!managerStore) return
+    let bundles = managerStore.getSnapshot().bundles
+    return managerStore.subscribe(() => {
+      const next = managerStore.getSnapshot().bundles
+      if (next === bundles) return
+      bundles = next
+      catalog.reload()
+    })
+  }, [managerStore, catalog.reload])
   useLayoutEffect(() => { contentRef.current?.scrollTo({ top: 0 }) }, [active])
 
   const selectSection = (id: string) => select(id)
   const openDetail = (card: PluginCatalogCard) => {
-    const navigation = pluginNavigationOf(props.ctx)
-    if (card.packageName && typeof navigation?.openBundle === 'function') {
-      try {
-        navigation.openBundle(card.packageName)
-        // openBundle only switches the manager's own view: bring the manager
-        // page up too, or the detail opens behind the hidden seat.
-        selectSection('plugins-manager')
-        return
-      } catch { /* An absent detail route falls back to the manager page. */ }
-    }
-    selectSection('plugins-manager')
+    if (card.packageName) { selectSection(`plugin:${card.packageName}`); return }
+    const target = configTargetOf(card, links)
+    selectSection(target ?? 'plugins-installed')
   }
+  /* 添加插件对话框：发现页预填 spec 直接检查；未安装官方卡的开关也走这里装。 */
   const openInstall = (spec?: string) => {
-    selectSection('plugins-manager')
-    try {
-      const live = nativePluginManagerBridge(props.ctx)
-      setManagerError(live?.openInstall(spec) ? '' : t('plugins.unavailable'))
-    } catch { setManagerError(t('plugins.unavailable')) }
+    setManagerError('')
+    setInstallRequest(spec === undefined ? { inspect: false } : { spec, inspect: true })
+    setInstallOpen(true)
   }
-  /* Plugin configuration pages live in the official manager's own slot context
-     (the root entry may not render them), so their entries jump there. */
-  const openEntryInManager = (entry: PluginConfigurationEntry) => {
-    const navigation = pluginNavigationOf(props.ctx)
-    const packageName = entry.slot === 'plugins.bundle.config'
-      ? entry.entryKey
-      : entry.slot === 'plugins.row.config' ? entry.entryKey?.split('#')[0] : undefined
-    if (packageName && typeof navigation?.openBundle === 'function') {
-      try { navigation.openBundle(packageName) } catch { /* fall through to the manager page */ }
-    }
-    selectSection('plugins-manager')
+  const toggleCard = (card: PluginCatalogCard, enabled: boolean) => {
+    if (enabled && card.installed === false && card.installSpec) { openInstall(card.installSpec); return }
+    void catalog.toggle(card, enabled)
   }
   const openConfigFile = async () => {
     setNote('')
@@ -328,32 +332,6 @@ export function SettingsPage(props: SettingsPageProps) {
         data-warn={item.warn || undefined}
         data-testid={`settings-nav-${item.id}`} />)}
     </div>
-    {group.label === 'settings.plugins' ? <div className="dsh-settings-nav-group dsh-settings-config">
-      <div className="dsh-settings-nav-group__label" aria-hidden="true">{t('plugins.configuration')}</div>
-      <SearchField
-        aria-label={t('plugins.search')}
-        placeholder={t('plugins.search')}
-        clearLabel={t('search.close')}
-        value={configQuery}
-        onChange={setConfigQuery}
-        onClear={() => setConfigQuery('')} />
-      <ul className="dsh-settings-config__links">
-        {ordinaryLinks.map(link => <li key={link.id}><ListRow
-          label={link.label}
-          selected={active === link.id}
-          onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager'); return } onPick(link.id) }}
-          className="dsh-settings-nav-item" /></li>)}
-        {!filteredLinks.length ? <li><p className="dsh-settings-config__empty">{t('plugins.empty')}</p></li> : null}
-      </ul>
-      {advancedLinks.length ? <details className="dsh-settings-config__advanced" open={configQuery.trim() ? true : undefined}>
-        <summary><ChevronRightIcon size="sm" />{t('plugins.catalogAdvanced')}</summary>
-        <ul className="dsh-settings-config__links">{advancedLinks.map(link => <li key={link.id}><ListRow
-          label={link.label}
-          selected={active === link.id}
-          onSelect={() => { if (link.entry) { openEntryInManager(link.entry); onPick('plugins-manager') } else onPick(link.id) }}
-          className="dsh-settings-nav-item" /></li>)}</ul>
-      </details> : null}
-    </div> : null}
   </Fragment>)
 
   const section = (id: string, title: string, children: ReactNode, opts?: { tools?: ReactNode }) => (
@@ -429,23 +407,31 @@ export function SettingsPage(props: SettingsPageProps) {
         </>)}
         {section('appearance', t('settings.appearanceTitle'), <AppearanceSection ctx={props.ctx} />)}
         {section('shortcuts', t('settings.shortcuts'), <ShortcutsSettings commands={props.commands} renderSlot={props.renderSlot} />)}
-        {section('plugins-installed', t('settings.pluginsInstalled'), <PluginsCatalog
-          status={catalog.status}
-          sections={sections}
-          error={catalog.error}
-          query={installedQuery}
-          pending={catalog.pending}
-          actionError={catalog.actionError}
-          configKeys={configKeys}
-          presets={presets.presets}
-          presetError={presets.error}
-          presetPending={presets.pending}
-          restartRequired={catalog.restartRequired || presets.restartRequired}
-          onRetry={catalog.reload}
-          onToggle={(card, enabled) => { void catalog.toggle(card, enabled) }}
-          onTogglePreset={(preset, enabled) => { void presets.setEnabled(preset, enabled) }}
-          onConfigure={openDetail}
-          onDetail={openDetail} />, {
+        {section('plugins-installed', t('settings.pluginsInstalled'), <>
+          <PluginsCatalog
+            status={catalog.status}
+            sections={sections}
+            error={catalog.error}
+            query={installedQuery}
+            pending={catalog.pending}
+            actionError={catalog.actionError}
+            presets={presets.presets}
+            presetError={presets.error}
+            presetPending={presets.pending}
+            restartRequired={catalog.restartRequired || presets.restartRequired}
+            installing={managerSnapshot.install.phase === 'starting' || managerSnapshot.install.phase === 'running' || managerSnapshot.install.phase === 'cancelling'}
+            onRetry={catalog.reload}
+            onToggle={toggleCard}
+            onTogglePreset={(preset, enabled) => { void presets.setEnabled(preset, enabled) }}
+            onConfigure={openDetail}
+            onDetail={openDetail} />
+          {orphanLinks.length ? <div className="dsh-settings-nav-group plugins-orphan-config">
+            <div className="dsh-settings-nav-group__label" aria-hidden="true">{t('plugins.otherConfig')}</div>
+            {orphanLinks.map(link => <ListRow key={link.id} label={link.label}
+              onSelect={() => selectSection(link.id)} className="dsh-settings-nav-item"
+              data-testid={`plugins-orphan-${link.id}`} />)}
+          </div> : null}
+        </>, {
           tools: <>
             <SearchField
               data-testid="plugins-catalog-search"
@@ -455,25 +441,43 @@ export function SettingsPage(props: SettingsPageProps) {
               value={installedQuery}
               onChange={setInstalledQuery}
               onClear={() => setInstalledQuery('')} />
-            <Button size="sm" data-testid="plugins-page-add-plugin" onClick={() => openInstall()}>{t('plugins.addPlugin')}</Button>
+            {(managerSnapshot.install.phase === 'starting' || managerSnapshot.install.phase === 'running' || managerSnapshot.install.phase === 'cancelling')
+              ? <Button size="sm" data-testid="plugins-page-install-busy" onClick={() => setInstallOpen(true)}>{t('plugins.installBusy')}</Button>
+              : <Button size="sm" data-testid="plugins-page-add-plugin" onClick={() => openInstall()}>{t('plugins.addPlugin')}</Button>}
           </>,
         })}
         <div hidden={active !== 'plugins-discovery'} className="dsh-settings-section" data-testid="plugins-discovery">
           <h2 className="dsh-settings-section__title" tabIndex={-1}>{t('plugins.navDiscovery')}</h2>
           <PluginSettingsContent contribution={props.renderSlot
-            ? props.renderSlot(PLUGINS_SETTINGS_SLOT, { Button: SeatButton, Input: SeatInput, inventory: manager?.inventory,
+            ? props.renderSlot(PLUGINS_SETTINGS_SLOT, { Button: SeatButton, Input: SeatInput, inventory,
               onInstall: openInstall, onOpen: (packageName: string) => openDetail({ key: `bundle:${packageName}`, packageName,
                 title: '', description: '', badges: [], action: 'detail' }) })
             : props.plugins} fallback={<p className="dsh-settings-error">{t('plugins.unavailable')}</p>} />
         </div>
-        {/* The official manager stays mounted while hidden: its pluginNavigation service must survive. */}
-        <div hidden={active !== 'plugins-manager'} className="dsh-settings-section" data-testid="plugins-manager-seat">
-          <h2 className="dsh-settings-section__title" tabIndex={-1}>{t('plugins.navManager')}</h2>
-          {managerError ? <p className="dsh-settings-error" role="alert">{managerError}</p> : null}
-          <div data-dsh-plugin-surface="">
-            {props.renderSlot ? props.renderSlot(NATIVE_PLUGIN_MANAGER_SEAT, {}, { entryKey: NATIVE_PLUGIN_MANAGER_KEY }) : <p className="dsh-settings-error">{t('plugins.unavailable')}</p>}
-          </div>
-        </div>
+        {active.startsWith('plugin:') && props.renderSlot ? <PluginDetailPage
+          key={active}
+          packageName={active.slice('plugin:'.length)}
+          ctx={props.ctx}
+          renderSlot={props.renderSlot}
+          entries={official.entries}
+          links={links}
+          catalogSections={sections}
+          legacy={legacy}
+          modelSections={models.sections}
+          zhihu={props.zhihu}
+          snapshot={managerSnapshot}
+          store={managerStore}
+          onBack={() => selectSection('plugins-installed')}
+          onInstall={openInstall}
+          configVersion={official.version}
+          renderModelSurface={(id) => <PluginModelSettingsSurface key={id} ctx={props.ctx} id={id}
+            renderSlot={props.renderSlot!} sessionId={props.sessionId} locale={locale}
+            renderProviders={() => <SettingsModelsSection ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} showWritingRoutes={false} />}
+            renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} />} />} /> : null}
+        <PluginInstallDialog open={installOpen} onOpenChange={setInstallOpen}
+          store={managerStore} snapshot={managerSnapshot} request={installRequest}
+          onConsumed={() => setInstallRequest(undefined)}
+          onOpenPlugin={(packageName) => selectSection(`plugin:${packageName}`)} />
         {section('usage', t('settings.usage'), <SettingsUsageSection ctx={props.ctx} />)}
         {section('about', t('settings.about'), <AboutSettingsSection active={active === 'about' && visible} onBusyChange={setAboutBusy} />)}
         {section('advanced', t('settings.advanced'), <AdvancedSection
@@ -537,3 +541,4 @@ export function SettingsWorkspace(props: SettingsPageProps & { open: boolean; ch
     </div>
   </div>
 }
+

@@ -1169,11 +1169,11 @@ try {
     const drawerState = await navDrawer.evaluate((el) => ({
       groups: [...el.querySelectorAll('.dsh-settings-nav-group__label')].map((g) => g.textContent.trim()),
       items: el.querySelectorAll('[data-testid^="settings-nav-"]').length,
-      search: Boolean(el.querySelector('.dsh-settings-config .dsh-search-field, .dsh-settings-config input')),
+      configGroup: Boolean(el.querySelector('.dsh-settings-config')),
     }))
     if (drawerState.groups.length < 4) failures.push(`settings/390: drawer nav groups ${JSON.stringify(drawerState.groups)}`)
-    if (drawerState.items < 11) failures.push(`settings/390: drawer nav incomplete (${drawerState.items} items)`)
-    if (!drawerState.search) failures.push('settings/390: drawer nav missing the config search')
+    if (drawerState.items < 10) failures.push(`settings/390: drawer nav incomplete (${drawerState.items} items)`)
+    if (drawerState.configGroup) failures.push('settings/390: drawer nav still renders the removed 插件配置 group')
     await navDrawer.locator(S.settingsNavSection('writing')).click()
     await navDrawer.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
     if (await navDrawer.isVisible().catch(() => false)) failures.push('settings/390: nav drawer did not close after selecting a section')

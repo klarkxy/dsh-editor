@@ -43,6 +43,10 @@ export type PluginCatalogCard = {
   /** Omit when the card carries no switch. */
   enabled?: boolean
   action: PluginCatalogAction
+  /** `false` marks an official bundle that is not installed yet. */
+  installed?: boolean
+  /** Registry spec to install when the card's switch is flipped on. */
+  installSpec?: string
 }
 export type PluginCatalogSectionId = 'official' | 'builtin' | 'user'
 export type PluginCatalogSection = { id: PluginCatalogSectionId; items: PluginCatalogCard[] }
@@ -124,6 +128,8 @@ function cardOf(value: unknown): PluginCatalogCard | null {
       : [],
     ...(typeof row.enabled === 'boolean' ? { enabled: row.enabled } : {}),
     action: ACTIONS.includes(row.action as PluginCatalogAction) ? row.action as PluginCatalogAction : 'detail',
+    ...(row.installed === false ? { installed: false as const } : {}),
+    ...(row.installed === false && typeof row.installSpec === 'string' && row.installSpec.trim() ? { installSpec: row.installSpec.trim() } : {}),
   }
 }
 
@@ -270,12 +276,34 @@ export type PluginCatalogBundle = {
 }
 
 /** The official ChangeResult receipt: writes can fail without failing the RPC. */
-export type ChangeReceipt = { changed?: boolean; application?: string; message?: string }
+export type IncompatiblePlugin = { name: string; version: string; runtimeVersion: string; requirements?: Record<string, string> }
+export type ChangeReceipt = {
+  changed?: boolean
+  application?: string
+  message?: string
+  /** Management error code (e.g. 'incompatible-version') for callers that branch on it. */
+  code?: string
+  incompatible?: IncompatiblePlugin[]
+}
 
 export function changeReceipt(value: unknown): ChangeReceipt {
   const row = recordOf(value)
   const error = recordOf(row.error)
   const warnings = Array.isArray(row.warnings) ? row.warnings.filter((item): item is string => typeof item === 'string') : []
+  const incompatible = Array.isArray(error.incompatible)
+    ? error.incompatible.flatMap((item): IncompatiblePlugin[] => {
+      const entry = recordOf(item)
+      const name = text(entry.name)
+      const version = text(entry.version)
+      const runtimeVersion = text(entry.runtimeVersion)
+      if (!name || !version || !runtimeVersion) return []
+      const requirements = recordOf(entry.requirements)
+      return [{
+        name, version, runtimeVersion,
+        ...(Object.keys(requirements).length ? { requirements: requirements as Record<string, string> } : {}),
+      }]
+    })
+    : undefined
   return {
     // `changed` reports a disk write, not success: an idempotent applied change may be false.
     changed: typeof row.changed === 'boolean' ? row.changed : undefined,
@@ -283,6 +311,8 @@ export function changeReceipt(value: unknown): ChangeReceipt {
     message: typeof error.diagnostic === 'string' && error.diagnostic
       ? error.diagnostic
       : (warnings[0] ?? (typeof error.code === 'string' ? error.code : undefined)),
+    ...(typeof error.code === 'string' ? { code: error.code } : {}),
+    ...(incompatible?.length ? { incompatible } : {}),
   }
 }
 

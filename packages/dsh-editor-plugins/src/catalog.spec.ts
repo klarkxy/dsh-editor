@@ -322,3 +322,55 @@ describe('plugin catalog classification', () => {
     expect(section(malformed, 'user')).toEqual([])
   })
 })
+
+describe('official bundles not installed by the distribution', () => {
+  it('lists an official not-installed bundle as an install switch card', () => {
+    const bundles = [...defaultBundles(), {
+      name: '@deepseek-ai/dsh-automation', official: true, installed: false, enabled: false,
+      availability: 'installation', installTarget: { spec: '@deepseek-ai/dsh-automation@1.2.0', version: '1.2.0' },
+    }]
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles, plugins: DEFAULT_PLUGINS })
+    const card = section(catalog, 'official').find((item) => item.packageName === '@deepseek-ai/dsh-automation')
+    expect(card).toMatchObject({
+      key: 'bundle:@deepseek-ai/dsh-automation', installed: false,
+      installSpec: '@deepseek-ai/dsh-automation@1.2.0', enabled: false, action: 'switch',
+    })
+    expect(card?.badges).not.toContain('experimental')
+  })
+
+  it('keeps an installation-supplied bundle without a target as a normal card', () => {
+    /* installed:false only means "not a profile dependency"; without an
+       installTarget the row is a normal switch card, like the voice bundle. */
+    const bundles = [...defaultBundles(),
+      { name: '@deepseek-ai/dsh-voice-supplied', official: true, installed: false, enabled: true, availability: 'installation' },
+      { name: '@scope/not-installed', official: false, installed: false, enabled: false,
+        installTarget: { spec: '@scope/not-installed@1.0.0', version: '1.0.0' } },
+    ]
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles, plugins: DEFAULT_PLUGINS })
+    const voice = section(catalog, 'official').find((card) => card.packageName === '@deepseek-ai/dsh-voice-supplied')
+    expect(voice).toMatchObject({ enabled: true, action: 'switch' })
+    expect(voice?.installed).toBeUndefined()
+    /* Non-official on-demand rows (installTarget only) stay out of user. */
+    expect(catalog.sections.flatMap((row) => row.items).some((card) => card.packageName === '@scope/not-installed')).toBe(false)
+  })
+
+  it('treats an enabled official row with an installTarget as a normal card', () => {
+    const bundles = [...defaultBundles(), {
+      name: '@deepseek-ai/dsh-automation', official: true, installed: false, enabled: true,
+      availability: 'installation', installTarget: { spec: '@deepseek-ai/dsh-automation@1.2.0', version: '1.2.0' },
+    }]
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles, plugins: DEFAULT_PLUGINS })
+    const card = section(catalog, 'official').find((item) => item.packageName === '@deepseek-ai/dsh-automation')
+    expect(card).toMatchObject({ enabled: true, action: 'switch' })
+    expect(card?.installed).toBeUndefined()
+    expect(card?.installSpec).toBeUndefined()
+  })
+
+  it('keeps experimental bundle projection unchanged when installed', () => {
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
+    const voice = section(catalog, 'official').find((card) => card.packageName === EXPERIMENTAL_BUNDLES[0])
+    expect(voice?.installed).toBeUndefined()
+    expect(voice?.installSpec).toBeUndefined()
+    expect(voice?.badges).toContain('experimental')
+  })
+})

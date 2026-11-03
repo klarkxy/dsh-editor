@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, expandAllDetails, openPluginDetail, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -67,7 +67,7 @@ try {
     assert.deepEqual(navIds, [
       'settings-nav-writing', 'settings-nav-models', 'settings-nav-assistant',
       'settings-nav-appearance', 'settings-nav-shortcuts',
-      'settings-nav-plugins-installed', 'settings-nav-plugins-discovery', 'settings-nav-plugins-manager',
+      'settings-nav-plugins-installed', 'settings-nav-plugins-discovery',
       'settings-nav-usage', 'settings-nav-about', 'settings-nav-advanced',
     ], navIds.join(','))
     await shot(theme + '-settings')
@@ -79,18 +79,25 @@ try {
     await openWritingPresets(pluginPage)
     await shot(theme + '-overview-1440')
     if (theme === '浅色') {
-      const nativePanel = await openPluginManager(pluginPage)
-      const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()
-      await loop.click()
+      // Agent 循环 is an entry card; its row opens the official plugins.item page.
+      // Rows arrive with catalog.list; expand their disclosure only once they exist.
+      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').waitFor({ state: 'attached' })
+      await expandAllDetails(pluginPage.locator(S.pluginsCatalog))
+      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').click()
       const parallel = pluginPage.locator(S.pluginConfigAgentLoopParallel)
+      await parallel.waitFor()
       await parallel.fill('7')
       await pluginPage.getByRole('button', { name: '保存', exact: true }).click()
       await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(el => el.textContent?.trim() === '保存' && el.disabled), S.pluginsPageButton)
       await page.reload()
       await page.locator(S.pluginsTrigger).waitFor({timeout:90000})
       await page.locator(S.pluginsTrigger).click()
-      const reloadedPanel = await openPluginManager(pluginPage)
-      await reloadedPanel.getByText('Agent 循环', { exact: true }).first().click()
+      await showPluginList(pluginPage)
+      // Rows arrive with catalog.list; expand their disclosure only once they exist.
+      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').waitFor({ state: 'attached' })
+      await expandAllDetails(pluginPage.locator(S.pluginsCatalog))
+      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').click()
+      await pluginPage.locator(S.pluginConfigAgentLoopParallel).waitFor()
       assert.equal(await pluginPage.locator(S.pluginConfigAgentLoopParallel).inputValue(), '7')
       await shot('official-config-saved-after-reload')
       report.checks.push('official Agent loop configuration saved through Host and survived full reload')

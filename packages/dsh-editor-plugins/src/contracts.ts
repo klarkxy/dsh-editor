@@ -71,6 +71,13 @@ export type PluginCatalogCard = {
   /** Omit when the card carries no switch. */
   enabled?: boolean
   action: PluginCatalogAction
+  /**
+   * `false` on official bundles the distribution ships but has not installed;
+   * their switch installs instead of toggling. Absent means installed.
+   */
+  installed?: boolean
+  /** Registry spec from installTarget; present only when `installed === false`. */
+  installSpec?: string
 }
 export type PluginCatalogSectionId = 'official' | 'builtin' | 'user'
 export type PluginCatalogSection = { id: PluginCatalogSectionId; items: PluginCatalogCard[] }

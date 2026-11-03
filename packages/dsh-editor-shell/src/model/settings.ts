@@ -13,7 +13,6 @@ export type SettingsSectionId =
   | 'shortcuts'
   | 'plugins-installed'
   | 'plugins-discovery'
-  | 'plugins-manager'
   | 'usage'
   | 'about'
   | 'advanced'
@@ -44,7 +43,6 @@ const APP_GROUP: readonly SettingsNavItem[] = [
 const PLUGINS_GROUP: readonly SettingsNavItem[] = [
   { id: 'plugins-installed', label: 'settings.pluginsInstalled' },
   { id: 'plugins-discovery', label: 'settings.pluginsDiscovery' },
-  { id: 'plugins-manager', label: 'plugins.navManager' },
 ]
 
 const MORE_GROUP: readonly SettingsNavItem[] = [
@@ -68,13 +66,13 @@ export function composeSettingsNavGroups(assistantEnabled: boolean): SettingsNav
 
 const FIXED_SECTION_IDS: readonly string[] = [
   'writing', 'models', 'assistant', 'appearance', 'shortcuts',
-  'plugins-installed', 'plugins-discovery', 'plugins-manager',
+  'plugins-installed', 'plugins-discovery',
   'usage', 'about', 'advanced',
 ]
 
 /** 插件分组里的动态配置分区沿用插件页的 id 前缀规则。 */
 export function isPluginsSection(id: string): boolean {
-  return id === 'plugins-installed' || id === 'plugins-discovery' || id === 'plugins-manager'
+  return id === 'plugins-installed' || id === 'plugins-discovery'
     || id.startsWith('official:')
     || id.startsWith('model:')
     || id === 'zhihu'

@@ -87,7 +87,7 @@ export function usePluginConfigurations(ctx: unknown): { entries: PluginConfigur
   }), [ledger, stamp])
 }
 
-type PageProps = {
+export type PluginConfigurationPageProps = {
   ctx: ConfigurationContext
   renderSlot: SettingsRenderSlot
   entry: PluginConfigurationEntry
@@ -124,7 +124,7 @@ class ConfigurationBoundary extends Component<{ identity: string; children: Reac
   }
 }
 
-function renderConfiguration(props: PageProps, form?: object): ReactNode {
+function renderConfiguration(props: PluginConfigurationPageProps, form?: object): ReactNode {
   const selected = props.entry.slot === 'plugins.item' ? props.entry.namespace : props.entry.entryKey
   if (!selected) return null
   const owner = { view: 'page' as const, ...(form ? { form } : {}), close: props.onClose, locale: props.locale }
@@ -134,7 +134,7 @@ function renderConfiguration(props: PageProps, form?: object): ReactNode {
   return props.renderSlot(props.entry.slot, owner, opts) ?? null
 }
 
-function FormConfiguration(props: PageProps & { namespace: string }) {
+function FormConfiguration(props: PluginConfigurationPageProps & { namespace: string }) {
   const form = useMemo(() => props.ctx.configForms.get<Record<string, unknown>>(props.namespace), [props.ctx, props.namespace])
   const subscribe = useCallback((listener: () => void) => form.subscribe(listener), [form])
   const getSnapshot = useCallback(() => form.getSnapshot(), [form])
@@ -142,7 +142,7 @@ function FormConfiguration(props: PageProps & { namespace: string }) {
   return <>{renderConfiguration(props, { state, mutate: form.mutate.bind(form) })}</>
 }
 
-function ConfigurationOutlet(props: PageProps) {
+export function ConfigurationOutlet(props: PluginConfigurationPageProps) {
   const describe = useMemo(() => props.ctx.configForms.describe(), [props.ctx])
   const subscribe = useCallback((listener: () => void) => describe.subscribe(listener), [describe])
   const getSnapshot = useCallback(() => describe.getSnapshot(), [describe])
@@ -155,7 +155,7 @@ function ConfigurationOutlet(props: PageProps) {
     : <>{renderConfiguration(props)}</>
 }
 
-export function PluginConfigurationPage(props: PageProps) {
+export function PluginConfigurationPage(props: PluginConfigurationPageProps) {
   return <Box className="plugin-configuration-page" data-testid="plugin-configuration-page">
     <Heading as="h2" size="4" className="plugin-configuration-title">{props.entry.label}</Heading>
     <Box data-dsh-plugin-surface="">

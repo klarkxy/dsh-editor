@@ -101,15 +101,18 @@ export async function openListingSpec(discovery, specText) {
   return card
 }
 
-/** The official manager keeps its install, uninstall and script-approval UI on this page. */
-export async function openPluginManager(plugins) {
-  const nav = plugins.locator(S.pluginsNavManager)
-  if (await nav.isVisible()) await nav.click()
-  const seat = plugins.locator(S.pluginsManagerSeat)
+/** The official manager page is gone; install/toggle UI is the catalog row's
+   switch and the plugin:<name> detail route. Open the detail for one bundle. */
+export async function openPluginDetail(plugins, packageName) {
+  // Rows under 高级组件 hide until the disclosure opens.
+  const tid = `plugins-catalog-row-bundle:${packageName}`
+  const row = plugins.locator(`[data-testid="${tid}"]`)
+  await row.waitFor({ state: 'attached' })
+  await expandAllDetails(plugins.locator(S.pluginsCatalog))
+  await row.waitFor()
+  await row.click()
+  const seat = plugins.locator(`[data-testid="plugin-detail-seat-${packageName}"]`)
   await seat.waitFor()
-  // A previous detail view (openBundle) sticks inside the manager; return to its list.
-  const backToList = seat.getByText('插件列表', { exact: true }).first()
-  if (await backToList.count()) await backToList.click()
   return seat
 }
 

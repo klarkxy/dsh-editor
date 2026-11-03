@@ -58,6 +58,11 @@ type BundleRow = {
   name: string
   enabled?: unknown
   installed?: unknown
+  official?: unknown
+  availability?: unknown
+  installTarget?: { spec?: unknown; version?: unknown }
+  removable?: unknown
+  error?: unknown
   readOnlyReason?: unknown
   description?: unknown
   meta?: { title?: unknown; description?: unknown; icon?: unknown }
@@ -207,23 +212,34 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
 
   const official: PluginCatalogCard[] = []
   for (const row of bundles) {
-    if (!isExperimental(row.name)) continue
+    if (!isExperimental(row.name) && row.official !== true) continue
     officialNames.add(row.name)
     const copy = experimentalCopy(row.name, entries, consumedCatalogEntries)
     const display = UPSTREAM_DISPLAY[row.name]
     const title = copy.title !== row.name ? copy.title : (display?.title ?? (rowTitle(row) || row.name))
     const description = copy.description || display?.description || rowDescription(row)
     const locked = readOnlyReason(row)
-    const enabled = !locked && typeof row.enabled === 'boolean' ? row.enabled : undefined
+    /* Install semantics apply only to a declared-but-not-installed bundle with
+       an install target and no live activation — installation-supplied rows
+       (installed:false, no target, e.g. 语音输入) keep normal card behavior. */
+    const installSpec = row.installed === false && row.enabled !== true
+      && typeof row.installTarget?.spec === 'string' && row.installTarget.spec.trim()
+      ? row.installTarget.spec.trim()
+      : undefined
+    const enabled = installSpec !== undefined ? false : (!locked && typeof row.enabled === 'boolean' ? row.enabled : undefined)
     official.push({
       key: `bundle:${row.name}`,
       title,
       description,
       ...iconField(row.meta),
       packageName: row.name,
-      badges: orderedBadges(['experimental', ...(locked ? ['locked' as const] : [])]),
+      badges: orderedBadges([
+        ...(isExperimental(row.name) ? ['experimental' as const] : []),
+        ...(locked ? ['locked' as const] : []),
+      ]),
       ...(enabled === undefined ? {} : { enabled }),
       action: cardAction(enabled, locked),
+      ...(installSpec !== undefined ? { installed: false as const, installSpec } : {}),
     })
   }
 
@@ -309,6 +325,10 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
   const user: PluginCatalogCard[] = []
   for (const row of bundles) {
     const name = row.name
+    /* On-demand rows (declared, targetable, not yet enabled) have no live
+       surface; installation-supplied rows stay listed. */
+    if (row.installed === false && row.enabled !== true
+      && typeof row.installTarget?.spec === 'string' && row.installTarget.spec.trim()) continue
     if (officialNames.has(name) || builtinBundleNames.has(name)) continue
     if (coveredPackages.has(name) || name in PREINSTALLED_PUBLIC_PLUGINS) continue
     // Upstream runtime packages are never author-installed plugins.

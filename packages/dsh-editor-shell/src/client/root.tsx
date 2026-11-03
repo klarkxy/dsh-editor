@@ -46,6 +46,7 @@ import { ConfirmDialog } from './dialogs.tsx'
 import { type SettingsRenderSlot } from './settings.tsx'
 import { SettingsWorkspace } from '../app/settings/settings-page.tsx'
 import { isPluginsSection, normalizeSettingsSection, readStoredTab, type SettingsTab } from '../model/settings.ts'
+import { consumePluginNavTarget, pluginNavVersion, registerPluginNavOpener, subscribePluginNav } from '../model/plugin-navigation.ts'
 import { useTheme } from './theme.tsx'
 import { WindowControls } from './window-controls.tsx'
 import { writeHostThemePreference, type HostThemePreference, type HostThemeSync } from '../model/theme.ts'
@@ -278,6 +279,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const closePlugins = useCallback(() => {
     selectPanel(null)
   }, [selectPanel])
+  /* pluginNavigation is provided at boot (client.ts) and only records the
+     target section; the mounted root opens the panel and consumes it. */
+  useEffect(() => registerPluginNavOpener(() => selectPanel('plugins')), [selectPanel])
+  const navVersion = useSyncExternalStore(subscribePluginNav, pluginNavVersion, pluginNavVersion)
+  useEffect(() => {
+    const wanted = consumePluginNavTarget()
+    if (wanted) setSettingsSection(wanted)
+  }, [navVersion])
   const openSettings = useCallback((tab?: SettingsTab | string) => {
     if (tab !== undefined) setSettingsSection(normalizeSettingsSection(tab))
     setSettingsOpen(true)
@@ -290,7 +299,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   /* selectPanel('plugins') → 插件分区；selectPanel(null) → 关闭整页。 */
   useEffect(() => {
     if (!pluginsOpen) { setSettingsOpen(false); return }
-    setSettingsSection((current) => isPluginsSection(current) ? current : 'plugins-installed')
+    setSettingsSection((current) => consumePluginNavTarget() ?? (isPluginsSection(current) ? current : 'plugins-installed'))
   }, [pluginsOpen])
   const seatContextRef = useRef<ShellToolSeatContext | null>(null)
   /* 工作区 <main> 的句柄。 */

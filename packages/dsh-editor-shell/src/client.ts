@@ -1,6 +1,6 @@
 import { provideOfficialLayout } from './client/official-layout.ts'
-import { adaptNativePluginManagerSeat } from './client/native-plugin-manager-seat.ts'
 import { provideOfficialSurfaces } from './client/official-surfaces.tsx'
+import { requestPluginNavSection } from './model/plugin-navigation.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope } from './dsh-compat.ts'
 import type { ReactNode } from 'react'
@@ -96,7 +96,15 @@ export function apply(ctx: Context): void {
   try {
     const client = ctx as ShellContext & { configForms: SettingsSlot }
     const writingScope = client.configForms.get<NonNullable<ReturnType<typeof decodeWritingPreferences>>>(WRITING_SETTINGS_NAMESPACE)
-    adaptNativePluginManagerSeat(client)
+    /* The retired official manager published pluginNavigation during slot
+       injection; plugins inject it at boot, so it must exist before mount. */
+    try {
+      const reflect = (client as { reflect?: { provide?: (name: string, value: unknown) => () => void } }).reflect
+      reflect?.provide?.('pluginNavigation', {
+        openList: () => requestPluginNavSection('plugins-installed'),
+        openBundle: (packageName: string) => requestPluginNavSection(`plugin:${packageName}`),
+      })
+    } catch { /* reflect unavailable: callers degrade like an absent service */ }
     provideOfficialLayout(client)
     provideOfficialSurfaces(client)
     provideEditorUiWorkspace(client)

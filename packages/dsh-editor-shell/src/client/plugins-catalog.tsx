@@ -36,7 +36,7 @@ import {
   type WritingPresetsBundle,
 } from '../model/plugins-catalog.ts'
 import { ActivityText, Button } from './ui/index.ts'
-import { FileTextIcon, SwitchControl } from '../ui/index.ts'
+import { ChevronRightIcon, FileTextIcon, Spinner, SwitchControl } from '../ui/index.ts'
 import { AppBrandMark, PluginIcon } from './icons.tsx'
 
 export function usePluginCatalog(ctx: unknown): PluginCatalogBundle {
@@ -150,21 +150,28 @@ export function CatalogRow(props: {
   card: PluginCatalogCard
   kind: CatalogKind
   pending: boolean
-  /** True when the row also reaches a 插件配置 page and may offer the secondary control. */
-  configurable: boolean
   /** True while a freshly installed user card carries its transient highlight. */
   highlighted: boolean
+  /** True while an install is running — the not-installed switch shows progress. */
+  installing?: boolean
   onToggle(card: PluginCatalogCard, enabled: boolean): void
   onConfigure(card: PluginCatalogCard): void
   onDetail(card: PluginCatalogCard): void
 }) {
   const card = props.card
+  const openable = card.packageName !== undefined || card.entryId !== undefined
   return <li className={props.highlighted ? 'plugins-catalog-row is-new' : 'plugins-catalog-row'}
-    data-testid={`plugins-catalog-row-${card.key}`}>
+    data-testid={`plugins-catalog-row-${card.key}`} data-openable={openable || undefined}>
     <CatalogIcon icon={card.icon} title={card.title} kind={props.kind} />
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
-        <Text className="plugins-catalog-row-title">{card.title}</Text>
+        {openable
+          ? <button type="button" className="plugins-catalog-open plugins-catalog-row-title"
+            title={card.description || undefined}
+            data-testid={`plugins-catalog-open-${card.key}`} onClick={() => props.onDetail(card)}>
+            {card.title}
+          </button>
+          : <Text className="plugins-catalog-row-title">{card.title}</Text>}
         {card.badges.map((badge) => <Badge key={badge} tone="neutral" className="plugins-catalog-badge">
           {catalogBadgeLabel(badge)}
         </Badge>)}
@@ -175,26 +182,17 @@ export function CatalogRow(props: {
     </div>
     <div className="plugins-catalog-row-action">
       {card.action === 'switch'
-        ? <>
-          {props.configurable
-            ? <ThemeButton variant="ghost" className="plugins-catalog-action"
-              data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
-              {t('plugins.catalogConfigure')}
-            </ThemeButton>
-            : null}
-          <SwitchControl className="plugins-catalog-switch" checked={card.enabled === true} disabled={props.pending}
+        ? card.installed === false
+          ? props.installing
+            ? <span className="plugins-catalog-installing" role="status"><Spinner />{t('plugins.installBusy')}</span>
+            : <SwitchControl className="plugins-catalog-switch" checked={false} disabled={props.pending}
+              aria-label={card.title} data-testid={`plugins-catalog-toggle-${card.key}`}
+              onCheckedChange={(enabled) => { if (enabled) props.onToggle(card, true) }} />
+          : <SwitchControl className="plugins-catalog-switch" checked={card.enabled === true} disabled={props.pending}
             aria-label={card.title} data-testid={`plugins-catalog-toggle-${card.key}`}
             onCheckedChange={(enabled) => props.onToggle(card, enabled)} />
-        </>
-        : card.action === 'config'
-          ? <ThemeButton variant="ghost" className="plugins-catalog-action"
-            data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
-            {t('plugins.catalogConfigure')}
-          </ThemeButton>
-          : <ThemeButton variant="ghost" className="plugins-catalog-action"
-            data-testid={`plugins-catalog-detail-${card.key}`} onClick={() => props.onDetail(card)}>
-            {t('plugins.catalogDetails')}
-          </ThemeButton>}
+        : null}
+      {openable ? <ChevronRightIcon size="sm" aria-hidden className="plugins-catalog-row-chevron" /> : null}
     </div>
   </li>
 }
@@ -236,7 +234,8 @@ function CatalogSection(props: {
   presetPending: string
   presetError: string
   restartRequired: boolean
-  configKeys: readonly string[]
+  /** True while a bundle install is in flight (not-installed switches show progress). */
+  installing?: boolean
   /** Keys of user cards that just appeared, carrying the transient highlight. */
   freshKeys: readonly string[]
   /** The user section anchors the install scroll; other sections do not move. */
@@ -264,16 +263,16 @@ function CatalogSection(props: {
     {ordinary.length
       ? <ul className="plugins-catalog-rows">{ordinary.map((card) => <CatalogRow key={card.key} card={card}
         kind={section.id === 'official' || section.id === 'builtin' || section.id === 'user' ? section.id : 'user'}
-        pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
+        pending={props.pending === card.key} installing={props.installing}
         highlighted={props.freshKeys.includes(card.key)}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
       : null}
     {advanced.length ? <details className="plugins-catalog-advanced" open={props.query.trim() ? true : undefined}>
-      <summary>{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
+      <summary><ChevronRightIcon size="sm" />{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
       <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogAdvancedHint')}</Text>
       <ul className="plugins-catalog-rows">{advanced.map(card => <CatalogRow key={card.key} card={card}
         kind={section.id === 'official' || section.id === 'builtin' || section.id === 'user' ? section.id : 'user'}
-        pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)} highlighted={false}
+        pending={props.pending === card.key} installing={props.installing} highlighted={false}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
     </details> : null}
     {presets.length
@@ -370,8 +369,8 @@ export function PluginsCatalog(props: {
   query: string
   pending: string
   actionError: string
-  /** Card keys whose row may offer the secondary 配置 control beside its switch. */
-  configKeys?: readonly string[]
+  /** True while a bundle install is in flight. */
+  installing?: boolean
   presets?: readonly WritingPresetCard[]
   presetError?: string
   presetPending?: string
@@ -413,7 +412,7 @@ export function PluginsCatalog(props: {
         {sections.map((section) => <CatalogSection key={section.id} section={section} presets={presets}
           query={props.query} pending={props.pending} presetPending={props.presetPending ?? ''}
           presetError={props.presetError ?? ''} restartRequired={props.restartRequired === true}
-          configKeys={props.configKeys ?? []} freshKeys={freshKeys}
+          installing={props.installing} freshKeys={freshKeys}
           sectionRef={section.id === 'user' ? userSection : undefined}
           onToggle={props.onToggle} onTogglePreset={props.onTogglePreset}
           onConfigure={props.onConfigure} onDetail={props.onDetail} />)}

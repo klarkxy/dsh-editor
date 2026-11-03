@@ -8,7 +8,7 @@ import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { DshSupervisor } from '../apps/desktop/dist/supervisor.js'
 import { PINNED_PNPM_VERSION, resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
-import { nativePluginRpc, openPluginsPage, openPluginManager, closePluginsPage, assertDefaultPluginPage } from './helpers/plugin-page.mjs'
+import { nativePluginRpc, openPluginsPage, openPluginDetail, closePluginsPage, assertDefaultPluginPage } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -214,9 +214,8 @@ try {
   await assertDefaultPluginPage(page,pluginsPage);
   // Retired and optional packages must be absent from the official manager on
   // the 安装与卸载 page, not merely from the default catalog.
-  const inventoryManager=await openPluginManager(pluginsPage);
   for(const name of ['AI Services','Model Center','Memory','Self-improvement','Fusion','当前标题','需求记录','会话纪要','知乎资料']) {
-    assert.equal(await inventoryManager.locator(S.pluginPanel).getByRole('button',{name:'查看 '+name,exact:true}).count(),0,name);
+    assert.equal(await pluginsPage.locator('[data-testid^="plugins-catalog-row-"]', {hasText:name}).count(),0,name);
   }
   await screenshot('00-plugin-inventory');
   await closePluginsPage(page);
@@ -327,8 +326,7 @@ try {
       let result;
       if(id === 'zhihu') {
         const marketplace = await openPlugins();
-        const preInstallManager = await openPluginManager(marketplace);
-        await preInstallManager.locator(S.pluginPanel).waitFor();
+        await marketplace.locator(S.pluginsCatalog).waitFor();
         await screenshot('03-native-manager-before-install');await page.setViewportSize({width:760,height:1000});assert.ok(await marketplace.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-native-manager-before-install-760');await page.setViewportSize({width:1440,height:1000});
         result = await native('installBundle', {spec,options:{requestId:'e2e-'+id}});
         await closePluginsPage(page);
@@ -400,14 +398,13 @@ try {
       assert.ok(installedPlugins.some(row => String(row.moduleName || '').includes(name) || String(row.entryId).includes(id)), id);
     }
     const installedPage = await openPlugins();
-    const installedManager = await openPluginManager(installedPage);
+    await openPluginDetail(installedPage, '@klarkxy/dsh-zhihu');
     await screenshot('03-optional-plugins-installed');
-    await installedManager.locator(S.pluginPanel).getByRole('button',{name:/^查看 (知乎资料|知乎)$/}).click();
     await installedPage.locator(S.zhihuSettings).waitFor();
-    assert.equal(await installedManager.locator(S.pluginConfig).locator(S.zhihuSettings).count(),1);
+    assert.equal(await installedPage.locator(S.zhihuSettings).count(),1);
     await closePluginsPage(page);
     await toggleTheme(page);await page.locator(S.shellThemeDark).waitFor({timeout:10000});
-    const darkPlugins=await openPlugins();await openPluginManager(darkPlugins);
+    const darkPlugins=await openPlugins();await darkPlugins.locator(S.pluginsCatalog).waitFor();
     await page.setViewportSize({width:760,height:1000});assert.ok(await darkPlugins.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-market-dark-760');await page.setViewportSize({width:1440,height:1000});await closePluginsPage(page);
     const toolCallAt=report.calls.length;
     await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('请只回复工具已就绪，不要调用工具。');await page.getByRole('textbox',{name:'输入消息',exact:true}).press('Enter');await waitForCall('chat',toolCallAt);

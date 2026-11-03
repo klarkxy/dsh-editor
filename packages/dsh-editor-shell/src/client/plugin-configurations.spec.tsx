@@ -7,7 +7,7 @@ import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
 import { PluginConfigurationPage, usePluginConfigurations } from './plugin-configurations.tsx'
 import { legacyZhihuVisible, projectPluginConfigurations } from '../model/plugin-configurations.ts'
 import { SettingsPage } from '../app/settings/settings-page.tsx'
-import { mergeSections, secondaryConfigKeys } from '../model/plugins-page.ts'
+import { mergeSections } from '../model/plugins-page.ts'
 import { CatalogRow, PluginsCatalog } from './plugins-catalog.tsx'
 import {
   catalogBadgeLabel,
@@ -221,7 +221,6 @@ describe('plugin configuration navigation', () => {
     /* The routable official configuration is a nav link; the legacy page is gone. */
     expect(html).toContain('知乎')
     expect(html).toContain('installed-management')
-    expect(html).toContain('official-slot')
     expect(html).not.toContain('插件模型')
     expect(html).toContain('已安装')
   })
@@ -267,10 +266,10 @@ describe('plugin configuration navigation', () => {
     expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
     const html = navigation(rows, createElement('p', null, 'legacy-zhihu-body'))
     expect(html).toContain('知乎资料')
-    /* The package name may appear as a configuration link, never as page content. */
+    /* Unmapped configuration stays reachable through the 其他插件配置 orphan
+       group on the installed page — never as detached page content. */
     const content = html.slice(html.indexOf('data-testid="settings-content"'))
-    expect(content).not.toContain('@klarkxy/dsh-memory')
-    expect(content).not.toContain('>记忆<')
+    expect(content).toContain('plugins-orphan-official:plugins.bundle.config:@klarkxy/dsh-memory')
   })
 
   it('follows legacy registration and removal through the ledger version', () => {
@@ -403,7 +402,7 @@ describe('plugin catalog', () => {
     const advancedAt = html.indexOf('<details class="plugins-catalog-advanced"')
     expect(advancedAt).toBeGreaterThan(-1)
     expect(html.indexOf('plugins-catalog-toggle-entry:manuscript-assist')).toBeLessThan(advancedAt)
-    expect(html.indexOf('plugins-catalog-detail-entry:runtime')).toBeGreaterThan(advancedAt)
+    expect(html.indexOf('plugins-catalog-row-entry:runtime')).toBeGreaterThan(advancedAt)
     expect(html).not.toContain('<details class="plugins-catalog-advanced" open=""')
     expect(catalog({ sections: [{ id: 'builtin', items: [runtime] }], query: 'runtime' }))
       .toContain('<details class="plugins-catalog-advanced" open=""')
@@ -425,27 +424,18 @@ describe('plugin catalog', () => {
     expect(html).toContain('内置')
     expect(html).toContain('由会话控制')
     expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
-    expect(html).toContain('data-testid="plugins-catalog-config-bundle:dsh-editor-workbench"')
-    expect(html).toContain('data-testid="plugins-catalog-detail-bundle:@klarkxy/dsh-terminal"')
     const rows = html.match(/data-testid="plugins-catalog-row-[^"]+"/g) ?? []
     expect(rows).toHaveLength(3)
+    /* Every row opens the plugin detail through its title button; only switch cards
+       keep a control, and no row carries config/detail buttons anymore. */
+    expect(html).not.toContain('plugins-catalog-config-')
+    expect(html).not.toContain('plugins-catalog-detail-')
     for (const row of sectionHtml(html, 'official').match(/data-testid="plugins-catalog-row-[^"]+"[\s\S]*?(?=data-testid="plugins-catalog-row-|$)/g) ?? []) {
-      expect(row.match(/plugins-catalog-(?:toggle|config|detail)-/g)).toHaveLength(1)
+      expect((row.match(/plugins-catalog-toggle-/g) ?? []).length).toBeLessThanOrEqual(1)
+      /* The row stays a list item; a real button opens the detail (no nested interactive role). */
+      expect(row).toContain('plugins-catalog-open-')
+      expect(row).not.toContain('role="button"')
     }
-  })
-
-  it('adds a secondary 配置 beside the switch only for a reachable configuration page', () => {
-    const html = catalog({ configKeys: ['bundle:@deepseek-ai/dsh-web-search'] })
-    const official = sectionHtml(html, 'official')
-    expect(official).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
-    expect(official).toContain('data-testid="plugins-catalog-config-bundle:@deepseek-ai/dsh-web-search"')
-    expect(official).toContain('plugins-catalog-action"')
-    /* The switch stays the rightmost primary control; the detail row is untouched. */
-    const row = official.slice(0, official.indexOf('data-testid="plugins-catalog-row-bundle:@klarkxy/dsh-terminal"'))
-    expect(row.lastIndexOf('plugins-catalog-config-')).toBeLessThan(row.lastIndexOf('plugins-catalog-toggle-'))
-    expect(official).not.toContain('plugins-catalog-config-bundle:@klarkxy/dsh-terminal')
-    /* No reachable configuration page means no config affordance at all. */
-    expect(catalog()).not.toContain('plugins-catalog-config-bundle:@deepseek-ai/dsh-web-search')
   })
 
   it('keeps the one-line description with its full text in the row tooltip', () => {
@@ -522,15 +512,11 @@ describe('plugin catalog', () => {
     setLocale('en')
     expect(catalogBadgeLabel('installed')).toBe('Installed')
     setLocale('zh')
-    const html = catalog({ configKeys: ['bundle:@deepseek-ai/dsh-web-search'] })
-    /* 配置 beside a switch and a lone 详情 are one control, so they read alike:
-       the switch stays the row's only filled control. */
+    const html = catalog()
     const official = sectionHtml(html, 'official')
-    expect(official.match(/plugins-catalog-action"/g)).toHaveLength(2)
-    expect(official).not.toContain('plugins-catalog-config"')
-    /* 内部 Button 的 class 先于 data-testid 输出，不按属性顺序断言。 */
-    expect(official).toMatch(/<button(?=[^>]*data-testid="plugins-catalog-config-[^"]+")(?=[^>]*plugins-catalog-action)[^>]*>/)
-    expect(official).toMatch(/<button(?=[^>]*data-testid="plugins-catalog-detail-[^"]+")(?=[^>]*plugins-catalog-action)[^>]*>/)
+    /* Rows open the plugin detail; the switch is the row's only control. */
+    expect(official).not.toContain('plugins-catalog-action')
+    expect(official).toContain('class="plugins-catalog-open')
   })
 
   it('anchors the user section and highlights only the rows a refresh added', () => {
@@ -549,7 +535,7 @@ describe('plugin catalog', () => {
     const row = (highlighted: boolean) => renderToStaticMarkup(createElement(CatalogRow, {
       card: { key: 'bundle:b', title: 'B', description: '', badges: [], action: 'detail' },
       kind: 'user',
-      pending: false, configurable: false, highlighted,
+      pending: false, highlighted,
       onToggle() {}, onConfigure() {}, onDetail() {},
     }))
     expect(row(true)).toContain('class="plugins-catalog-row is-new"')
@@ -594,7 +580,9 @@ describe('plugin catalog', () => {
       { id: 'official:plugins.item:terminal', label: '终端', entry: { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' } },
     ])
     expect(reachable[0]!.items[0]!.action).toBe('config')
-    expect(catalog({ sections: reachable })).toContain('data-testid="plugins-catalog-config-entry:plugins.item:terminal"')
+    /* The row itself opens the detail route; there is no config button anymore. */
+    expect(catalog({ sections: reachable })).toContain('data-testid="plugins-catalog-row-entry:plugins.item:terminal"')
+    expect(catalog({ sections: reachable })).not.toContain('plugins-catalog-config-')
   })
 
   it('marks a switch row configurable through its package name, entry id or configuration key', () => {
@@ -609,19 +597,12 @@ describe('plugin catalog', () => {
       { id: 'official:plugins.item:terminal', label: '终端', entry: { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' } },
       { id: 'official:plugins.bundle.config:@klarkxy/dsh-terminal', label: '终端包', entry: { id: 'plugins.bundle.config:@klarkxy/dsh-terminal', label: '终端包', slot: 'plugins.bundle.config', entryKey: '@klarkxy/dsh-terminal' } },
     ]
-    /* Only the two switch rows with a reachable page get the secondary control. */
-    expect(secondaryConfigKeys(sections, links)).toEqual([
-      'bundle:@klarkxy/dsh-web-search-manager',
-      'entry:terminal',
-    ])
-    expect(secondaryConfigKeys(sections, [])).toEqual([])
-    const html = catalog({ sections, configKeys: secondaryConfigKeys(sections, links) })
-    expect(html).toContain('data-testid="plugins-catalog-config-bundle:@klarkxy/dsh-web-search-manager"')
+    /* Switch rows keep their toggles; rows open detail instead of a config button. */
+    const html = catalog({ sections })
     expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@klarkxy/dsh-web-search-manager"')
-    expect(html).not.toContain('plugins-catalog-config-bundle:@scope/plain')
-    /* A detail row keeps its single primary control even with a reachable page. */
-    expect(html).toContain('data-testid="plugins-catalog-detail-bundle:@klarkxy/dsh-terminal"')
-    expect(html).not.toContain('plugins-catalog-config-bundle:@klarkxy/dsh-terminal')
+    expect(html).toContain('data-testid="plugins-catalog-toggle-entry:terminal"')
+    expect(html).not.toContain('plugins-catalog-config-')
+    expect(html).not.toContain('plugins-catalog-detail-')
   })
 
   it('filters a catalog projection without touching its source', () => {
@@ -651,34 +632,28 @@ describe('settings plugins navigation', () => {
     expect(html).toContain('data-testid="settings-nav"')
     expect(html).toContain('data-testid="settings-nav-plugins-installed"')
     expect(html).toContain('data-testid="settings-nav-plugins-discovery"')
-    expect(html).toContain('data-testid="settings-nav-plugins-manager"')
     expect(html).toContain('已安装')
     expect(html).toContain('发现')
-    expect(html).toContain('安装与卸载')
-    expect(html).toContain('插件配置')
-    expect(html).toContain('搜索插件配置')
+    /* The 插件配置 nav group is gone: configuration is reached via the detail
+       page or the 其他插件配置 orphan list on 已安装. */
+    expect(html).not.toContain('dsh-settings-config')
+    expect(html).not.toContain('搜索插件配置')
     expect(html).toContain('data-testid="plugins-catalog-search"')
     expect(html).toContain('placeholder="搜索插件"')
     expect(html).toContain('data-testid="plugins-page-add-plugin"')
     expect(html).toContain('添加插件')
-    expect(html).toContain('暂无插件配置。')
   })
 
-  it('keeps the discovery contribution and the official manager seat mounted', () => {
+  it('keeps the discovery contribution mounted', () => {
     const html = navigation({}, emptyZhihuSlot)
     expect(html).toContain('data-testid="plugins-discovery"')
     expect(html).toContain('installed-management')
-    expect(html).toContain('data-testid="plugins-manager-seat"')
-    expect(html).toContain('official-slot')
-    expect(html).toContain('data-dsh-plugin-surface')
-    const manager = html.slice(html.indexOf('data-testid="plugins-manager-seat"'))
-    expect(manager).toContain('official-slot')
-    expect(html).toMatch(/hidden=""[^>]*data-testid="plugins-manager-seat"/)
+    expect(html).not.toContain('data-testid="plugins-manager-seat"')
   })
 
-  it('routes the plugins.item configuration entries from the nav', () => {
+  it('routes an unmapped plugins.item configuration entry through the orphan group', () => {
     const html = navigation({ 'plugins.item': [{ options: { id: 'terminal', label: () => '终端' } }] })
     expect(html).toContain('终端')
-    expect(html).toContain('搜索插件配置')
+    expect(html).toContain('plugins-orphan-official:plugins.item:terminal')
   })
 })

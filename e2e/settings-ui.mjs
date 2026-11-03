@@ -10,7 +10,7 @@ catch {
   ;({ default: AxeBuilder } = createRequire(toolkit)('@axe-core/playwright'))
 }
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, closePluginsPage, openListingSpec, openPluginDiscovery, openPluginManager, openPluginsPage, showPluginList } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openListingSpec, openPluginDiscovery, openPluginsPage, showPluginList } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -115,11 +115,10 @@ try {
       await dialog.waitFor({ state: 'hidden' })
       const plugins = await openPluginsPage(page)
       await assertDefaultPluginPage(page, plugins)
-      const surfaces = ['插件总览', '发现插件', '安装与卸载']
+      const surfaces = ['插件总览', '发现插件']
       for (const [i, tab] of surfaces.entries()) {
         await showPluginList(plugins)
         if (tab === '发现插件') await openPluginDiscovery(plugins)
-        if (tab === '安装与卸载') await openPluginManager(plugins)
         await page.waitForTimeout(300)
         const content = plugins.locator(S.pluginsPageContent)
         const metrics = await content.evaluate(el => {

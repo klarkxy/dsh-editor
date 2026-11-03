@@ -82,7 +82,6 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
   container-type: inline-size;
 }
 .dsh-settings-section { display: flex; flex-direction: column; gap: var(--dsh-ui-space-4); min-width: 0; max-width: var(--dsh-ui-content-max); }
-.dsh-settings-section[data-testid="plugins-manager-seat"] { max-width: 880px; }
 .dsh-settings-section__title {
   margin: 0; font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-medium);
 }
@@ -353,6 +352,56 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .radix-themes .plugins-catalog-subsection { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line); }
 .radix-themes .plugins-catalog-subsection-title { color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium); }
 .radix-themes .plugins-catalog-hint, .radix-themes .plugins-catalog-empty, .radix-themes .plugins-catalog-preset-locked { margin: 0; color: var(--dsh-ui-muted); }
-.radix-themes .plugins-catalog-advanced > summary { cursor: pointer; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2); }
+.radix-themes .plugins-catalog-advanced > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--dsh-ui-space-2);
+  color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);
+  min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);
+}
+.radix-themes .plugins-catalog-advanced > summary::-webkit-details-marker { display: none; }
+.radix-themes .plugins-catalog-advanced > summary > svg { flex: none; transition: transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out); }
+.radix-themes .plugins-catalog-advanced[open] > summary > svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .radix-themes .plugins-catalog-advanced > summary > svg { transition: none; } }
 .radix-themes .plugins-catalog-advanced[open] > summary, .radix-themes .plugins-catalog-advanced .plugins-catalog-hint { margin-bottom: var(--dsh-ui-space-2); }
+
+/* 插件目录行整行可点开详情：标题是真按钮，其 ::after 铺满整行（行是定位容器）；
+   开关是后续兄弟里的定位元素，按文档顺序绘制在其上，不嵌套交互控件。
+   chevron 提示可进入，not-installed 开关换成内联进度。 */
+.radix-themes .plugins-catalog-row[data-openable] { position: relative; cursor: pointer; }
+.radix-themes .plugins-catalog-row[data-openable]:hover { background: var(--dsh-ui-hover); }
+.radix-themes .plugins-catalog-row[data-openable]:has(.plugins-catalog-open:focus-visible) { outline: 2px solid var(--dsh-ui-accent); outline-offset: -1px; }
+.radix-themes .plugins-catalog-open {
+  margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  text-align: start; cursor: pointer;
+}
+.radix-themes .plugins-catalog-open:focus-visible { outline: none; }
+.radix-themes .plugins-catalog-open::after { content: ''; position: absolute; inset: 0; border-radius: var(--dsh-ui-radius-xl); }
+.radix-themes .plugins-catalog-row[data-openable] .plugins-catalog-row-action { position: relative; }
+.radix-themes .plugins-catalog-row-chevron { color: var(--dsh-ui-muted); flex: none; }
+.radix-themes .plugins-catalog-installing { display: inline-flex; align-items: center; gap: var(--dsh-ui-space-2); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); }
+.radix-themes .plugins-orphan-config { margin-top: var(--dsh-ui-space-6); }
+/* 插件详情页。 */
+.radix-themes .plugin-detail-head { display: flex; align-items: center; gap: var(--dsh-ui-space-3); margin-bottom: var(--dsh-ui-space-5); }
+.radix-themes .plugin-detail-head-text { flex: 1 1 auto; min-width: 0; }
+.radix-themes .plugin-detail-head-action { flex: none; display: flex; align-items: center; gap: var(--dsh-ui-space-2); }
+.radix-themes .plugin-detail-title { margin: 0; font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium); }
+.radix-themes .plugin-detail-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); }
+.radix-themes .plugin-detail-row { display: flex; align-items: baseline; gap: var(--dsh-ui-space-2); font-size: var(--dsh-ui-text-sm); }
+.radix-themes .plugin-detail-row-title { font-weight: var(--dsh-ui-weight-medium); }
+.radix-themes .plugin-detail-row-meta { color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); overflow-wrap: anywhere; }
+.radix-themes .plugin-detail-diagnostic { margin: 0; font-family: var(--dsh-ui-font-mono); font-size: var(--dsh-ui-text-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+.radix-themes .plugin-detail-empty { display: block; padding-block: var(--dsh-ui-space-3); }
+.radix-themes .plugin-detail-components { padding: var(--dsh-ui-space-1) var(--dsh-ui-space-4); }
+.radix-themes .plugin-detail-components .dsh-disclosure__content { padding-block-end: var(--dsh-ui-space-3); }
+/* 添加插件对话框。 */
+.radix-themes .plugin-install-dialog__title { margin: 0 0 var(--dsh-ui-space-3); font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium); }
+.radix-themes .plugin-install-field { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); }
+.radix-themes .plugin-install-advanced { margin-top: var(--dsh-ui-space-1); }
+.radix-themes .plugin-install-summary { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); }
+.radix-themes .plugin-install-name { margin: 0; font-weight: var(--dsh-ui-weight-medium); }
+.radix-themes .plugin-install-desc, .radix-themes .plugin-install-meta { margin: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); }
+.radix-themes .plugin-install-progress { display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); }
+.radix-themes .plugin-install-progress > p { margin: 0; }
+.radix-themes .plugin-install-log { margin: 0; font-family: var(--dsh-ui-font-mono); font-size: var(--dsh-ui-text-xs); max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.radix-themes .plugin-install-builds { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); margin-top: var(--dsh-ui-space-3); }
+.radix-themes .plugin-install-builds > p { margin: 0; font-size: var(--dsh-ui-text-sm); }
 `)

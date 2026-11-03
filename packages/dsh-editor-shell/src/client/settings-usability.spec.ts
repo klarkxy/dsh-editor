@@ -46,7 +46,7 @@ describe('settings task groups', () => {
     expect(groups.flatMap(group => group.items.map(item => item.id))).toEqual([
       'writing', 'models', 'assistant',
       'appearance', 'shortcuts',
-      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'plugins-installed', 'plugins-discovery',
       'usage', 'about', 'advanced',
     ])
     const advanced = groups.flatMap(group => group.items).find(item => item.id === 'advanced')
@@ -58,7 +58,7 @@ describe('settings task groups', () => {
     expect(groups.flatMap(group => group.items.map(item => item.id))).toEqual([
       'writing',
       'appearance', 'shortcuts',
-      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'plugins-installed', 'plugins-discovery',
       'usage', 'about', 'advanced',
     ])
   })

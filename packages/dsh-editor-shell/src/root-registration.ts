@@ -1,4 +1,3 @@
-import { NATIVE_PLUGIN_MANAGER_SEAT } from './client/native-plugin-manager-seat.ts'
 import { OFFICIAL_INPUT_SLOT } from './model/official-surfaces.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from './dsh-compat.ts'
@@ -30,7 +29,17 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     // Editor is the sole layout owner; official plugins retain their own child slots.
     children: {
       [OFFICIAL_INPUT_SLOT]: { kind: 'single', scope: 'session' },
-      [NATIVE_PLUGIN_MANAGER_SEAT]: { kind: 'keyed', scope: 'root' },
+      /* Official plugin contributions the retired ui-plugin-manager hosted:
+         the editor's own plugin pages now own the same nine child slots. */
+      'plugins.add.actions': { kind: 'list', scope: 'root' },
+      'plugins.tab': { kind: 'list', scope: 'root' },
+      'plugins.item': { kind: 'list', scope: 'root' },
+      'plugins.bundle.activation': { kind: 'keyed', scope: 'root' },
+      'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
+      'plugins.row.config': { kind: 'keyed', scope: 'root' },
+      'plugins.detail.actions': { kind: 'list', scope: 'root' },
+      'plugins.detail.badge': { kind: 'list', scope: 'root' },
+      'plugins.detail.section': { kind: 'list', scope: 'root' },
       'rightbar': { kind: 'single', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
       'settings.general.item': { kind: 'list', scope: 'root' },

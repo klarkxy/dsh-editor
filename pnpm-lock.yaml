@@ -55,9 +55,6 @@ overrides:
   playwright: 1.62.1
 
 patchedDependencies:
-  '@deepseek-ai/dsh-client-ui-plugin-manager@0.2.1-rc.5':
-    hash: 79bc5f71634d57bb4d879b525897b6272b1f5cbf511e293a5ffce290b613492e
-    path: patches/@deepseek-ai__dsh-client-ui-plugin-manager@0.2.1-rc.5.patch
   '@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.1-rc.5':
     hash: 7ade4735842caad47d2fc4b386048a808b537bb841b8960120fc9eb4a1af6bd0
     path: patches/@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.1-rc.5.patch
@@ -8585,7 +8582,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
 
-  '@deepseek-ai/dsh-client-ui-plugin-manager@0.2.1-rc.5(patch_hash=79bc5f71634d57bb4d879b525897b6272b1f5cbf511e293a5ffce290b613492e)(@deepseek-ai/cordis@4.0.5)':
+  '@deepseek-ai/dsh-client-ui-plugin-manager@0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       '@deepseek-ai/dsh-timeout': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
@@ -10763,7 +10760,7 @@ snapshots:
       '@deepseek-ai/dsh-client-ui-open-in-app': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-permission-presets': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-plan': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
-      '@deepseek-ai/dsh-client-ui-plugin-manager': 0.2.1-rc.5(patch_hash=79bc5f71634d57bb4d879b525897b6272b1f5cbf511e293a5ffce290b613492e)(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-client-ui-plugin-manager': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-reference': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-renderer': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-schedule': 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)

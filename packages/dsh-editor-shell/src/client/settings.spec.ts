@@ -17,7 +17,7 @@ describe('application settings navigation', () => {
     expect(groups.flatMap(group => group.items.map(item => item.id))).toEqual([
       'writing', 'models', 'assistant',
       'appearance', 'shortcuts',
-      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'plugins-installed', 'plugins-discovery',
       'usage', 'about', 'advanced',
     ])
     expect(groups[3]!.items.at(-1)).toMatchObject({ id: 'advanced', warn: true })
@@ -29,7 +29,7 @@ describe('application settings navigation', () => {
     expect(ids).toEqual([
       'writing',
       'appearance', 'shortcuts',
-      'plugins-installed', 'plugins-discovery', 'plugins-manager',
+      'plugins-installed', 'plugins-discovery',
       'usage', 'about', 'advanced',
     ])
     expect(ids).not.toContain('models')
@@ -47,7 +47,7 @@ describe('application settings navigation', () => {
   it('classifies plugin sub-sections and dynamic configuration pages', () => {
     expect(isPluginsSection('plugins-installed')).toBe(true)
     expect(isPluginsSection('plugins-discovery')).toBe(true)
-    expect(isPluginsSection('plugins-manager')).toBe(true)
+    expect(isPluginsSection('plugin:some-pack')).toBe(true)
     expect(isPluginsSection('official:plugins.item:terminal')).toBe(true)
     expect(isPluginsSection('model:assistant')).toBe(true)
     expect(isPluginsSection('zhihu')).toBe(true)

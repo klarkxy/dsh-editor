@@ -4,6 +4,18 @@ import type { PluginConfigurationEntry } from './plugin-configurations.ts'
 export type ConfigLink = { id: string; label: string; entry?: PluginConfigurationEntry }
 
 /**
+ * The catalog install-switch rule, shared by the catalog projection and the
+ * detail page: install semantics apply only to a declared-but-not-installed
+ * bundle that carries an install target and is not already enabled.
+ * Installation-supplied rows (installed:false, no target) stay normal cards.
+ */
+export function installSpecOf(row: { installed?: boolean | null; enabled?: boolean | null; installTarget?: { spec?: unknown } | null }): string | null {
+  if (row.installed !== false || row.enabled === true) return null
+  const spec = row.installTarget?.spec
+  return typeof spec === 'string' && spec.trim() ? spec.trim() : null
+}
+
+/**
  * The 插件配置 nav entry a card opens, or null when none is reachable.
  * A bundle card names its package, an entry card its Cordis entry; both routes
  * end at the same official configuration key.
@@ -20,13 +32,6 @@ export function configTargetOf(card: PluginCatalogCard, links: readonly ConfigLi
   return byPackage?.id ?? null
 }
 
-/** Switch rows that also reach a configuration page carry a secondary 配置 control. */
-export function secondaryConfigKeys(sections: readonly PluginCatalogSection[], links: readonly ConfigLink[]): string[] {
-  return sections
-    .flatMap((section) => section.items)
-    .filter((card) => card.action === 'switch' && configTargetOf(card, links) !== null)
-    .map((card) => card.key)
-}
 
 /**
  * Configuration cards that have no reachable 插件配置 entry fall back to the

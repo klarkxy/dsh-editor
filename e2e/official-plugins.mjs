@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { mkdir, writeFile, readFile, appendFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { nativePluginRpc, openPluginManager, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
+import { nativePluginRpc, openPluginDetail, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -176,16 +176,13 @@ try {
   for (const [moduleName] of capabilityStates.filter(([moduleName, enabled]) => enabled && moduleName.includes('/dsh-client-'))) {
     assert.ok(bootModules.includes(moduleName), moduleName + ' is advertised to the client module loader')
   }
-  // The official manager is the install, toggle and approval engine; it lives on
-  // the 安装与卸载 page, so select that page before touching its panel.
-  const manager = await openPluginManager(plugins)
-  await manager.locator(S.pluginPanel).getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
+  // The voice bundle's detail page carries its switch and configuration.
+  const manager = await openPluginDetail(plugins, voiceName)
   check('native inventory and boot manifest enable shortcuts and document previews; MCP resources ship disabled')
   await page.screenshot({path:resolve(output,'plugins-light.png')})
   // Built-in availability, bundle selection, component activation and model
   // preparation are separate native states.
-  await manager.locator(S.pluginPanel).getByRole('button', {name:'查看 语音输入',exact:true}).click()
-  const voiceSwitch = plugins.getByRole('switch', {name:'启用 语音输入',exact:true})
+  const voiceSwitch = plugins.getByRole('switch', {name:'语音输入',exact:true})
   const voiceBundle = (await nativePluginRpc(page, 'listBundles')).find(bundle => bundle.name === voiceName)
   const voiceComponents = voiceIds
     .map(id => inventory.find(row => row.entryId.split(':').at(-1) === id))
@@ -220,11 +217,11 @@ try {
   await voiceSwitch.click()
   // Bundle teardown can take tens of seconds on a slow machine; the probe
   // showed ~25s for the disable toggle to settle.
-  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'false', S.switch('启用 语音输入'), { timeout: 60000 })
+  await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(el => el.checkVisibility() && el.getAttribute('aria-checked') === 'false'), S.switch('语音输入'), { timeout: 60000 })
   report.voice.disabled = await waitForVoiceState(page, false)
   assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), micBeforeToggle, 'disabling voice does not request microphone')
   await voiceSwitch.click()
-  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('启用 语音输入'), { timeout: 60000 })
+  await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(el => el.checkVisibility() && el.getAttribute('aria-checked') === 'true'), S.switch('语音输入'), { timeout: 60000 })
   report.voice.reenabled = await waitForVoiceState(page, true)
   await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
   await assertVoiceIdle(page, 'bundle off/on', { expectedMicRequests: 1 })

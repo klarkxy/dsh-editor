@@ -91,7 +91,6 @@
       "playwright": "1.62.1"
     },
     "patchedDependencies": {
-      "@deepseek-ai/dsh-client-ui-plugin-manager@0.2.1-rc.5": "patches/@deepseek-ai__dsh-client-ui-plugin-manager@0.2.1-rc.5.patch",
       "@deepseek-ai/dsh-web-frontend@0.2.1-rc.5": "patches/@deepseek-ai__dsh-web-frontend@0.2.1-rc.5.patch",
       "@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.1-rc.5": "patches/@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.1-rc.5.patch"
     }
