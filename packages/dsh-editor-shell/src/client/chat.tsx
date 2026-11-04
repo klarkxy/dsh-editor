@@ -337,7 +337,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
       type="button" variant="secondary" size="sm"
       className="chat-bot-earlier"
       onClick={() => bot.showEarlier(2)}>{t('chat.botLoadEarlier')}</UiButton> : null}
-    {bot.history.map((segment) => <div key={segment.sessionId} className="chat-bot-segment">
+    {bot.history.filter((segment) => !segment.missing).map((segment) => <div key={segment.sessionId} className="chat-bot-segment">
       {segment.failed ? <div className="chat-bot-failed">{t('chat.botHistoryFailed')}</div>
         : (segment.rows ?? []).map((row) => <ChatRowView
             key={row.seq}

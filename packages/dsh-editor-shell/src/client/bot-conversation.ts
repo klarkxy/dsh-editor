@@ -38,6 +38,8 @@ export type SegmentTimeline = {
   sessionId: string
   rows?: BotHistoryRow[]
   failed?: boolean
+  /** The segment's session log is gone — skip rendering it entirely. */
+  missing?: boolean
   markerAt?: number
   recapText?: string
 }
@@ -136,9 +138,9 @@ export function useBotConversation({
       && !loadedSegments.current.has(segment.sessionId))
     for (const segment of missing) {
       loadedSegments.current.add(segment.sessionId)
-      void botRpc<{ rows: BotHistoryRow[] }>(ctx, 'bot.history', { sessionId, segmentSessionId: segment.sessionId }).then((result) => {
+      void botRpc<{ rows: BotHistoryRow[]; missing?: boolean }>(ctx, 'bot.history', { sessionId, segmentSessionId: segment.sessionId }).then((result) => {
         setHistory((current) => current.map((item) => item.sessionId === segment.sessionId
-          ? result.ok ? { ...item, rows: result.value.rows } : { ...item, failed: true }
+          ? result.ok ? { ...item, rows: result.value.rows, missing: result.value.missing } : { ...item, failed: true }
           : item))
       })
     }

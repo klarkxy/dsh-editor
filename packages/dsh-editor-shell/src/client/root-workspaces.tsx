@@ -181,9 +181,12 @@ export function useRootWorkspaces({
     let chatSessionId = sessionId
     const botState = await safeRpcCall<import('dsh-editor-workbench/contracts').BotStateView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.state', { sessionId }))
     const current = botState.ok ? botState.value.current : undefined
-    if (current) {
-      const listed = await pingWorkspaceSession(ctx, current as SessionId)
-      if (listed.ok) chatSessionId = current as SessionId
+    /* 「还在」按客户端会话清单判定：会话已列且未归档就算存在，
+       直接 openSession 由宿主恢复；ping 会对有内容但未激活的会话误判。 */
+    const listedSessions = ctx.sessions.list.getSnapshot()
+    const archived = new Set<SessionId>(ctx.workspaces.list.getSnapshot().archivedSessionIds ?? [])
+    if (current && listedSessions.byId?.[current] && !archived.has(current as SessionId)) {
+      chatSessionId = current as SessionId
     }
     if (chatSessionId === sessionId) {
       await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.attach', { sessionId, reason: 'first' }))

@@ -48,6 +48,11 @@ async function listVisiblePaths(files: WorkspaceFileContext): Promise<string[]> 
   return out
 }
 
+function isMissingSessionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /not found|no such|missing|ENOENT/i.test(message)
+}
+
 function lastActivityOf(events: readonly SessionEventLike[]): number | undefined {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]!
@@ -156,8 +161,25 @@ export function botHandlers(ctx: Context, deps: BotRpcDeps): WorkbenchHandlers {
         const REASONS: ReadonlySet<string> = new Set(['idle-expired', 'model-switch', 'prompt-changed', 'context-full', 'wrap-up', 'tools-changed'])
         if (fromSessionId && !REASONS.has(reasonRaw)) throw new Error(`bot.attach: unknown rollover reason '${reasonRaw}'`)
         if (!fromSessionId) {
-          return await updateBotState(root, (state) => {
+          return await updateBotState(root, async (state) => {
             if (state.current === sessionId && segmentOf(state, sessionId)) return { handoffMode: undefined }
+            /* A dead or empty prior segment (e.g. a blank session that never
+               persisted) must not linger as an unreadable stitched segment.
+               Prune it only when its log is unreadable or has no rows — never
+               drop a segment that carries transcript content. */
+            const prior = state.current
+            if (prior && prior !== sessionId && segmentOf(state, prior)) {
+              let keep = false
+              try {
+                keep = transcriptRows(await deps.readEvents(prior)).length > 0
+              } catch (error) {
+                keep = !isMissingSessionError(error)
+              }
+              if (!keep) {
+                state.segments = state.segments.filter((segment) => segment.sessionId !== prior)
+                state.recaps = state.recaps.filter((recap) => recap.sessionId !== prior)
+              }
+            }
             if (!segmentOf(state, sessionId)) state.segments.push({ sessionId, startedAt: Date.now(), reason: 'first' })
             state.current = sessionId
             return { handoffMode: undefined }
@@ -208,8 +230,13 @@ export function botHandlers(ctx: Context, deps: BotRpcDeps): WorkbenchHandlers {
         const root = access.workspace.path
         const state = await loadBotState(root)
         if (!segmentOf(state, segmentSessionId)) throw new Error(`bot.history: ${segmentSessionId} is not a segment of this work`)
-        const rows = transcriptRows(await deps.readEvents(segmentSessionId))
-        return { rows: rows.slice(-400) }
+        try {
+          const rows = transcriptRows(await deps.readEvents(segmentSessionId))
+          return { rows: rows.slice(-400) }
+        } catch (error) {
+          if (isMissingSessionError(error)) return { rows: [], missing: true }
+          throw error
+        }
       },
     },
     'bot.initialize': {
