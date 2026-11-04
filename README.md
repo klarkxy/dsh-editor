@@ -8,7 +8,7 @@ Windows / macOS 桌面写作应用。作者在稿纸上写正文，AI 搭档在�
 
 [下载](https://github.com/klarkxy/dsh-editor/releases) · [使用指南](docs/user-guide.md) · [变更记录](CHANGELOG.md)
 
-支持查找替换、章节导航、版本回滚和 Markdown / TXT / DOCX / EPUB 导出。新对话可选通用写作、小说创作、文章与自媒体、技术文档。
+支持查找替换、章节导航、版本回滚和 Markdown / TXT / DOCX / EPUB 导出。每部作品只有一个写作搭档，打开就能直接聊，不需要选择模式或管理会话；小说、文章与技术文档的写法由搭档按作品内容选用，长对话、换模型与缓存过期由应用在背后整理。
 
 首页「继续写作」直接回到上次的章节；工作台左侧栏分「文件 / 搜索」页签，右侧辅助栏分「搭档 / 资料 / 工具」页签，窄窗下侧栏变成抽屉。命令面板按写作 / 视图 / 作品 / 插件命令 / 跳转到文档分组，可切换浅色 / 深色 / 跟随系统。设置与插件是同一个全页视图，导出前可按目录勾选文档。界面由仓库自有「原稿」设计系统驱动，支持明暗主题。
 
@@ -16,7 +16,7 @@ Windows / macOS 桌面写作应用。作者在稿纸上写正文，AI 搭档在�
 
 Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / zip。应用未签名，首次运行可能出现系统安全提示。更新入口在「设置 → 关于」，操作见[使用指南](docs/user-guide.md#安装与更新)。
 
-全局「插件」页按来源把插件分成三类展示：上游随运行时提供的 DSH 官方插件（含发行提供但尚未安装的官方包，开关即安装）、DSH-Editor 内置插件（写作模式作为其子分组）和作者安装的用户插件。点插件行打开详情页：配置项、组件清单、包信息、版本豁免与卸载都在详情页完成；「添加插件」打开编辑器自托管的安装对话框（检查、进度、脚本批准、取消），搜索 npm 包名在「发现」页。官方 pluginManager 服务仍是安装、清单与启停的权威。模型配置常驻设置。人物与世界书的目录快捷入口及写作记忆面板随包提供，默认关闭；人物卡和世界书直接在文件树中编辑。具体归属和兼容边界见[内置插件与设置](docs/builtin-plugins.md)。
+全局「插件」页按来源把插件分成三类展示：上游随运行时提供的 DSH 官方插件（含发行提供但尚未安装的官方包，开关即安装）、DSH-Editor 内置插件和作者安装的用户插件。点插件行打开详情页：配置项、组件清单、包信息、版本豁免与卸载都在详情页完成；「添加插件」打开编辑器自托管的安装对话框（检查、进度、脚本批准、取消），搜索 npm 包名在「发现」页。官方 pluginManager 服务仍是安装、清单与启停的权威。模型配置常驻设置。人物与世界书的目录快捷入口及写作记忆面板随包提供，默认关闭；人物卡和世界书直接在文件树中编辑。具体归属和兼容边界见[内置插件与设置](docs/builtin-plugins.md)。
 
 ## 插件
 
@@ -28,7 +28,6 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | [@klarkxy/dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 由当前 Agent 记录和更新需求 | npm，按需安装 |
 | [@klarkxy/dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与 Agent 检查点 | npm，按需安装 |
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
-| DSH 原生会话管理 | 对话归档、恢复、置顶与列表筛选 | 内置 DSH 0.2.1-rc.5 |
 | @deepseek-ai/dsh-client-ui-shortcuts | 搜索、录制、重置快捷键；桌面设置持久化 | 内置官方插件 |
 | @deepseek-ai/dsh-client-ui-sidebar-documentpreview | 文件栏资料预览 | 内置官方插件 |
 | @deepseek-ai/dsh-mcp-resources | 读取已配置 MCP 服务提供的资源，默认关闭 | 内置官方插件 |

@@ -12,7 +12,7 @@ import { currentModelNeedsKey, effortDisplay } from '../model/chat-model-picker.
 /* 'unavailable' = 目录请求失败（有 note）；'empty' = 请求成功但没有任何可用模型组。 */
 export type ModelPickerState = 'loading' | 'ready' | 'empty' | 'unavailable'
 
-export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSetup = true }: {
+export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSetup = true, onSelectModel, disabled }: {
   ctx: ShellContext
   session: SessionFace
   onConfigure(): void
@@ -20,6 +20,9 @@ export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSe
   /* false 时空/不可用交给调用方的主状态呈现（搭档空态、composer 提示），
      工具栏里的内联设置行不再渲染。 */
   inlineSetup?: boolean
+  /* 提供时代替 selectModel：调用方决定换段（provider/model 变化）或原位选择。 */
+  onSelectModel?(provider: string, model: string, reasoningEffort?: string): Promise<void>
+  disabled?: boolean
 }) {
   const providerStore = useMemo(() => new ModelsStore(ctx.remote, ctx.configForms.describe(), ctx.settingsSchema), [ctx])
   const providers = useSyncExternalStore(providerStore.subscribe, providerStore.getSnapshot, providerStore.getSnapshot)
@@ -61,6 +64,7 @@ export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSe
     if (!models || busy) return
     setBusy(true); setNote('')
     try {
+      if (onSelectModel) { await onSelectModel(provider, model, reasoningEffort); await refresh(); return }
       const result = await selectModel(ctx.remote.session, session.sessionId, provider, model, reasoningEffort)
       if (!result.ok) { setNote(t('chat.modelSwitchFailed')); return }
       await refresh()
@@ -119,7 +123,7 @@ export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSe
         aria-label={t('chat.chooseModel')}
         title={currentFull}
         align="start"
-        disabled={busy}
+        disabled={busy || disabled}
         options={options}
         onChange={(next) => {
           const [provider, model] = next.split(' ')
@@ -133,7 +137,7 @@ export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSe
           aria-label={t('chat.reasoning')}
           title={t('chat.effortValue', { name: effortName })}
           align="end"
-          disabled={busy}
+          disabled={busy || disabled}
           options={effortOptions}
           onChange={(next) => { void choose(models.current.provider, models.current.model, next) }} />
       </Flex> : null}

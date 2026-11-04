@@ -14,7 +14,7 @@ const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
 const CANONICAL_ID = 'desktop'
 const ALIAS_IDS = ['basic', 'smart', 'full']
 const EXPECTED_LABELS = { [CANONICAL_ID]: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
-const WRITING_PRESETS = ['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical']
+const WRITING_PRESETS = ['dsh-editor-writing']
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, `composition-${composition}-projects`)
@@ -231,21 +231,24 @@ try {
 
  if(!/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/.test(aliases[0].files.patch))throw new Error('materialized profile default is not dsh-editor-writing');
  const sourcePresetIds=(await readdir(resolve(root,'apps','desktop','resources','profile','agent-presets'))).sort();
- if(JSON.stringify(sourcePresetIds)!==JSON.stringify(['dsh-editor','dsh-editor-writing']))throw new Error('template source must keep only the locked core and legacy presets: '+sourcePresetIds.join(','));
+ if(JSON.stringify(sourcePresetIds)!==JSON.stringify(['dsh-editor-writing']))throw new Error('template source must ship only the standard writing preset: '+sourcePresetIds.join(','));
  await assertWritingPresetsHealthy(template);
  const deployedNames=(await readdir(resolve(home,'.agent-presets'))).sort();
- const expectedDeployed=['dsh-editor','dsh-editor-article','dsh-editor-novel','dsh-editor-technical','dsh-editor-writing'];
+ const expectedDeployed=['dsh-editor-writing'];
  if(JSON.stringify(deployedNames)!==JSON.stringify(expectedDeployed))throw new Error('deployed preset roster mismatch: '+deployedNames.join(','));
  for(const id of expectedDeployed){
   const marker=JSON.parse(await readFile(resolve(home,'.agent-presets',id,'.dsh-editor-owner.json'),'utf8'));
   if(marker.app!=='dsh-editor'||marker.schema!==1||marker.plugin!==undefined)throw new Error(id+' deployed marker is not app-owned');
  }
- /* 停用态：隔离 HOME 预写 dsh-plugins.json，部署应跳过并清除该 preset。 */
- await rm(toggleHome,{recursive:true,force:true});await mkdir(toggleHome,{recursive:true});
- await writeFile(resolve(toggleHome,'dsh-plugins.json'),JSON.stringify({schema:1,overrides:{},presets:{'dsh-editor-novel':false},installed:[]}));
+ /* 退役 preset 的 app-owned 目录在部署时被清除，作者自有目录保留。 */
+ await rm(toggleHome,{recursive:true,force:true});
  await deployProfile(toggleHome,template,resolve(runtime,'node_modules'));
- const toggledNames=(await readdir(resolve(toggleHome,'.agent-presets'))).sort();
- if(JSON.stringify(toggledNames)!==JSON.stringify(expectedDeployed.filter((id)=>id!=='dsh-editor-novel')))throw new Error('disabled preset was not skipped: '+toggledNames.join(','));
+ const staleRoot=resolve(toggleHome,'.agent-presets');
+ for(const stale of ['dsh-editor','dsh-editor-novel','dsh-editor-article','dsh-editor-technical']){const dir=resolve(staleRoot,stale);await mkdir(dir,{recursive:true});await writeFile(resolve(dir,'.dsh-editor-owner.json'),'{"app":"dsh-editor","schema":1}');}
+ const foreign=resolve(staleRoot,'author-preset');await mkdir(foreign,{recursive:true});
+ await deployProfile(toggleHome,template,resolve(runtime,'node_modules'));
+ const cleanedNames=(await readdir(staleRoot)).sort();
+ if(JSON.stringify(cleanedNames)!==JSON.stringify(['author-preset','dsh-editor-writing']))throw new Error('stale preset dirs were not cleaned: '+cleanedNames.join(','));
  const deployedPresets=resolve(home,'.agent-presets');
  if(await exists(deployedPresets)){
   const leftover=(await readdir(deployedPresets)).filter((name)=>name.includes('.stage-')||name.includes('.backup-'));
@@ -256,8 +259,8 @@ try {
   const leftover=(await readdir(deployedProfiles)).filter((name)=>name.includes('.stage-')||name.includes('.backup-'));
   if(leftover.length)throw new Error('profile stage/backup leftover: '+leftover.join(','));
  }
- evidence.writingPresets={ids:WRITING_PRESETS,default:'dsh-editor-writing',toggleable:['dsh-editor-novel','dsh-editor-article','dsh-editor-technical']};
- evidence.checks.push('template ships 5 presets (2 app-owned + 3 first-party plugin); deploy honors the disabled toggle');
+ evidence.writingPresets={ids:['dsh-editor-writing'],default:'dsh-editor-writing'};
+ evidence.checks.push('template ships one standard preset; deploy removes retired app-owned preset dirs');
 
  const started=await startDsh(env);dshChild=started.child;
  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1440,height:900},locale:'zh-CN'});page.setDefaultTimeout(15000);

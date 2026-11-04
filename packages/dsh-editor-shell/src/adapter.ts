@@ -17,8 +17,9 @@ import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProp
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
-import { stripReasoningText } from './conversation-lifecycle.ts'
+
 import { isNovelIndexJobPrompt } from './novel-index.ts'
+import { BOT_INIT_SENTINEL } from 'dsh-editor-workbench/contracts'
 
 export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 export { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME } from 'dsh-manuscript/client/editor-core'
@@ -96,6 +97,14 @@ export type PendingQuestion = {
 export type PendingInteraction = PendingApproval | PendingQuestion
 
 export type SessionRemote = EditorRemote['session']
+
+export function stripReasoningText(text: string): string {
+  return text
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/giu, '')
+    .replace(/<think\b[^>]*>[\s\S]*$/giu, '')
+    .replace(/<\/?think\b[^>]*>/giu, '')
+    .trim()
+}
 
 export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[], depth = 0): string {
   const text = blocks.map((block) => {
@@ -236,6 +245,7 @@ export function chatRows(snapshot: ChatTranscript): ChatRow[] {
       /* 初始化（建索引）指令本身不展示,但它之后的思考、查找与总结照常可见,
          让作者能看到初始化正在进行的过程。 */
       if (isNovelIndexJobPrompt(text)) continue
+      if (text.startsWith(BOT_INIT_SENTINEL)) continue
       const envelope = parseProjectContextEnvelope(text)
       rows.push({
         ...common,
@@ -329,16 +339,6 @@ export async function send(session: SessionFace, text: string): Promise<RpcResul
   return session.prompt([{ type: 'text', text: trimmed } satisfies PromptContentPart], 'queue')
 }
 
-export async function sendProjectContext(
-  session: SessionFace,
-  userRequest: string,
-  compile: () => Promise<{ serialized: string; receipt: ProjectContextReceiptBundle }>,
-): Promise<{ result: RpcResult<{ accepted: true }> | undefined; receipt: ProjectContextReceiptBundle } | undefined> {
-  const trimmed = userRequest.trim()
-  if (!trimmed) return undefined
-  const compiled = await compile()
-  return { result: await send(session, compiled.serialized), receipt: compiled.receipt }
-}
 
 export async function stop(session: SessionFace): Promise<RpcResult<{ accepted: true }>> {
   return session.cancel()

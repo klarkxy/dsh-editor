@@ -55,7 +55,7 @@ describe('shell client inject', () => {
   it('declares every Remote face the renderer reads through ctx.remote', () => {
     expect(inject).toEqual([
       'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
-      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.workspace', 'remote.directoryPicker', 'remote.agentPresets',
+      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.workspace', 'remote.directoryPicker', 'remote.agentPresets', 'remote.account',
       'uiSession', 'locale', 'theme', 'shortcuts',
     ])
   })

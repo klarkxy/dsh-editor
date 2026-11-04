@@ -6,6 +6,7 @@ import { overviewHandlers } from './overview.ts'
 import { projectHandlers } from './project.ts'
 import { proposalHandlers } from './proposal.ts'
 import { snapshotHandlers } from './snapshot.ts'
+import { botHandlersForIndex } from '../bot/rpc-index.ts'
 import type { WorkbenchHandler, WorkbenchHandlers } from './types.ts'
 
 const clusters: WorkbenchHandlers[] = [
@@ -16,6 +17,7 @@ const clusters: WorkbenchHandlers[] = [
   importHandlers,
   proposalHandlers,
   memoryHandlers,
+  botHandlersForIndex,
 ]
 
 function assertUniqueHandlerKeys(maps: WorkbenchHandlers[]): void {
@@ -38,6 +40,7 @@ export const workbenchHandlers = {
   ...importHandlers,
   ...proposalHandlers,
   ...memoryHandlers,
+  ...botHandlersForIndex,
 } satisfies Record<WorkbenchEndpoint, WorkbenchHandler>
 
 type ExtraHandlerKeys = Exclude<keyof typeof workbenchHandlers, WorkbenchEndpoint>

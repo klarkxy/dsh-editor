@@ -45,9 +45,10 @@ type ChatHistoryProps = {
   outgoing: ChatOutgoing | null
   outgoingIsCanonical: boolean
   hasTurnError: boolean
-  initGuide: ReactNode
   /** §5 空状态（三条起步建议），由 Chat 在确认为空时传入。 */
   empty?: ReactNode
+  /** 之前对话段的只读拼接内容（换段标记与回顾），由 Chat 传入。 */
+  stitched?: ReactNode
   /* 会话提案板：Chat 持有实例，这里读状态渲染粘性条，按行下发登记与批量入口。 */
   board: ProposalBoard
   proposalTurnKeys: ReadonlyMap<string, number>
@@ -58,7 +59,7 @@ export function ChatHistory({
   ctx, session, locale, hidden, renderSlot, snapshot, historyRef, bottomPinnedRef, historyBlocks,
   messageCards, messageCardTick, messageCardContext, handleApplied, isNewMessage, partial,
   hasPartial, visibleCalls, queuedSubmissions, pendingItems, outgoing, outgoingIsCanonical,
-  hasTurnError, initGuide, empty, board, proposalTurnKeys,
+  hasTurnError, empty, stitched, board, proposalTurnKeys,
 }: ChatHistoryProps) {
   const liveOpen = snapshot.running
   const liveSteps = <Fragment>
@@ -91,7 +92,7 @@ export function ChatHistory({
           <ProposalBoardScope board={board} turnKeys={proposalTurnKeys}>
             {/* 粘性条与提案行的批量入口都读 ProposalBoardContext。 */}
             <ChatProposalPill historyRef={historyRef} />
-          {initGuide}
+          {stitched}
           {empty}
           {snapshot.hasMore ? <Button
             type="button"

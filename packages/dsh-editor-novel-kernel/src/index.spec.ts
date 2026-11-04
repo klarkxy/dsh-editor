@@ -193,7 +193,7 @@ describe('novel-kernel Host entry', () => {
   it('generic/article/technical mount only workbench tools and have no novel_*', () => {
     const { ctx, names } = registrationHost()
     applyWorkbenchTools(ctx)
-    expect(names()).toEqual([WRITING_PROPOSE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME])
+    expect(names()).toEqual([WRITING_PROPOSE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME, 'conversation_search', 'conversation_read', 'conversation_wrap_up'])
     expect(names().some((toolName) => toolName.startsWith('novel_'))).toBe(false)
   })
 
@@ -246,12 +246,12 @@ describe('novel-kernel Host entry', () => {
     }
   })
 
-  it('knowledge-only registers novel_knowledge and nothing that writes or maintains legacy state', () => {
+  it('knowledge-only registers novel_knowledge and novel_memory_update and nothing else', () => {
     expect(resolveNovelKernelMode({ mode: NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE })).toBe(NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE)
     expect(resolveNovelKernelMode(NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE)).toBe(NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE)
     const { ctx, names, guards, sections } = registrationHost()
     apply(ctx, { mode: NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE })
-    expect(names()).toEqual([NOVEL_KNOWLEDGE_TOOL_NAME])
+    expect(names()).toEqual([NOVEL_KNOWLEDGE_TOOL_NAME, NOVEL_MEMORY_UPDATE_TOOL_NAME])
     expect(names().some((toolName) => (
       toolName === PROPOSAL_TOOL_NAME
       || toolName === NOVEL_INDEX_WRITE_TOOL_NAME
@@ -259,7 +259,6 @@ describe('novel-kernel Host entry', () => {
       || toolName === NOVEL_SCRATCH_READ_TOOL_NAME
       || toolName === NOVEL_SCRATCH_LIST_TOOL_NAME
       || toolName === NOVEL_OVERVIEW_TOOL_NAME
-      || toolName === NOVEL_MEMORY_UPDATE_TOOL_NAME
     ))).toBe(false)
     expect(guards).toHaveLength(0)
     expect(sections).toEqual([])
@@ -273,9 +272,13 @@ describe('novel-kernel Host entry', () => {
     expect(names()).toEqual([
       WRITING_PROPOSE_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
+      'conversation_search',
+      'conversation_read',
+      'conversation_wrap_up',
       NOVEL_KNOWLEDGE_TOOL_NAME,
+      NOVEL_MEMORY_UPDATE_TOOL_NAME,
     ])
-    expect(names().filter((toolName) => toolName.startsWith('novel_'))).toEqual([NOVEL_KNOWLEDGE_TOOL_NAME])
+    expect(names().filter((toolName) => toolName.startsWith('novel_'))).toEqual([NOVEL_KNOWLEDGE_TOOL_NAME, NOVEL_MEMORY_UPDATE_TOOL_NAME])
   })
 
   it('rejects an unknown kernel mode instead of falling back to the full surface', () => {

@@ -25,13 +25,13 @@
       "types": "./lib/writing-config.d.ts",
       "default": "./lib/writing-config.js"
     },
-    "./developer-config": {
-      "types": "./lib/developer-config.d.ts",
-      "default": "./lib/developer-config.js"
-    },
     "./limit-break-config": {
       "types": "./lib/limit-break-config.d.ts",
       "default": "./lib/limit-break-config.js"
+    },
+    "./bot-config": {
+      "types": "./lib/bot-config.d.ts",
+      "default": "./lib/bot-config.js"
     }
   },
   "files": [
@@ -81,15 +81,15 @@
         "locked": true
       },
       {
-        "id": "ui-developer",
-        "title": "开发者偏好",
-        "description": "编辑器开发者配置",
-        "locked": true
-      },
-      {
         "id": "ui-limit-break",
         "title": "破限模式",
         "description": "绕过模型内容审查的编辑器配置",
+        "locked": true
+      },
+      {
+        "id": "ui-bot",
+        "title": "搭档对话",
+        "description": "写作搭档的闲置回顾与缓存有效期",
         "locked": true
       }
     ]

@@ -107,11 +107,11 @@ export const EditorColumn = memo(function EditorColumn(props: {
   onStatusChange?(status: EditorCoreStatus): void
   contentRevision: number
   onDirtyChange(dirty: boolean): void
+  authorPreferences: string
+  authorMemory: string
   completionPreference: CompletionPreference
   completionDelayMs?: number
   completionEnabled: boolean
-  authorPreferences: string
-  authorMemory: string
   typewriter?: boolean
   focusParagraph?: boolean
   typography?: {
@@ -146,12 +146,12 @@ export const EditorColumn = memo(function EditorColumn(props: {
         externalRevision={props.contentRevision}
         onDirtyChange={props.onDirtyChange}
         reveal={props.reveal}
+        authorPreferences={props.authorPreferences}
+        authorMemory={props.authorMemory}
         completionPreference={props.completionPreference}
         completionDelayMs={props.completionDelayMs}
         /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
         completionEnabled={props.completionEnabled}
-        authorPreferences={props.authorPreferences}
-        authorMemory={props.authorMemory}
         typewriter={props.typewriter}
         focusParagraph={props.focusParagraph}
         typography={props.typography}
@@ -166,8 +166,6 @@ export const ChatColumn = memo(function ChatColumn(props: {
   workspaceId?: WorkspaceId
   activePath?: string
   getActiveDocTitle?(): string | undefined
-  authorPreferences: string
-  authorMemory: string
   renderSlot?: SettingsRenderSlot
   hidden: boolean
   overlay?: boolean
@@ -186,8 +184,6 @@ export const ChatColumn = memo(function ChatColumn(props: {
         workspaceId={props.workspaceId}
         activePath={props.activePath}
         getActiveDocTitle={props.getActiveDocTitle}
-        authorPreferences={props.authorPreferences}
-        authorMemory={props.authorMemory}
         renderSlot={props.renderSlot}
         hidden={props.hidden}
         overlay={props.overlay}

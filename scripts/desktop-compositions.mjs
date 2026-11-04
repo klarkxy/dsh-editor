@@ -220,20 +220,4 @@ export async function configureProfile(destination, composition) {
       ...publishedCatalogEntries,
     },
   }, null, 2)}\n`)
-  // First-party plugin presets ship through the same template channel as the
-  // app-owned ones: copy each declared dir next to them and mark it app-owned.
-  const presets = composition.presets ?? []
-  if (presets.length) {
-    const byName = new Map(manifests.map((item) => [item.name, item]))
-    const presetRoot = resolve(destination, 'agent-presets')
-    await mkdir(presetRoot, { recursive: true })
-    for (const preset of presets) {
-      const manifest = byName.get(preset.packageName)
-      if (!manifest) throw new Error(`composition preset ${preset.id} comes from unknown package ${preset.packageName}`)
-      const target = join(presetRoot, preset.id)
-      await rm(target, { recursive: true, force: true })
-      await cp(resolve(manifest.dir, preset.path), target, { recursive: true })
-      await writeFile(join(target, '.dsh-editor-owner.json'), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`)
-    }
-  }
 }

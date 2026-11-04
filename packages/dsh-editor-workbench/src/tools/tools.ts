@@ -3,6 +3,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { asHost, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import { createAuthorObserveTool } from '../tools/observe-tool.ts'
 import { createWritingProposeTool } from '../proposals/writing-propose-tool.ts'
+import { createConversationReadTool, createConversationSearchTool, createConversationWrapUpTool } from '../bot/recall.ts'
+import { createBotToolDeps } from '../bot/deps.ts'
 export const name = 'dsh-editor-workbench-tools'
 export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools', 'editorWritingPreferences'] as const
 
@@ -33,6 +35,10 @@ export function apply(ctx: Context): void {
       const preferences = ctx.get('editorWritingPreferences') as { remember(observation: string): Promise<'added' | 'already-present'> }
       return preferences.remember(observation)
     }))
+    const botDeps = createBotToolDeps(ctx)
+    tools.register(createConversationSearchTool(ctx, botDeps))
+    tools.register(createConversationReadTool(ctx, botDeps))
+    tools.register(createConversationWrapUpTool(ctx, botDeps))
   }
   if (tools && typeof tools.restrict === 'function') {
     ctx.effect(() => restrictInheritedHostTools(tools), 'dsh-editor-workbench.tool-restrict')

@@ -29,7 +29,7 @@ describe('workbench tool isolation', () => {
   it('generic apply (writing / article / technical) registers writing_propose and author_observe only', () => {
     const { ctx, names } = registrationCtx()
     apply(ctx)
-    expect(names()).toEqual([WRITING_PROPOSE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME])
+    expect(names()).toEqual([WRITING_PROPOSE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME, 'conversation_search', 'conversation_read', 'conversation_wrap_up'])
     expect(names().some((name) => name.startsWith('novel_'))).toBe(false)
   })
 
@@ -48,6 +48,9 @@ describe('workbench tool isolation', () => {
     expect(names()).toEqual([
       WRITING_PROPOSE_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
+      'conversation_search',
+      'conversation_read',
+      'conversation_wrap_up',
       NOVEL_OVERVIEW_TOOL_NAME,
       MEMORY_UPDATE_TOOL_NAME,
     ])

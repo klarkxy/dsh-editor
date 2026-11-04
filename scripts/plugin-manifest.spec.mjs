@@ -76,7 +76,6 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-manuscript',
       'dsh-editor-workbench',
       'dsh-editor-novel-kernel',
-      'dsh-editor-writing-presets',
       'dsh-editor-shell',
       'dsh-editor-plugins',
       'dsh-editor-cards',
@@ -132,20 +131,15 @@ describe('plugin manifests and composition resolver', () => {
     const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel']
     const core = ['dsh-manuscript', 'dsh-editor-workbench']
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]
-    const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', ...tail]
+    const packages = [...core, 'dsh-editor-novel-kernel', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'overview-panel', 'writing-presets'],
+      features: ['assistant', 'completion', 'overview-panel'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       runtimeDependencies: ['@klarkxy/dsh-plugin-kit', 'react'],
       disabledEntries: ['editor-cards', 'editor-memory-panel'],
       extraInserts: [],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist' },
-      presets: [
-        { id: 'dsh-editor-article', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-article' },
-        { id: 'dsh-editor-novel', packageName: 'dsh-editor-novel-kernel', path: 'presets/dsh-editor-novel' },
-        { id: 'dsh-editor-technical', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-technical' },
-      ],
       bundles: [...BASE_BUNDLES, ...packages],
     }
 
@@ -163,7 +157,6 @@ describe('plugin manifests and composition resolver', () => {
     expect(capability.features).not.toContain('cards')
     expect(capability.features).not.toContain('memory-panel')
     expect(capability.packages).toContain('dsh-editor-novel-kernel')
-    expect(capability.packages).toContain('dsh-editor-writing-presets')
     expect(capability.packages).toContain('dsh-editor-cards')
     expect(capability.packages).toContain('dsh-editor-memory-panel')
     expect(capability.disabledEntries).toEqual(['editor-cards', 'editor-memory-panel'])
@@ -209,27 +202,17 @@ describe('plugin manifests and composition resolver', () => {
     expect(composition.extraInserts).toEqual([])
   })
 
-  it('defaults new sessions to dsh-editor-writing and mounts novel-kernel only on novel and legacy presets', () => {
+  it('defaults new sessions to dsh-editor-writing, the only shipped preset', () => {
     const profile = resolve(root, 'apps/desktop/resources/profile')
     const patch = readFileSync(resolve(profile, 'cordis.patch.yml'), 'utf8')
     expect(patch).toMatch(/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/)
     expect(patch).not.toMatch(/- id: agent-preset-registry\s+config:\s+default: dsh-editor\s*$/m)
 
-    /* 模板只保留 legacy 与核心通用写作；小说/文章/技术由第一方包提供。 */
-    const sourceDir = (id) => {
-      if (id === 'dsh-editor' || id === 'dsh-editor-writing') return resolve(profile, 'agent-presets', id)
-      if (id === 'dsh-editor-novel') return resolve(root, 'packages/dsh-editor-novel-kernel/presets', id)
-      return resolve(root, 'packages/dsh-editor-writing-presets/presets', id)
-    }
-    const kernelPresets = new Set(['dsh-editor', 'dsh-editor-novel'])
-    for (const id of ['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing']) {
-      const composition = readFileSync(resolve(sourceDir(id), 'agent.cordis.yml'), 'utf8')
-      if (kernelPresets.has(id)) expect(composition).toContain('dsh-editor-novel-kernel')
-      else expect(composition).not.toContain('dsh-editor-novel-kernel')
-    }
+    const composition = readFileSync(resolve(profile, 'agent-presets', 'dsh-editor-writing', 'agent.cordis.yml'), 'utf8')
+    expect(composition).toContain('dsh-editor-novel-kernel')
   })
 
-  it('documents compositions as aliases and conversation presets as writing modes', () => {
+  it('documents compositions as aliases', () => {
     const docs = [
       'README.md',
       'docs/README.md',
@@ -238,136 +221,12 @@ describe('plugin manifests and composition resolver', () => {
       'packages/README.md',
       'packages/dsh-editor-shell/README.md',
       'packages/dsh-editor-novel-kernel/README.md',
-      'packages/dsh-editor-writing-presets/README.md',
     ].map((path) => readFileSync(resolve(root, path), 'utf8')).join('\n')
     expect(docs).toContain('dsh-editor-writing')
-    expect(docs).toContain('dsh-editor-novel')
-    expect(docs).toContain('dsh-editor-article')
-    expect(docs).toContain('dsh-editor-technical')
     expect(docs).not.toMatch(/新建(?:作品)?预建[^。\n]{0,40}正文\/[^。\n]{0,40}大纲\//)
     expect(docs).not.toMatch(/basic\s*\/\s*smart 只是更小的 feature 集合/)
     expect(docs).not.toMatch(/桌面写作会话走专属 `dsh-editor` agent preset/)
     expect(docs).not.toMatch(/默认[:：].{0,12}dsh-editor(?!-)/)
-  })
-})
-describe('plugin conversation preset manifests', () => {
-  function manifestRoot(packages) {
-    const root = mkdtempSync(join(tmpdir(), 'dsh-manifest-'))
-    for (const [name, pkg] of Object.entries(packages)) {
-      const dir = join(root, 'packages', name)
-      mkdirSync(join(dir, 'agent-presets', 'team-style'), { recursive: true })
-      writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg))
-      writeFileSync(join(dir, 'cordis.patch.yml'), `- insert:\n    - id: entry-${name}\n      name: ${name}\n`)
-      writeFileSync(join(dir, 'agent-presets', 'team-style', 'preset.yml'), 'name: x\n')
-      writeFileSync(join(dir, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
-    }
-    return root
-  }
-  const basePkg = (name, presets) => ({
-    name,
-    dsh: { bundle: { patch: './cordis.patch.yml' } },
-    dshEditor: {
-      role: 'feature',
-      visibility: 'public',
-      entries: [{ id: `entry-${name}`, title: 't', description: 'd' }],
-      ...(presets ? { presets } : {}),
-    },
-  })
-
-  it('accepts and normalizes declared presets', () => {
-    const root = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: 'agent-presets/team-style' }]) })
-    const manifests = loadPluginManifests(root)
-    expect(manifests).toHaveLength(1)
-    expect(manifests[0].presets).toEqual([{ id: 'team-style', path: 'agent-presets/team-style' }])
-  })
-
-  it('rejects reserved-prefix and unsafe preset ids', () => {
-    const reserved = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }]) })
-    expect(() => loadPluginManifests(reserved)).toThrow(/must not start with dsh-editor/)
-    const unsafe = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'bad id', path: 'agent-presets/team-style' }]) })
-    expect(() => loadPluginManifests(unsafe)).toThrow(/invalid preset id/)
-  })
-
-  it('rejects preset paths that escape the package or lack the required files', () => {
-    const escaping = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: '../outside' }]) })
-    expect(() => loadPluginManifests(escaping)).toThrow(/invalid path/)
-    const missing = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: 'agent-presets/absent' }]) })
-    expect(() => loadPluginManifests(missing)).toThrow(/preset\.yml and agent\.cordis\.yml/)
-  })
-
-  it('rejects duplicate preset ids across packages', () => {
-    const root = manifestRoot({
-      'plugin-one': basePkg('plugin-one', [{ id: 'team-style', path: 'agent-presets/team-style' }]),
-      'plugin-two': basePkg('plugin-two', [{ id: 'team-style', path: 'agent-presets/team-style' }]),
-    })
-    expect(() => loadPluginManifests(root)).toThrow(/duplicate conversation preset id team-style/)
-  })
-
-  it('lets first-party desktop packages declare app-prefixed preset ids', () => {
-    const pkg = basePkg('first-party', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
-    pkg.dshEditor.visibility = 'desktop'
-    const manifests = loadPluginManifests(manifestRoot({ 'first-party': pkg }))
-    expect(manifests).toHaveLength(1)
-    expect(manifests[0].presets).toEqual([{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
-  })
-
-  it('requires runtime dependencies to be production dependencies and includes them only with their package', () => {
-    const pkg = basePkg('runtime-plugin')
-    pkg.dshEditor.role = 'core'
-    pkg.dshEditor.runtimeDependencies = ['runtime-adapter']
-    pkg.dependencies = { 'runtime-adapter': '1.0.0' }
-    const manifests = loadPluginManifests(manifestRoot({ 'runtime-plugin': pkg }))
-    expect(resolveComposition(manifests, { id: 'x', label: 'x', features: [] }).runtimeDependencies).toEqual(['runtime-adapter'])
-
-    const invalid = basePkg('invalid-runtime-plugin')
-    invalid.dshEditor.runtimeDependencies = ['missing-adapter']
-    expect(() => loadPluginManifests(manifestRoot({ 'invalid-runtime-plugin': invalid }))).toThrow(/must be declared in dependencies/)
-  })
-
-  it('loads scoped workspace dependencies and enables preinstalled entries without requiring Shell services', () => {
-    const base = basePkg('@klarkxy/dsh-support')
-    base.dshEditor.entries[0].id = 'entry-shared'
-    base.dshEditor.role = 'core'
-    const feature = basePkg('@klarkxy/dsh-feature')
-    feature.dshEditor.entries[0] = { id: 'entry-feature', title: 'Feature', description: 'Optional', feature: 'optional' }
-    feature.dependencies = { '@klarkxy/dsh-support': 'workspace:*' }
-    const root = manifestRoot({ shared: base, feature })
-    const manifests = loadPluginManifests(root)
-    const result = resolveComposition(manifests, { id: 'x', label: 'x', features: [], preinstalled: ['@klarkxy/dsh-feature'] })
-    expect(result.packages).toEqual(['@klarkxy/dsh-feature', '@klarkxy/dsh-support'])
-    expect(result.disabledEntries).toEqual([])
-    expect(result.shellFeatures).toEqual({})
-    expect(manifests.find(item => item.name === '@klarkxy/dsh-feature').workspaceDeps).toEqual(['@klarkxy/dsh-support'])
-    expect(() => resolveComposition(manifests, { id: 'x', label: 'x', features: [], preinstalled: ['missing'] })).toThrow(/preinstalled/)
-  })
-
-  it('preserves an explicitly disabled preinstalled feature default', () => {
-    const feature = basePkg('@klarkxy/dsh-optional')
-    feature.dshEditor.entries[0] = { id: 'entry-feature', title: 'Optional', description: 'Off until enabled', feature: 'optional', defaultEnabled: false }
-    const loaded = loadPluginManifests(manifestRoot({ feature }))
-    const composition = resolveComposition(loaded, { id: 'x', label: 'x', features: [], preinstalled: ['@klarkxy/dsh-optional'] })
-    expect(composition.disabledEntries).toEqual(['entry-feature'])
-    expect(composition.shellFeatures).toEqual({})
-    const explicitlyEnabled = resolveComposition(loaded, { id: 'x', label: 'x', features: ['optional'] })
-    expect(explicitlyEnabled.enabledEntries).toEqual(['entry-feature'])
-    expect(explicitlyEnabled.disabledEntries).toEqual([])
-    feature.dshEditor.entries[0].defaultEnabled = 'false'
-    expect(() => loadPluginManifests(manifestRoot({ feature }))).toThrow(/defaultEnabled/)
-  })
-
-  it('selects feature-only packages and flows their presets into resolveComposition', () => {
-    const pkg = basePkg('first-party', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
-    pkg.dshEditor.visibility = 'desktop'
-    pkg.dshEditor.features = ['writing-presets']
-    const manifests = loadPluginManifests(manifestRoot({ 'first-party': pkg }))
-    const resolved = resolveComposition(manifests, { id: 'x', label: 'x', features: ['writing-presets'] })
-    expect(resolved.packages).toEqual(['first-party'])
-    expect(resolved.presets).toEqual([
-      { id: 'dsh-editor-clone', packageName: 'first-party', path: 'agent-presets/team-style' },
-    ])
-    const dropped = resolveComposition(manifests, { id: 'x', label: 'x', features: [] })
-    expect(dropped.packages).toEqual([])
-    expect(dropped.presets).toEqual([])
   })
 })
 

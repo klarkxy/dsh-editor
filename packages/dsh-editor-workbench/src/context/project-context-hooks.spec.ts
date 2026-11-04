@@ -2,14 +2,21 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { emptyBotState, type BotState } from '../bot/state.ts'
 import { writeTextFile } from 'dsh-manuscript/host-api'
 import { createMemoryContext } from '../test-helpers.ts'
 import { compileProjectContext, compileProjectContextV2 } from '../contracts.ts'
 import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from './project-context-hooks.ts'
 import { WRITING_AGENT_PRESETS } from '../host-guard.ts'
 
-function session(agentPreset: string = 'dsh-editor') {
+let mockBotState: BotState = emptyBotState()
+vi.mock('../bot/state.ts', async (importActual) => {
+  const actual = await importActual<typeof import('../bot/state.ts')>()
+  return { ...actual, loadBotState: vi.fn(async () => mockBotState) }
+})
+
+function session(agentPreset: string = 'dsh-editor-writing') {
   return Session.create(SessionId('rules-test'), [], {
     id: SessionId('rules-test'),
     version: SESSION_FORMAT_VERSION,
@@ -91,5 +98,52 @@ describe('rules and history on the actual host contracts', () => {
       const result = await handlers['tools/post-execute']!(exec, { content: [{ type: 'text', text: 'source' }] }, async () => ({ kind: 'accept' }))
       expect(result.content[1].text).toContain(`version-${preset}`)
     }
+  })
+})
+
+describe('bot prompt freeze and handoff section', () => {
+  it('returns the frozen assembly on later assembles despite changed preferences', async () => {
+    const handlers: Record<string, (...args: any[]) => any> = {}
+    const prefs: Record<string, unknown> = { authorPreferences: '第一版偏好' }
+    const files = createMemoryContext({ 'AGENTS.md': '规则A' })
+    const s = Session.create(SessionId('freeze-test'), [], { id: SessionId('freeze-test'), version: SESSION_FORMAT_VERSION, createdAt: 1, cwd: '/workspace', agentPreset: 'dsh-editor-writing', isSeeded: false })
+    const ctx = {
+      on: (name: string, fn: (...args: any[]) => any) => { handlers[name] = fn }, effect: () => {},
+      fs: files.fs, sessions: { get: () => s },
+      workspaceRegistry: { resolveByPath: async () => ({ path: '/workspace', sessionIds: ['freeze-test'] }) },
+      sandboxPolicy: { resolve: () => files.policy },
+      get: (name: string) => name === 'editorWritingPreferences' ? { read: () => prefs } : undefined,
+    } as unknown as Context
+    installProjectContextHooks(ctx)
+    const next = async () => emptyAssembly()
+    const first = await handlers['system-prompt/assemble']!(emptyAssembly(), { agent: { session: s } }, next)
+    expect(renderPrompt(first)).toContain('第一版偏好')
+    prefs.authorPreferences = '第二版偏好'
+    const second = await handlers['system-prompt/assemble']!(emptyAssembly(), { agent: { session: s } }, next)
+    expect(second.sections).toBe(first.sections)
+    expect(second.variables).toBe(first.variables)
+    expect(renderPrompt(second)).toContain('第一版偏好')
+  })
+})
+
+describe('bot handoff section', () => {
+  it('adds dsh-editor:handoff only when the segment records handoffText', async () => {
+    const files = createMemoryContext({ 'AGENTS.md': '规则' })
+    const make = (id: string) => Session.create(SessionId(id), [], { id: SessionId(id), version: SESSION_FORMAT_VERSION, createdAt: 1, cwd: '/workspace', agentPreset: 'dsh-editor-writing', isSeeded: false })
+    const s = make('with-handoff')
+    const ctx = {
+      fs: files.fs, sessions: { get: () => s },
+      workspaceRegistry: { resolveByPath: async () => ({ path: '/workspace', sessionIds: ['with-handoff', 'no-handoff'] }) },
+      sandboxPolicy: { resolve: () => files.policy },
+      get: () => undefined,
+    } as unknown as Context
+    mockBotState = emptyBotState()
+    mockBotState.segments.push({ sessionId: 'with-handoff', startedAt: 1, reason: 'idle-expired', handoffMode: 'verbatim', handoffText: '交接文本体' })
+    const assembly = await assembleProjectRules(ctx, emptyAssembly(), { session: s })
+    expect(renderPrompt(assembly)).toContain('交接文本体')
+    const other = make('no-handoff')
+    const plain = await assembleProjectRules({ ...ctx, sessions: { get: () => other } } as unknown as Context, emptyAssembly(), { session: other })
+    expect(plain.sections.some((section) => section.name === 'dsh-editor:handoff')).toBe(false)
+    mockBotState = emptyBotState()
   })
 })

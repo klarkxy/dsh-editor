@@ -18,7 +18,6 @@ import {
   filterCatalogSections,
   mergeConfigurationCards,
   newUserCardKeys,
-  presetEnabledRequest,
   userSectionKeys,
   type PluginCatalogSection,
 } from '../model/plugins-catalog.ts'
@@ -383,7 +382,7 @@ function catalog(props: Partial<Parameters<typeof PluginsCatalog>[0]> = {}) {
     query: '',
     pending: '',
     actionError: '',
-    onToggle() {}, onTogglePreset() {}, onConfigure() {}, onDetail() {},
+    onToggle() {}, onConfigure() {}, onDetail() {},
     ...props,
   }))
 }
@@ -476,22 +475,6 @@ describe('plugin catalog', () => {
     expect(failed).not.toContain('用户插件')
   })
 
-  it('renders writing presets as a built-in sub-group and locks the required ones', () => {
-    const html = catalog({ presets: [
-      { id: 'dsh-editor-writing', title: '通用写作', description: '默认写作', enabled: true, locked: true },
-      { id: 'dsh-editor-novel', title: '小说工具', description: '长篇创作助手', enabled: false, locked: false },
-    ], restartRequired: true })
-    const builtin = sectionHtml(html, 'builtin')
-    expect(countIn(html, 'builtin')).toBe('3')
-    expect(builtin).toContain('写作模式')
-    expect(builtin).toContain('data-testid="plugins-catalog-preset-dsh-editor-writing"')
-    expect(builtin).toContain('data-testid="plugins-catalog-preset-toggle-dsh-editor-novel"')
-    expect(builtin).toContain('仅影响新对话，进行中的对话不变。')
-    expect(html).toContain('重启 DSH 后生效。')
-    const locked = builtin.slice(builtin.indexOf('data-testid="plugins-catalog-preset-dsh-editor-writing"'))
-    expect(locked.slice(0, locked.indexOf('data-testid="plugins-catalog-preset-dsh-editor-novel"'))).toContain('必需')
-    expect(sectionHtml(catalog(), 'official')).not.toContain('写作模式')
-  })
 
   it('renders the author brand icon and falls back to the monogram when it is absent or fails', () => {
     const icon = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
@@ -622,7 +605,7 @@ describe('plugin catalog', () => {
     expect(source[2]!.items).toHaveLength(1)
   })
 
-  it('issues the bundle, entry and preset requests the Host contract defines', () => {
+  it('issues the bundle and entry requests the Host contract defines', () => {
     expect(catalogToggleRequest({ key: 'bundle:a', title: 'A', description: '', badges: [], packageName: '@scope/a', action: 'switch' }, false))
       .toEqual({ channel: '/api', endpoint: 'pluginManager/setBundleEnabled', payload: { args: { name: '@scope/a', enabled: false } } })
     expect(catalogToggleRequest({ key: 'entry:terminal', title: 'A', description: '', badges: [], entryId: 'terminal', action: 'switch' }, true))
@@ -631,8 +614,6 @@ describe('plugin catalog', () => {
     expect(catalogToggleRequest({ key: 'entry:terminal', title: 'A', description: '', badges: [], packageName: '@scope/a', entryId: 'terminal', action: 'switch' }, true))
       .toEqual({ channel: '/api', endpoint: 'pluginManager/setPluginEnabled', payload: { args: { id: 'terminal', enabled: true } } })
     expect(catalogToggleRequest({ key: 'entry:orphan', title: 'A', description: '', badges: [], action: 'switch' }, true)).toBeNull()
-    expect(presetEnabledRequest({ id: 'dsh-editor-novel', title: '小说工具', description: '', enabled: false, locked: false }, true))
-      .toEqual({ channel: '/dsh-editor-plugins', endpoint: 'presets.setEnabled', payload: { id: 'dsh-editor-novel', enabled: true } })
   })
 })
 

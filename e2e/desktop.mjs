@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWritingPresets } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -366,13 +366,6 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
     const bundle = bundles.find(item => item.name === name)
     if (!bundle?.enabled || bundle.readOnlyReason !== 'management-required') throw new Error(`native manager lost the required core guard: ${name}`)
   }
-  const presets = await openWritingPresets(pluginsPage)
-  const presetSwitch = presets.locator(S.pluginsPresetToggleNovel)
-  await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })
-  if ((await presetSwitch.getAttribute('aria-checked')) !== 'true') throw new Error('小说创作 writing preset should be enabled by default')
-  const lockedCore = presets.locator(S.pluginsPresetWriting)
-  await lockedCore.locator(S.pluginsCatalogPresetLocked).filter({ hasText: '必需' }).waitFor()
-  if (await lockedCore.locator(S.switchAny).count()) throw new Error('core writing preset exposes a toggle')
   await closePluginsPage(window)
 }))
 

@@ -3,7 +3,8 @@
       name: dsh-editor-shell
     - id: dsh-editor-writing
       name: dsh-editor-shell/writing-config
-    - id: ui-developer
-      name: dsh-editor-shell/developer-config
     - id: ui-limit-break
       name: dsh-editor-shell/limit-break-config
+
+    - id: ui-bot
+      name: dsh-editor-shell/bot-config

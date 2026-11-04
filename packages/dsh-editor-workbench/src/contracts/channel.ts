@@ -57,6 +57,12 @@ export type WorkbenchEndpoint =
   | 'entry.move'
   | 'entry.delete'
   | 'entry.rename'
+  | 'bot.state'
+  | 'bot.check'
+  | 'bot.prepareHandoff'
+  | 'bot.attach'
+  | 'bot.history'
+  | 'bot.initialize'
 
 export type ProposalRename = { from: string; to: string }
 export type ProposalPayload =
@@ -114,6 +120,12 @@ export type WorkbenchRequestMap = {
   'entry.move': { sessionId: string; path: string; targetDir: string }
   'entry.delete': { sessionId: string; path: string }
   'entry.rename': { sessionId: string; path: string; name: string }
+  'bot.state': { sessionId: string }
+  'bot.check': { sessionId: string }
+  'bot.prepareHandoff': { sessionId: string }
+  'bot.attach': { sessionId: string; fromSessionId?: string; reason?: string }
+  'bot.history': { sessionId: string; segmentSessionId: string }
+  'bot.initialize': { sessionId: string }
 }
 
 export type WorkbenchResponseMap = {
@@ -155,7 +167,40 @@ export type WorkbenchResponseMap = {
   'entry.move': { path: string }
   'entry.delete': { path: string }
   'entry.rename': { path: string }
+  'bot.state': BotStateView
+  'bot.check': BotCheckResult
+  'bot.prepareHandoff': { recap: BotRecap } | { skipped: 'busy' | 'no-new-content' | 'failed' }
+  'bot.attach': { handoffMode?: BotHandoffMode }
+  'bot.history': { rows: BotHistoryRow[] }
+  'bot.initialize': { empty: true } | { empty: false; prompt: string }
 }
+
+export const BOT_INIT_SENTINEL = '【DSH Editor 作品概况】'
+
+export type BotRolloverReason = 'idle-expired' | 'model-switch' | 'prompt-changed' | 'context-full' | 'wrap-up' | 'tools-changed'
+export type BotHandoffMode = 'verbatim' | 'stored' | 'summarized' | 'tail'
+export type BotSegmentView = { sessionId: string; startedAt: number; reason: BotRolloverReason | 'first'; handoffMode?: BotHandoffMode }
+export type BotRecap = { sessionId: string; afterSeq: number; text: string; createdAt: number }
+export type BotHandoffView = { sessionId: string; coversThroughSeq: number; summary?: string; createdAt: number; provider: string; model: string }
+export type BotStateView = {
+  schema: 1
+  initialized: boolean
+  current?: string
+  segments: BotSegmentView[]
+  handoff?: BotHandoffView
+  recaps: BotRecap[]
+  wrapUpRequested?: string
+  projectEmpty: boolean
+}
+export type BotCheckResult = {
+  hasMessages: boolean
+  lastMessageSeq?: number
+  lastActivityAt?: number
+  ratio?: number
+  promptChanged: boolean
+  wrapUpRequested: boolean
+}
+export type BotHistoryRow = { seq: number; role: 'user' | 'assistant'; text: string; time: number }
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
 export type WorkbenchRpcError = (

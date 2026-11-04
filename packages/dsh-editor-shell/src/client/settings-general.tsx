@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Notice } from '../ui/index.ts'
+import { Notice } from '../ui/index.ts'
 import { SettingRow as Row, SettingsGroup } from './settings-layout.tsx'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
@@ -8,15 +8,13 @@ import { ConfirmDialog } from './dialogs.tsx'
 import { Switch, SegmentedControl } from '../ui/index.ts'
 import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
 import {
-  DEVELOPER_SETTINGS_NAMESPACE,
-  decodeDeveloperSettings,
-  type DeveloperSettings,
-} from '../developer-settings.ts'
-import {
   LIMIT_BREAK_SETTINGS_NAMESPACE,
   decodeLimitBreakSettings,
   type LimitBreakSettings,
 } from '../limit-break-settings.ts'
+import { BOT_SETTINGS_NAMESPACE, decodeBotSettings, type BotSettings } from '../bot-settings.ts'
+import { botSettingsError, cacheTtlLabel, cacheTtlOptionMinutes } from '../model/bot-conversation.ts'
+import { Input, Text } from '../ui/index.ts'
 
 /*
  * 外观与语言 / 助手 / 高级三段分区:语言、外观与繁忙时 Enter 行为写上游
@@ -111,21 +109,74 @@ export function AssistantBusyEnterRow(props: { ctx: ShellContext }) {
   );
 }
 
-/** 高级分区:审阅豁免（破限模式）+ 开发者选项。开关整行可点,确认流程不变。 */
+function useBotSetting<K extends keyof BotSettings>(scope: SettingsScope<BotSettings>, key: K): [BotSettings[K], (value: BotSettings[K]) => void, boolean] {
+  const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
+  const value = (snapshot.status === 'ready' && snapshot.value ? decodeBotSettings(snapshot.value) : decodeBotSettings(undefined))[key]
+  const writable = snapshot.status === 'ready' && snapshot.writable !== false
+  const set = (next: BotSettings[K]) => { if (writable) void scope.set(key, next).catch(() => { /* 写入失败保持现值 */ }) }
+  return [value, set, writable]
+}
+
+/** 助手分区:对话整理（ui-bot namespace）——闲置回顾时间与缓存有效期。 */
+export function AssistantBotBlock(props: { ctx: ShellContext }) {
+  const scope = useMemo(
+    () => props.ctx.configForms.get<BotSettings>(BOT_SETTINGS_NAMESPACE),
+    [props.ctx],
+  )
+  const [idle, setIdle, writable] = useBotSetting(scope, 'idleRecapMinutes')
+  const [ttl, setTtl] = useBotSetting(scope, 'cacheTtlMinutes')
+  /* 草稿值与已保存值分离：输入未提交时验证错误也要立即可见，不只是提交后才报。 */
+  const [idleDraft, setIdleDraft] = useState<string | undefined>()
+  const draftMinutes = idleDraft === undefined ? idle : Math.round(Number(idleDraft))
+  const draftValid = idleDraft === undefined || (Number.isFinite(draftMinutes) && draftMinutes >= 1 && draftMinutes <= 240)
+  const ttlError = draftValid ? botSettingsError(draftMinutes, ttl) : 'idle-too-long' as const
+  const commitIdle = (raw: string) => {
+    setIdleDraft(undefined)
+    const next = Math.round(Number(raw))
+    if (!Number.isFinite(next) || next < 1 || next > 240) return
+    if (botSettingsError(next, ttl)) return
+    setIdle(next)
+  }
+  return (
+    <SettingsBlock label={t('settings.botTitle')}>
+      <Row
+        title={t('settings.botIdleMinutes')}
+        description={t('settings.botIdleHint')}
+        children={<Input
+          type="number" min={1} max={240} step={1} size="sm"
+          value={idleDraft ?? String(idle)}
+          invalid={Boolean(ttlError)}
+          disabled={!writable}
+          aria-label={t('settings.botIdleMinutes')}
+          aria-invalid={Boolean(ttlError) || undefined}
+          aria-describedby={ttlError ? 'bot-idle-error' : undefined}
+          onChange={(raw) => setIdleDraft(raw)}
+          onBlur={(event: React.FocusEvent<HTMLInputElement>) => commitIdle(event.currentTarget.value)}
+          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') commitIdle(event.currentTarget.value) }} />} />
+      <Row
+        title={t('settings.botCacheTtl')}
+        description={t('settings.botCacheTtlHint')}
+        children={<Select
+          value={String(ttl)}
+          disabled={!writable}
+          options={cacheTtlOptionMinutes().map((minutes) => ({ value: String(minutes), label: cacheTtlLabel(minutes, t) }))}
+          onChange={(value) => setTtl(Number(value) as BotSettings['cacheTtlMinutes'])}
+          aria-label={t('settings.botCacheTtl')} />} />
+      {ttlError ? <Text id="bot-idle-error" className="settings-error" role="alert">{t('settings.botIdleTooLong')}</Text> : null}
+    </SettingsBlock>
+  );
+}
+
+/** 高级分区:审阅豁免（破限模式）。开关整行可点,确认流程不变。 */
 export function AdvancedSection(props: {
   ctx: ShellContext
-  showDeveloperMode?: boolean
-  onRevealDeveloper?(): void
 }) {
   const scopes = useMemo(() => ({
-    developer: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE),
     limitBreak: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeLimitBreakSettings>>>(LIMIT_BREAK_SETTINGS_NAMESPACE),
   }), [props.ctx])
 
-  const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
   const [limitBreakMode, setLimitBreakMode, limitBreakWritable] = useLimitBreakMode(scopes.limitBreak)
   const [limitBreakConfirm, setLimitBreakConfirm] = useState(false)
-  const showDeveloperMode = props.showDeveloperMode === true
   /* 关闭立即生效；开启要过确认框,避免误触把封号风险打开。 */
   const requestLimitBreak = (next: boolean) => {
     if (next) setLimitBreakConfirm(true)
@@ -146,24 +197,6 @@ export function AdvancedSection(props: {
           {t('settings.limitBreakWarning')}
         </Notice>
       </SettingsBlock>
-      {showDeveloperMode ? <SettingsBlock label={t('settings.developer')}>
-        <Switch
-          id="settings-developer-mode"
-          label={t('settings.developerMode')}
-          description={t('settings.developerModeHint')}
-          checked={developerMode}
-          disabled={!developerWritable}
-          onCheckedChange={setDeveloperMode} />
-      </SettingsBlock> : props.onRevealDeveloper ? <SettingsBlock label={t('settings.developer')}>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="settings-reveal-developer"
-          onClick={props.onRevealDeveloper}>
-          {t('settings.showDeveloper')}
-        </Button>
-      </SettingsBlock> : null}
       {limitBreakConfirm ? <ConfirmDialog
         id="limit-break"
         title={t('settings.limitBreakConfirmTitle')}
@@ -176,13 +209,6 @@ export function AdvancedSection(props: {
   );
 }
 
-export function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void, boolean] {
-  const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
-  const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.developerMode : false
-  const writable = snapshot.status === 'ready' && snapshot.writable !== false
-  const set = (next: boolean) => { if (writable) void scope.set('developerMode', next).catch(() => { /* 同上 */ }) }
-  return [value, set, writable]
-}
 
 export function useLimitBreakMode(scope: SettingsScope<LimitBreakSettings>): [boolean, (value: boolean) => void, boolean] {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))

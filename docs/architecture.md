@@ -4,17 +4,19 @@
 
 DSH 管理 Agent、会话、模型、审批、文件权限与对话历史。Editor 提供写作界面，不另建这些状态的副本，避免出现两份真相。产品取舍见[产品原则](product-principles.md)。
 
+搭档对话由一串 DSH 会话（段）承载。作品元数据 `.dsh-editor/bot.json` 只记录段指针、交接文本、待用摘要与回顾，不复制消息；旧段经 `ctx.sessionQuery.readSession` 冷读显示，不唤醒其 Agent。交接文本作为该段的系统提示词分节注入；系统提示词的分节与变量在段内冻结，作者约定或审查豁免变化时下一次发送前换段。摘要请求沿用源段的请求前缀（与 compaction 相同的 `ctx.llm.stream` 旁路），不写入源段日志。设计见[搭档对话设计](bot-conversation.md)。
+
 作者侧写由已有 Host 写作偏好服务写入原生 settings，工具在持久化完成后返回追加或已存在的结果。追加使用 namespace revision，拒绝覆盖并发的作者编辑；容量不足或写入失败作为工具失败返回。聊天界面读取历史不重放观察写入。升级保留当前侧写，不补导入旧版本生成但尚未落盘的观察。
 
 桌面外壳替换官方界面依赖固定版本的兼容接缝，升级约束见 [shell](../packages/dsh-editor-shell/README.md)。
 
 ## 官方插件管理器与 native profile
 
-已安装清单与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.1-rc.5` 官方插件管理器**服务**为唯一权威；官方管理器 UI（`ui-plugin-manager` 行）已在发行组合中禁用，Editor 自托管插件页：已安装三分类清单、`plugin:<包名>` 详情路由（配置、组件、信息、卸载与版本豁免）、「添加插件」对话框（检查 → 安装 → 结果/脚本批准）。`pluginNavigation` 服务由 shell 在启动时提供（`openList` / `openBundle`），配置贡献经根注册的九个 `plugins.*` 子槽位渲染，无私有座位。私有适配保留发现搜索、写作模式、有限核心守卫，以及自身生成的工具声明同步。
+已安装清单与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.1-rc.5` 官方插件管理器**服务**为唯一权威；官方管理器 UI（`ui-plugin-manager` 行）已在发行组合中禁用，Editor 自托管插件页：已安装三分类清单、`plugin:<包名>` 详情路由（配置、组件、信息、卸载与版本豁免）、「添加插件」对话框（检查 → 安装 → 结果/脚本批准）。`pluginNavigation` 服务由 shell 在启动时提供（`openList` / `openBundle`），配置贡献经根注册的九个 `plugins.*` 子槽位渲染，无私有座位。私有适配保留发现搜索、有限核心守卫，以及自身生成的工具声明同步。
 
-按需插件的工具声明由当前 bundle 选择及其所需组件的有效开关派生。Editor 在原生禁用、卸载前更新这份声明，在安装、启用成功后同步并通过公开启动接口重新协调，避免工具留在已卸下的服务上。声明写入与写作模式复用同一应用内队列；原生锁、包操作、进度与取消仍归 DSH。失败恢复依据实际保留的依赖与选择，不把部分卸载声称为完整回滚，也不改写作者补丁、预设或插件数据。外部 CLI 不参与应用内队列；下次启动会按原生状态重建声明。
+按需插件的工具声明由当前 bundle 选择及其所需组件的有效开关派生。Editor 在原生禁用、卸载前更新这份声明，在安装、启用成功后同步并通过公开启动接口重新协调，避免工具留在已卸下的服务上。声明写入使用应用内队列；原生锁、包操作、进度与取消仍归 DSH。失败恢复依据实际保留的依赖与选择，不把部分卸载声称为完整回滚，也不改写作者补丁、预设或插件数据。外部 CLI 不参与应用内队列；下次启动会按原生状态重建声明。
 
-native profile 顶层依赖用 `link:` 指向仍保留的已编译制品。`composition.json` 的 `nativeDependencies` 是不可变发行基线，与 `package.json` 里实际已选依赖分开。重部署时核心包与 `dsh-editor-profile-config` 恢复为模板规格和 `link:./profile-config`；基线中已卸下的可选依赖不会复活；作者改过的规格保留。进程在 TEMP 建立仅含 SDK 投影的 install anchor（复制 DSH 清单并链接运行时 `node_modules`），避开仓库祖先解析阴影，带所有者标记，停止时只清理自有目录。插件操作钉住随包 pnpm `11.7.0`（`--pm-on-fail=ignore`），与仓库构建用的 pnpm `10.14.0` 分开；随包 Node 为 `26.10.0`。importer 规格变化时用官方插件操作离线 `--lockfile-only` reconcile 锁文件；失败则中止，并按变更前快照恢复 DSH_HOME 中的插件配置、原 profile 与应用自有写作模式。
+native profile 顶层依赖用 `link:` 指向仍保留的已编译制品。`composition.json` 的 `nativeDependencies` 是不可变发行基线，与 `package.json` 里实际已选依赖分开。重部署时核心包与 `dsh-editor-profile-config` 恢复为模板规格和 `link:./profile-config`；基线中已卸下的可选依赖不会复活；作者改过的规格保留。进程在 TEMP 建立仅含 SDK 投影的 install anchor（复制 DSH 清单并链接运行时 `node_modules`），避开仓库祖先解析阴影，带所有者标记，停止时只清理自有目录。插件操作钉住随包 pnpm `11.7.0`（`--pm-on-fail=ignore`），与仓库构建用的 pnpm `10.14.0` 分开；随包 Node 为 `26.10.0`。importer 规格变化时用官方插件操作离线 `--lockfile-only` reconcile 锁文件；失败则中止，并按变更前快照恢复 DSH_HOME 中的插件配置、原 profile 与应用自有 preset。
 
 ## 信任与写入
 

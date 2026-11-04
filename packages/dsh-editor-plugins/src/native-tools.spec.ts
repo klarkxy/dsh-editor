@@ -380,34 +380,6 @@ describe('native tool projection lifecycle', () => {
     adapter.dispose()
   })
 
-  it('serializes native operations with writing-preset generation and its reload', async () => {
-    const f = await fixture(false)
-    const source = join(f.paths.profileDir, 'node_modules', 'novel', 'preset')
-    await mkdir(source, { recursive: true })
-    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\n')
-    await writeFile(join(source, 'agent.cordis.yml'), '[]\n')
-    await writeFile(join(f.paths.profileDir, 'composition.json'), JSON.stringify({ presets: [{ id: 'novel', packageName: 'novel', path: 'preset' }] }))
-    const started = deferred(), finish = deferred()
-    const original = f.manager.installBundle
-    f.manager.installBundle = async (spec, options) => { started.resolve(); await finish.promise; return original.call(f.manager, spec, options) }
-    const adapter = f.attach(); await adapter.ready
-    const installing = f.manager.installBundle('research-spec')
-    await started.promise
-    let presetReloaded = false
-    const writing = handlePluginsRpc('presets.setEnabled', { id: 'novel', enabled: true }, signal(), {
-      paths: f.paths, readToolState: () => readNativeToolState(f.manager as unknown as NativeToolManager),
-      reloadProfile: async () => { presetReloaded = true; expect(await f.tools()).toContain('research-tools'); return true },
-    })
-    await new Promise(done => setTimeout(done, 10))
-    expect(presetReloaded).toBe(false)
-    finish.resolve()
-    await installing
-    expect(await writing).toMatchObject({ ok: true, value: { restartRequired: false } })
-    expect(presetReloaded).toBe(true)
-    expect(await f.tools()).toContain('research-tools')
-    expect(JSON.parse(await readFile(f.file, 'utf8'))[0].insert).toContainEqual(expect.objectContaining({ id: 'editor-preset-novel' }))
-    adapter.dispose()
-  })
 
   it('disposes identity-safely and composes with core guards in either disposal order', async () => {
     const f = await fixture()

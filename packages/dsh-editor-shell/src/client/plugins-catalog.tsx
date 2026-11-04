@@ -18,22 +18,15 @@ import {
   catalogToggleRequest,
   changeReceipt,
   filterCatalogSections,
-  filterWritingPresets,
   newUserCardKeys,
-  presetEnabledRequest,
   rpcCallerOf,
   userSectionKeys,
-  writingPresetsOf,
   CATALOG_ENDPOINT,
   PLUGINS_RPC_CHANNEL,
-  PRESETS_ENDPOINT,
   type CatalogStatus,
   type PluginCatalogBundle,
   type PluginCatalogCard,
   type PluginCatalogSection,
-  type PresetsStatus,
-  type WritingPresetCard,
-  type WritingPresetsBundle,
 } from '../model/plugins-catalog.ts'
 import { ActivityText, Button } from './ui/index.ts'
 import { ChevronRightIcon, FileTextIcon, Spinner, SwitchControl } from '../ui/index.ts'
@@ -92,46 +85,12 @@ export function usePluginCatalog(ctx: unknown): PluginCatalogBundle {
   return { status, sections: sections ?? [], error, pending, actionError, restartRequired, reload, toggle }
 }
 
-export function useWritingPresets(ctx: unknown): WritingPresetsBundle {
-  const [presets, setPresets] = useState<WritingPresetCard[] | null>(null)
-  const [error, setError] = useState('')
-  const [request, setRequest] = useState(0)
-  const [pending, setPending] = useState('')
-  const [restartRequired, setRestartRequired] = useState(false)
-  useEffect(() => {
-    const call = rpcCallerOf(ctx)
-    let live = true
-    if (!call) { setError(t('plugins.catalogUnavailable')); return }
-    void safeRpcCall<unknown>(() => call(PLUGINS_RPC_CHANNEL, PRESETS_ENDPOINT, {})).then((result) => {
-      if (!live) return
-      if (!result.ok) { setError(errorMessage(result) || t('plugins.catalogError')); return }
-      setPresets(writingPresetsOf(result.value))
-      setError('')
-    })
-    return () => { live = false }
-  }, [ctx, request])
-  const setEnabled = useCallback(async (preset: WritingPresetCard, enabled: boolean) => {
-    const call = rpcCallerOf(ctx)
-    if (!call || pending) return
-    setPending(preset.id)
-    setError('')
-    const shape = presetEnabledRequest(preset, enabled)
-    const result = await safeRpcCall<{ restartRequired?: boolean }>(() => call(shape.channel, shape.endpoint, shape.payload))
-    setPending('')
-    if (!result.ok) { setError(errorMessage(result) || t('plugins.catalogError')); return }
-    setRestartRequired(result.value?.restartRequired === true)
-    setRequest((value) => value + 1)
-  }, [ctx, pending])
-  const status: PresetsStatus = presets ? 'ready' : error ? 'error' : 'loading'
-  return { status, presets: presets ?? [], error, pending, restartRequired, setEnabled }
-}
+export type CatalogKind = 'official' | 'builtin' | 'user'
 
-export type CatalogKind = 'official' | 'builtin' | 'user' | 'preset'
-
-/** 三类目录的统一类型图标：官方=DSH 标志,内置/预设=稿纸,用户=拼图。 */
+/** 三类目录的统一类型图标：官方=DSH 标志,内置=稿纸,用户=拼图。 */
 function CatalogKindIcon({ kind }: { kind: CatalogKind }) {
   if (kind === 'official') return <AppBrandMark size={20} />
-  if (kind === 'builtin' || kind === 'preset') return <FileTextIcon size="lg" />
+  if (kind === 'builtin') return <FileTextIcon size="lg" />
   return <PluginIcon size={20} />
 }
 
@@ -197,42 +156,10 @@ export function CatalogRow(props: {
   </li>
 }
 
-function PresetRow(props: {
-  preset: WritingPresetCard
-  pending: boolean
-  onToggle(preset: WritingPresetCard, enabled: boolean): void
-}) {
-  const preset = props.preset
-  return <li className="plugins-catalog-row" data-testid={`plugins-catalog-preset-${preset.id}`}>
-    <CatalogIcon title={preset.title} kind="preset" />
-    <div className="plugins-catalog-row-text">
-      <Flex className="plugins-catalog-row-head" align="center" gap="2">
-        <Text className="plugins-catalog-row-title">{preset.title}</Text>
-        {preset.locked ? <Badge tone="neutral" className="plugins-catalog-badge">
-          {t('plugins.badgeRequired')}
-        </Badge> : null}
-      </Flex>
-      {preset.description
-        ? <Text as="p" size="1" color="gray" className="plugins-catalog-row-desc" title={preset.description}>{preset.description}</Text>
-        : null}
-    </div>
-    <div className="plugins-catalog-row-action">
-      {preset.locked
-        ? <Text size="1" color="gray" className="plugins-catalog-preset-locked">{t('plugins.badgeRequired')}</Text>
-        : <SwitchControl className="plugins-catalog-switch" checked={preset.enabled} disabled={props.pending}
-          aria-label={preset.title} data-testid={`plugins-catalog-preset-toggle-${preset.id}`}
-          onCheckedChange={(enabled) => props.onToggle(preset, enabled)} />}
-    </div>
-  </li>
-}
-
 function CatalogSection(props: {
   section: PluginCatalogSection
-  presets: readonly WritingPresetCard[]
   query: string
   pending: string
-  presetPending: string
-  presetError: string
   restartRequired: boolean
   /** True while a bundle install is in flight (not-installed switches show progress). */
   installing?: boolean
@@ -241,7 +168,6 @@ function CatalogSection(props: {
   /** The user section anchors the install scroll; other sections do not move. */
   sectionRef?: RefObject<HTMLElement>
   onToggle(card: PluginCatalogCard, enabled: boolean): void
-  onTogglePreset(preset: WritingPresetCard, enabled: boolean): void
   onConfigure(card: PluginCatalogCard): void
   onDetail(card: PluginCatalogCard): void
 }) {
@@ -249,8 +175,7 @@ function CatalogSection(props: {
   const items = section.items
   const ordinary = section.id === 'user' ? items : items.filter(card => !advancedCatalogCard(card))
   const advanced = section.id === 'user' ? [] : items.filter(advancedCatalogCard)
-  const presets = section.id === 'builtin' ? props.presets : []
-  const count = items.length + presets.length
+  const count = items.length
   const empty = props.query.trim()
     ? t('plugins.catalogNoMatch')
     : section.id === 'user' ? t('plugins.catalogUserEmpty') : t('plugins.catalogEmpty')
@@ -275,17 +200,6 @@ function CatalogSection(props: {
         pending={props.pending === card.key} installing={props.installing} highlighted={false}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
     </details> : null}
-    {presets.length
-      ? <div className="plugins-catalog-subsection">
-        <Heading as="h3" size="2" className="plugins-catalog-subsection-title">{t('plugins.catalogPresets')}</Heading>
-        <ul className="plugins-catalog-rows">{presets.map((preset) => <PresetRow key={preset.id} preset={preset}
-          pending={props.presetPending === preset.id} onToggle={props.onTogglePreset} />)}</ul>
-        <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogPresetHint')}</Text>
-      </div>
-      : null}
-    {section.id === 'builtin' && props.presetError
-      ? <Text as="p" size="1" color="red" role="alert" className="plugins-catalog-hint">{props.presetError}</Text>
-      : null}
     {count ? null : <Text as="p" size="2" color="gray" className="plugins-catalog-empty">{empty}</Text>}
   </section>
 }
@@ -371,23 +285,15 @@ export function PluginsCatalog(props: {
   actionError: string
   /** True while a bundle install is in flight. */
   installing?: boolean
-  presets?: readonly WritingPresetCard[]
-  presetError?: string
-  presetPending?: string
   restartRequired?: boolean
   onRetry?(): void
   onToggle(card: PluginCatalogCard, enabled: boolean): void
-  onTogglePreset(preset: WritingPresetCard, enabled: boolean): void
   onConfigure(card: PluginCatalogCard): void
   onDetail(card: PluginCatalogCard): void
 }) {
   const sections = useMemo(
     () => filterCatalogSections(props.sections, props.query),
     [props.sections, props.query],
-  )
-  const presets = useMemo(
-    () => filterWritingPresets(props.presets ?? [], props.query),
-    [props.presets, props.query],
   )
   const visibleUserKeys = useMemo(() => userSectionKeys(sections), [sections])
   const { freshKeys, userSection } = useInstalledUserCards(props.sections, props.status, visibleUserKeys)
@@ -407,14 +313,13 @@ export function PluginsCatalog(props: {
           </Notice>
           : null}
         {props.restartRequired
-          ? <Text as="p" size="1" color="red" role="alert" className="plugins-catalog-hint">{t('plugins.catalogPresetRestart')}</Text>
+          ? <Text as="p" size="1" color="red" role="alert" className="plugins-catalog-hint">{t('plugins.catalogRestart')}</Text>
           : null}
-        {sections.map((section) => <CatalogSection key={section.id} section={section} presets={presets}
-          query={props.query} pending={props.pending} presetPending={props.presetPending ?? ''}
-          presetError={props.presetError ?? ''} restartRequired={props.restartRequired === true}
+        {sections.map((section) => <CatalogSection key={section.id} section={section}
+          query={props.query} pending={props.pending} restartRequired={props.restartRequired === true}
           installing={props.installing} freshKeys={freshKeys}
           sectionRef={section.id === 'user' ? userSection : undefined}
-          onToggle={props.onToggle} onTogglePreset={props.onTogglePreset}
+          onToggle={props.onToggle}
           onConfigure={props.onConfigure} onDetail={props.onDetail} />)}
       </>
   return <section className="plugins-catalog" data-testid="plugins-catalog">{body}</section>

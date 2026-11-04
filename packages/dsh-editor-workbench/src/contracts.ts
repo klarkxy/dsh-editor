@@ -38,7 +38,16 @@ export {
 } from './memory/author-memory.ts'
 
 export {
+  BOT_INIT_SENTINEL,
   WORKBENCH_RPC_CHANNEL,
+  type BotCheckResult,
+  type BotHandoffMode,
+  type BotHandoffView,
+  type BotHistoryRow,
+  type BotRecap,
+  type BotRolloverReason,
+  type BotSegmentView,
+  type BotStateView,
   type ProposalApplyResult,
   type ProposalCreatePlan,
   type ProposalChapterMetaPlan,

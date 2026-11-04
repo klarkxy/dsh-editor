@@ -1,5 +1,5 @@
 import { syncPresetDeclarations } from './preset-config.js'
-import { migrateWritingSettings } from './settings-migration.js'
+import { migratePiAiCacheRetention, migrateWritingSettings } from './settings-migration.js'
 import { copyFile, cp, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import {
   BUNDLED_PACKAGES_DIR,
@@ -342,6 +342,7 @@ export async function deployOwnedProfile(
     await restoreUserPlugins(home, target, bundled)
     await syncPresetDeclarations(home, target)
     await migrateWritingSettings(home, target)
+    await migratePiAiCacheRetention(target)
     await ensureNativeWorkspace(target)
     if (!(await nativeMigrationComplete(home))) {
       await writeNativeMigrationMarker(home, options?.writeFile ?? writeFile)
@@ -369,49 +370,13 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
 }
 
 /**
- * First-party toggleable presets declared by the composition. App-owned presets
- * absent from this list (the legacy `dsh-editor` and the locked
- * `dsh-editor-writing` fallback) always deploy.
- */
-async function readToggleablePresetIds(template: string): Promise<Set<string>> {
-  try {
-    const composition = JSON.parse(await readFile(join(template, 'composition.json'), 'utf8')) as { presets?: unknown }
-    const ids = new Set<string>()
-    if (Array.isArray(composition.presets)) {
-      for (const row of composition.presets) {
-        const id = (row as { id?: unknown } | null)?.id
-        if (typeof id === 'string' && /^[A-Za-z0-9._-]+$/.test(id)) ids.add(id)
-      }
-    }
-    return ids
-  } catch {
-    return new Set()
-  }
-}
-
-/** Author toggles from `<home>/dsh-plugins.json`; a missing file means everything enabled. */
-async function readDisabledPresetIds(home: string, toggleable: ReadonlySet<string>): Promise<Set<string>> {
-  const disabled = new Set<string>()
-  if (toggleable.size === 0) return disabled
-  try {
-    const state = JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')) as { schema?: unknown; presets?: unknown }
-    if (state.schema !== 1 || !state.presets || typeof state.presets !== 'object' || Array.isArray(state.presets)) return disabled
-    for (const [id, enabled] of Object.entries(state.presets as Record<string, unknown>)) {
-      if (enabled === false && toggleable.has(id)) disabled.add(id)
-    }
-  } catch { /* no state yet */ }
-  return disabled
-}
-
-/**
  * Deploy the app-owned agent presets from the template into the harness-home
  * user preset root. Same ownership and staging rules as the profile itself:
- * only directories carrying the editor marker are ever replaced. The roster
- * skips dot-directories, so in-flight stage/backup siblings are invisible.
- * The template copy inside the deployed profile keeps an inert duplicate of
- * this directory; the live copy is the one under `.agent-presets`.
- * Toggleable first-party presets the author disabled are skipped, and a
- * previously deployed app-owned copy is removed so the roster drops it.
+ * only directories carrying the editor marker are ever replaced or removed.
+ * The roster skips dot-directories, so in-flight stage/backup siblings are
+ * invisible. The template copy inside the deployed profile keeps an inert
+ * duplicate of this directory; the live copy is the one under `.agent-presets`.
+ * Previously deployed app-owned copies no longer in the template are removed.
  */
 type PresetSwap = { target: string; backup?: string }
 
@@ -435,24 +400,21 @@ async function restorePresetSwaps(swaps: readonly PresetSwap[]): Promise<void> {
 async function deployAgentPresets(home: string, template: string, swaps: PresetSwap[]): Promise<void> {
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(join(template, 'agent-presets'), { withFileTypes: true }) } catch { return }
-  const toggleable = await readToggleablePresetIds(template)
-  const disabled = await readDisabledPresetIds(home, toggleable)
+  const wanted = new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name))
   const presets = join(home, '.agent-presets')
   await mkdir(presets, { recursive: true })
+  for (const deployed of await readdir(presets, { withFileTypes: true })) {
+    if (!deployed.isDirectory() || wanted.has(deployed.name)) continue
+    const target = join(presets, deployed.name)
+    if (!(await readPresetOwnerMarker(target))) continue
+    const backup = join(presets, `.${deployed.name}.backup-${randomUUID()}`)
+    await renameDirectory(target, backup)
+    swaps.push({ target, backup })
+  }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const source = join(template, 'agent-presets', entry.name)
     const target = join(presets, entry.name)
-    if (disabled.has(entry.name)) {
-      const owner = await readPresetOwnerMarker(target)
-      if (owner) {
-        const nonce = randomUUID()
-        const backup = join(presets, `.${entry.name}.backup-${nonce}`)
-        await renameDirectory(target, backup)
-        swaps.push({ target, backup })
-      }
-      continue
-    }
     await ensureDirectory(target)
     if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
     if (existsSync(target) && await sameFileTree(source, target)) continue

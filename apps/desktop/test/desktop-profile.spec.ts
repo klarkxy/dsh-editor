@@ -193,7 +193,7 @@ describe('profile deployment', () => {
     expect(await readFile(join(restaged, '.npmrc'), 'utf8')).toBe('registry=https://registry.npmjs.org/\n')
     expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).installed).toEqual([])
   })
-  it('points the agent preset default at generic writing and keeps the legacy preset compatible', async () => {
+  it('points the agent preset default at the standard writing preset', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
     const patch = await readFile(join(profileResources, 'cordis.patch.yml'), 'utf8')
     expect(patch).toMatch(/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/)
@@ -201,14 +201,14 @@ describe('profile deployment', () => {
     expect(patch).toMatch(/- id: editor-workbench-tools\r?\n  disabled: true/)
     expect(patch).toMatch(/- id: editor-novel-kernel\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
-    const legacy = await readFile(join(profileResources, 'agent-presets', 'dsh-editor', 'agent.cordis.yml'), 'utf8')
-    expect(legacy).toContain('dsh-tool-ask-user')
-    expect(legacy).toContain('dsh-tool-fs')
-    expect(legacy).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
-    expect(legacy).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
-    expect(legacy).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph|skill)/)
-    expect(legacy).not.toContain('dsh-plan-mode')
-    expect(topLevelPluginRows(legacy)).toEqual([
+    const standard = await readFile(join(profileResources, 'agent-presets', 'dsh-editor-writing', 'agent.cordis.yml'), 'utf8')
+    expect(standard).toContain('dsh-tool-ask-user')
+    expect(standard).toContain('dsh-tool-fs')
+    expect(standard).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
+    expect(standard).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
+    expect(standard).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph)(?!-)/)
+    expect(standard).not.toContain('dsh-plan-mode')
+    expect(topLevelPluginRows(standard)).toEqual([
       { id: 'persona', name: '@deepseek-ai/dsh-persona' },
       { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
       { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
@@ -218,169 +218,75 @@ describe('profile deployment', () => {
       { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
       { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
       { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
+      { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' },
+      { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
       { id: 'compaction', name: 'cordis:group' },
     ])
-    expect(legacy).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel\r?\n  config:\r?\n    mode: legacy/)
-    expect(legacy).not.toContain('knowledge-only')
-    expect(existsSync(join(profileResources, 'agent-presets', 'dsh-editor', 'skills'))).toBe(false)
+    expect(standard).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel\r?\n  config:\r?\n    mode: knowledge-only/)
   })
-  it('ships five writing presets from app template and first-party packages with parseable compositions and uncrossed skills', async () => {
+  it('ships one standard writing preset with all writing skills and a parseable composition', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
     const presetRoot = join(profileResources, 'agent-presets')
     const ids = (await readdir(presetRoot, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort()
-    /* 模板源只保留核心通用写作与 legacy；另外三个由第一方包提供。 */
-    expect(ids).toEqual(['dsh-editor', 'dsh-editor-writing'])
-    const repoRoot = join(import.meta.dirname, '..', '..', '..')
-    const presetSource = (id: string) => {
-      if (id === 'dsh-editor' || id === 'dsh-editor-writing') return join(presetRoot, id)
-      if (id === 'dsh-editor-novel') return join(repoRoot, 'packages', 'dsh-editor-novel-kernel', 'presets', id)
-      return join(repoRoot, 'packages', 'dsh-editor-writing-presets', 'presets', id)
-    }
-    const allIds = ['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing']
+    expect(ids).toEqual(['dsh-editor-writing'])
 
-    const writingIds = ['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical'] as const
-    const writingLabels = {
-      'dsh-editor-writing': '通用写作',
-      'dsh-editor-novel': '小说创作',
-      'dsh-editor-article': '文章与自媒体',
-      'dsh-editor-technical': '技术文档',
-    } as const
-    const professionalSkill = {
-      'dsh-editor-writing': undefined,
-      'dsh-editor-novel': 'novel-writing',
-      'dsh-editor-article': 'article-writing',
-      'dsh-editor-technical': 'technical-writing',
-    } as const
-    const scopedTools = {
-      'dsh-editor-writing': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
-      'dsh-editor-novel': [
-        { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
-        { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
-      ],
-      'dsh-editor-article': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
-      'dsh-editor-technical': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
-    } as const
-    const descriptions = new Map<string, string>()
-
-    for (const id of allIds) {
-      const directory = presetSource(id)
-      expect(existsSync(join(directory, 'preset.yml'))).toBe(true)
-      expect(existsSync(join(directory, 'agent.cordis.yml'))).toBe(true)
-      /* 包内源目录不带 marker；owner marker 由 configureProfile 在物化模板时写入。 */
-      if (ids.includes(id)) {
-        expect(JSON.parse(await readFile(join(directory, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
-      } else {
-        expect(existsSync(join(directory, PROFILE_MARKER))).toBe(false)
-      }
-      const composition = await readFile(join(directory, 'agent.cordis.yml'), 'utf8')
-      expect(compositionProblem(composition)).toBeUndefined()
-    }
-
-    for (const id of writingIds) {
-      const presetYml = await readFile(join(presetSource(id), 'preset.yml'), 'utf8')
-      expect(presetYml.match(/^name:\s*(.+)$/m)?.[1]?.trim()).toBe(writingLabels[id])
-      const composition = await readFile(join(presetSource(id), 'agent.cordis.yml'), 'utf8')
-      expect(composition).toContain('dsh-tool-ask-user')
-      expect(composition).toContain('dsh-tool-fs')
-      expect(composition).toContain('dsh-skill-filesystem')
-      expect(composition).toContain('dsh-tool-skill')
-      expect(composition).toContain("new URL('skills/', baseUrl)")
-      expect(composition).toContain('writing_propose')
-      expect(composition).toContain('作者确认')
-      expect(composition).toMatch(/不创建|不建目录/)
-      expect(composition).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
-      expect(composition).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
-      expect(composition).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph)(?!-)/)
-      expect(composition).not.toContain('dsh-plan-mode')
-      expect(topLevelPluginRows(composition)).toEqual([
-        { id: 'persona', name: '@deepseek-ai/dsh-persona' },
-        { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
-        { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
-        { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
-        { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
-        { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
-        { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
-        ...scopedTools[id],
-        { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' },
-        { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
-        { id: 'compaction', name: 'cordis:group' },
-      ])
-      // Four new presets exclude legacy novel write/index/scratch tools:
-      // writing/article/technical omit the kernel; novel mounts it knowledge-only.
-      if (id === 'dsh-editor-novel') {
-        expect(composition).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel\r?\n  config:\r?\n    mode: knowledge-only/)
-      } else {
-        expect(composition).not.toContain('dsh-editor-novel-kernel')
-        expect(composition).not.toContain('knowledge-only')
-      }
-      // The persona prefix renders under 0.2.1's registered variable set
-      // (provider, model, editor_global_preferences, editor_project_rules);
-      // {{cwd}} is unregistered and failed every chat turn on rc.5.
-      expect(composition).not.toContain('{{cwd}}')
-      const skillNames = await skillDirectoryNames(join(presetSource(id), 'skills'))
-      const expected = professionalSkill[id] ? ['prose-revision', professionalSkill[id]] : ['prose-revision']
-      expect(skillNames).toEqual(expected.sort())
-      for (const name of skillNames) {
-        const skill = parseSkillDocument(await readFile(join(presetSource(id), 'skills', name, 'SKILL.md'), 'utf8'))
-        expect(skill.name).toBe(name)
-        expect(skill.description.length).toBeGreaterThan(0)
-        descriptions.set(`${id}:${name}`, skill.description)
-      }
-    }
-
-    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-novel:prose-revision'))
-    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-article:prose-revision'))
-    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-technical:prose-revision'))
-    expect(descriptions.get('dsh-editor-writing:prose-revision')).toContain('当前 Preset 的专业工作流（若有）')
-    expect(descriptions.get('dsh-editor-writing:prose-revision')).not.toMatch(/novel-writing|article-writing|technical-writing/)
-    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toBe(descriptions.get('dsh-editor-article:article-writing'))
-    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toBe(descriptions.get('dsh-editor-technical:technical-writing'))
-    expect(descriptions.get('dsh-editor-article:article-writing')).not.toBe(descriptions.get('dsh-editor-technical:technical-writing'))
-    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toContain('article-writing 用于小说')
-    for (const [key, description] of descriptions) {
-      if (key.endsWith(':novel-writing')) expect(description).toMatch(/不要用于文章|不要用于.*技术/)
-      if (key.endsWith(':article-writing')) expect(description).toMatch(/不要用于小说|不要用于.*技术/)
-      if (key.endsWith(':technical-writing')) expect(description).toMatch(/不要用于小说|不要用于.*文章/)
+    const presetDir = join(presetRoot, 'dsh-editor-writing')
+    expect(JSON.parse(await readFile(join(presetDir, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+    const presetYml = await readFile(join(presetDir, 'preset.yml'), 'utf8')
+    expect(presetYml.match(/^name:\s*(.+)$/m)?.[1]?.trim()).toBe('写作搭档')
+    const composition = await readFile(join(presetDir, 'agent.cordis.yml'), 'utf8')
+    expect(compositionProblem(composition)).toBeUndefined()
+    expect(composition).toContain('dsh-tool-ask-user')
+    expect(composition).toContain('dsh-tool-fs')
+    expect(composition).toContain('dsh-skill-filesystem')
+    expect(composition).toContain('dsh-tool-skill')
+    expect(composition).toContain("new URL('skills/', baseUrl)")
+    expect(composition).toContain('writing_propose')
+    expect(composition).toContain('作者确认')
+    expect(composition).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
+    expect(composition).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
+    expect(composition).not.toMatch(/dsh-tool-(todo|goal|subagent|workflow|ralph)(?!-)/)
+    expect(composition).not.toContain('dsh-plan-mode')
+    expect(composition).not.toContain('{{cwd}}')
+    const skillNames = await skillDirectoryNames(join(presetDir, 'skills'))
+    expect(skillNames).toEqual(['article-writing', 'novel-writing', 'prose-revision', 'technical-writing'])
+    for (const name of skillNames) {
+      const skill = parseSkillDocument(await readFile(join(presetDir, 'skills', name, 'SKILL.md'), 'utf8'))
+      expect(skill.name).toBe(name)
+      expect(skill.description.length).toBeGreaterThan(0)
     }
 
     const { configureProfile, desktopComposition } = await import('../../../scripts/desktop-compositions.mjs')
-    const composition = await desktopComposition('desktop')
+    const compositionJson = await desktopComposition('desktop')
     const materialized = await mkdtemp(join(tmpdir(), 'dsh-template-'))
-    /* 与 prepare 脚本同序：先复制资源模板（含两个 app-owned preset），再由 configureProfile 补进第一方包的三个。 */
     await (await import('node:fs/promises')).cp(profileResources, materialized, { recursive: true })
-    await configureProfile(materialized, composition)
-    /* 物化模板重新集齐五个 preset，且全部由模板通道写入 app-owned marker。 */
+    await configureProfile(materialized, compositionJson)
     const templateIds = (await readdir(join(materialized, 'agent-presets'))).sort()
-    expect(templateIds).toEqual(allIds)
-    for (const id of allIds) {
-      expect(JSON.parse(await readFile(join(materialized, 'agent-presets', id, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
-    }
+    expect(templateIds).toEqual(['dsh-editor-writing'])
 
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
     await deployProfile(root, materialized)
     const deployed = (await readdir(join(root, '.agent-presets'))).sort()
-    expect(deployed).toEqual(allIds)
-    expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-writing', 'skills'))).toEqual(['prose-revision'])
-    expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-novel', 'skills'))).toEqual(['novel-writing', 'prose-revision'])
-    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-writing', 'skills', 'novel-writing'))).toBe(false)
-    expect(existsSync(join(root, '.agent-presets', 'dsh-editor', 'skills'))).toBe(false)
+    expect(deployed).toEqual(['dsh-editor-writing'])
+    expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-writing', 'skills'))).toEqual(['article-writing', 'novel-writing', 'prose-revision', 'technical-writing'])
 
-    /* 作者停用第一方模式后，重启部署跳过并清掉它的 app-owned 目录。 */
-    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
-      schema: 1,
-      overrides: {},
-      presets: { 'dsh-editor-novel': false },
-      installed: [],
-    }))
+    /* 退役 preset 的 app-owned 目录在下一次部署时被清掉；不带 marker 的目录不动。 */
+    for (const stale of ['dsh-editor', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical']) {
+      const dir = join(root, '.agent-presets', stale)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'preset.yml'), 'name: stale\n')
+      await writeFile(join(dir, PROFILE_MARKER), '{"app":"dsh-editor","schema":1}')
+    }
+    const foreign = join(root, '.agent-presets', 'author-preset')
+    await mkdir(foreign, { recursive: true })
+    await writeFile(join(foreign, 'preset.yml'), 'name: author\n')
+    await writeFile(join(foreign, 'agent.cordis.yml'), '[]\n')
     await deployProfile(root, materialized)
-    const afterDisable = (await readdir(join(root, '.agent-presets'))).sort()
-    expect(afterDisable).toEqual(allIds.filter((id) => id !== 'dsh-editor-novel'))
-    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({ schema: 1, overrides: {}, presets: {}, installed: [] }))
-    await deployProfile(root, materialized)
-    expect((await readdir(join(root, '.agent-presets'))).sort()).toEqual(allIds)
+    expect((await readdir(join(root, '.agent-presets'))).sort()).toEqual(['author-preset', 'dsh-editor-writing'])
+    expect(await readFile(join(foreign, 'preset.yml'), 'utf8')).toBe('name: author\n')
   }, 15000)
   it('keeps scoped tools disabled after preparing the full composition', async () => {
     const { configureProfile, desktopComposition } = await import('../../../scripts/desktop-compositions.mjs')
@@ -390,10 +296,9 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'writing-presets'])
+      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel'])
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
-      expect(item.packages).toContain('dsh-editor-writing-presets')
       expect(item.packages).toContain('dsh-editor-cards')
       expect(item.disabledEntries).toContain('editor-cards')
       expect(item.packages).toContain('dsh-editor-memory-panel')
@@ -426,11 +331,6 @@ describe('profile deployment', () => {
       expect(patch).not.toMatch(new RegExp(`- id: ${id}\\r?\\n  disabled: true`))
     }
     expect(patch).toMatch(/- id: tool-web\r?\n  disabled: true/)
-    for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {
-      const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')
-      expect(agent.match(/name: '@deepseek-ai\/dsh-tool-web'/g)).toHaveLength(1)
-      expect(agent).not.toContain('dsh-web-search-manager')
-    }
   })
   it('deploys app-owned agent presets into the harness-home user preset root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
@@ -596,28 +496,29 @@ describe('profile deployment', () => {
     expect(missing.reused).toBe(false)
     expect(existsSync(join(missing.path, 'package.json'))).toBe(true)
   })
-  it('still sanitizes locked overlays and preset toggles on a stamp hit', async () => {
+  it('still sanitizes locked overlays and ignores stale preset state on a stamp hit', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
     const template = join(root, 'template')
-    const novel = join(template, 'agent-presets', 'dsh-editor-novel')
-    await mkdir(novel, { recursive: true })
+    const writing = join(template, 'agent-presets', 'dsh-editor-writing')
+    await mkdir(writing, { recursive: true })
     await writeFile(join(template, 'package.json'), '{"name":"dsh-editor-profile"}')
-    await writeFile(join(template, 'composition.json'), JSON.stringify({ presets: [{ id: 'dsh-editor-novel' }] }))
-    await writeFile(join(novel, 'agent.cordis.yml'), '[]\n')
-    await writeFile(join(novel, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
+    await writeFile(join(template, 'composition.json'), '{}')
+    await writeFile(join(writing, 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(writing, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
     const id = deployIdentity()
     await deployOwnedProfile(root, template, undefined, id)
-    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-novel'))).toBe(true)
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-writing'))).toBe(true)
     await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
       schema: 1,
       overrides: { 'editor-novel-kernel': true, zhihu: false },
-      presets: { 'dsh-editor-novel': false },
+      presets: { 'dsh-editor-writing': false },
       installed: [],
     }))
     const second = await deployOwnedProfile(root, template, undefined, id)
     expect(second.reused).toBe(true)
     expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).overrides).toEqual({})
-    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-novel'))).toBe(false)
+    /* 退役版本留下的 presets 开关记录不再生效：模板里的 preset 照常部署。 */
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-writing'))).toBe(true)
   })
   it('relinks a community plugin already listed in profile bundles', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))

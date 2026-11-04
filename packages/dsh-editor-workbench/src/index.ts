@@ -12,6 +12,7 @@ import { MetadataIoError } from './io/metadata-io.ts'
 import { WritingLogError } from './lifecycle/writing-log.ts'
 import { ProposalOpsError } from './proposals/proposal-ops.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
+import { installBotRuntime } from './bot/rpc-index.ts'
 
 export const name = 'dsh-editor-workbench'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
@@ -121,8 +122,9 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
 }
 
 export function apply(ctx: Context): void {
+  installBotRuntime(ctx)
   ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
 }
 
 export { createAuthorObserveTool } from './tools/observe-tool.ts'
-export { installNovelWorkbenchTools } from './tools/novel-tools.ts'
+export { installNovelWorkbenchTools, installNovelMemoryTool } from './tools/novel-tools.ts'

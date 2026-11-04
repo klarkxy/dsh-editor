@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWritingPresets } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage } from './helpers/plugin-page.mjs'
 import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -44,16 +44,10 @@ try {
   const sample = async label => {
     const plugins = await openPluginsPage(page)
     await assertDefaultPluginPage(page, plugins)
-    await openWritingPresets(plugins)
-    const switches = await plugins.locator(S.pluginsCatalogPresetToggleAny).evaluateAll(elements => elements.filter(element => element.checkVisibility()).map(element => ({
-      id: element.getAttribute('data-testid'), width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
-    })))
-    assert.ok(switches.length > 0, 'writing mode controls must be visible after expanding their group')
-    assert.ok(switches.every(control => control.width === 36 && control.height === 20), JSON.stringify(switches))
     const styles = await page.locator(S.dshPluginStyles).evaluateAll(elements => elements.map(element => ({
       owner: element.getAttribute('data-plugin'), length: element.textContent.length,
     })))
-    report.pages.push({ label, switches, styles })
+    report.pages.push({ label, styles })
     await plugins.screenshot({ path: resolve(output, label + '.jpg'), quality: 85 })
     await closePluginsPage(page)
   }

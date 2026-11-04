@@ -177,22 +177,43 @@ export function useRootWorkspaces({
     const workspaceListState = ctx.workspaces.list.getSnapshot()
     const sessionListState = ctx.sessions.list.getSnapshot()
     const workspaceView = workspaceListState.items.find((item) => item.workspaceId === pending.workspace.workspaceId) ?? pending.workspace
-    const selectedSessionId = resumableConversationId({
-      sessionIds: workspaceView.sessionIds,
-      byId: sessionListState.byId ?? {},
-      archivedIds: workspaceResumeExcludedIds(workspaceListState.archivedSessionIds ?? [], sessionListState.byId ?? {}),
-      fallback: sessionId,
-    })
+    /* 搭档对话：作品的 current 段还活就接回，否则以文件会话为第一段。 */
+    let chatSessionId = sessionId
+    const botState = await safeRpcCall<import('dsh-editor-workbench/contracts').BotStateView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.state', { sessionId }))
+    const current = botState.ok ? botState.value.current : undefined
+    if (current) {
+      const listed = await pingWorkspaceSession(ctx, current as SessionId)
+      if (listed.ok) chatSessionId = current as SessionId
+    }
+    if (chatSessionId === sessionId) {
+      await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.attach', { sessionId, reason: 'first' }))
+    }
     await ctx.uiWorkspace.openWorkspaceSession(sessionId)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
-    await ctx.uiWorkspace.openSession(selectedSessionId)
+    await ctx.uiWorkspace.openSession(chatSessionId)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    /* 未初始化且无消息的作品补发一次隐藏概况提示。 */
+    if (botState.ok && !botState.value.initialized) {
+      const rows = await safeRpcCall<{ rows: unknown[] }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.history', { sessionId: chatSessionId, segmentSessionId: chatSessionId }))
+      if (!rows.ok || !rows.value.rows.length) {
+        const init = await safeRpcCall<{ empty: boolean; prompt?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'bot.initialize', { sessionId: chatSessionId }))
+        if (init.ok && !init.value.empty && init.value.prompt) {
+          const ref = ctx.sessions.retain(chatSessionId, { source: 'workspaceOperation' })
+          try {
+            const { session: face } = await ref.ready
+            await face.prompt([{ type: 'text', text: init.value.prompt }], 'queue')
+          } finally {
+            ref.release()
+          }
+        }
+      }
+    }
     pendingWorkspaceOpen.current = null
     setPath(initialPath ?? '')
     setWorkspaceOpen({
       kind: 'ready',
       workspaceId: pending.workspace.workspaceId,
-      sessionId: selectedSessionId,
+      sessionId: chatSessionId,
       path: pending.workspace.path,
       warning,
     })

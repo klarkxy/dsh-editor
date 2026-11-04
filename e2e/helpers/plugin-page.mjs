@@ -82,29 +82,7 @@ export async function assertCatalogDetailsOpenable(page, plugins) {
   return results
 }
 
-export async function openWritingPresets(plugins) {
-  await showPluginList(plugins)
-  const builtin = plugins.locator(S.pluginsCatalogBuiltin)
-  // The preset rows live in a 写作模式 subsection of the builtin catalog and
-  // arrive once presets.list resolves. Older layouts wrapped them in a
-  // collapsed <details>, so still expand any closed disclosures first.
-  await expandAllDetails(builtin)
-  const presets = await writingPresetGroup(builtin)
-  await presets.scrollIntoViewIfNeeded()
-  await builtin.getByText('小说创作', { exact: true }).waitFor({ state: 'visible' })
-  return presets
-}
 
-/** The preset sub-group is a plain subsection now; a collapsible group in older layouts. */
-async function writingPresetGroup(builtin) {
-  const subsection = builtin.locator(S.pluginsCatalogPresets)
-  if (await subsection.count()) return subsection.first()
-  const group = builtin.locator(S.pluginsWritingPresets)
-  if (await group.count()) return group.first()
-  const collapsible = builtin.locator('details').filter({ hasText: '写作模式' })
-  if (await collapsible.count()) return collapsible.first()
-  return builtin
-}
 
 export async function openPluginDiscovery(plugins) {
   const nav = plugins.locator(S.pluginsNavDiscovery)

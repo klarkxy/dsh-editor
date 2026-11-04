@@ -5,6 +5,9 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { asHost, readProjectRules, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
 import { normalizeAuthorMemory, normalizeAuthorPreferences, parseProjectContextEnvelope } from '../contracts.ts'
 import { isWritingAgentPreset } from '../host-guard.ts'
+import { loadBotState, segmentOf } from '../bot/state.ts'
+import { discardFrozenPrompt, freezePrompt, frozenPromptFor } from '../bot/freeze.ts'
+import { currentPromptFingerprint } from '../bot/prefs.ts'
 
 type EditorAgent = { session: Session }
 
@@ -45,16 +48,27 @@ export async function assembleProjectRules(ctx: Context, assembly: PromptAssembl
   const preferences = normalizeAuthorPreferences(raw.authorPreferences)
   const memory = normalizeAuthorMemory(raw.authorMemory)
   const globals = [preferences && `跨作品作者偏好：\n${preferences}`, memory && `作者已确认的跨作品侧写：\n${memory}`].filter(Boolean).join('\n\n')
-  const owned = new Set(['dsh-editor:global-preferences', 'dsh-editor:project-rules'])
+  /* 对话段交接文本：只在 bot.json 给本段记了 handoffText 时出现。 */
+  const sessionId = String(agent.session.id)
+  let handoffText = ''
+  try {
+    const state = await loadBotState(access.workspace.path)
+    handoffText = segmentOf(state, sessionId)?.handoffText ?? ''
+  } catch {
+    handoffText = ''
+  }
+  const owned = new Set(['dsh-editor:global-preferences', 'dsh-editor:project-rules', 'dsh-editor:handoff'])
   return {
     ...assembly,
     sections: [...assembly.sections.filter(section => !owned.has(section.name)),
       ...(globals ? [{ name: 'dsh-editor:global-preferences', text: '{{editor_global_preferences}}' }] : []),
       { name: 'dsh-editor:project-rules', text: '{{editor_project_rules}}' },
+      ...(handoffText ? [{ name: 'dsh-editor:handoff', text: '{{editor_handoff}}' }] : []),
     ],
     // Substitution results are never parsed again: literal {{...}} in user files stays literal.
     variables: { ...assembly.variables, editor_global_preferences: globals,
       editor_project_rules: `项目规则（${rules.path}${rules.exists ? '' : '，尚未创建，使用默认协作约定'}）：\n${rules.text}\n\n优先采用作者本次明确要求，其次本项目约定，再次跨作品默认偏好。项目规则不扩大工具权限。`,
+      editor_handoff: handoffText,
     },
   }
 }
@@ -66,8 +80,19 @@ export function installProjectContextHooks(ctx: Context): void {
   on('system-prompt/assemble', async (_assembly: PromptAssembly, context: { agent?: EditorAgent; signal?: AbortSignal }, next: () => Promise<PromptAssembly>) => {
     const assembly = await next()
     if (!isEditor(context.agent)) return assembly
-    return assembleProjectRules(ctx, assembly, context.agent, context.signal)
+    const sessionId = String(context.agent.session.id)
+    const frozen = frozenPromptFor(sessionId)
+    if (frozen) return { ...assembly, sections: frozen.assembly.sections, variables: frozen.assembly.variables }
+    const result = await assembleProjectRules(ctx, assembly, context.agent, context.signal)
+    freezePrompt(sessionId, result, currentPromptFingerprint(ctx))
+    return result
   })
+  for (const event of ['agent/disposed', 'session/disposed']) {
+    on(event, (payload: { agent?: { session?: { id?: unknown } }; sessionId?: string; session?: { id?: unknown } } | string) => {
+      const id = typeof payload === 'string' ? payload : (payload?.sessionId ?? String(payload?.agent?.session?.id ?? payload?.session?.id ?? ''))
+      if (id) discardFrozenPrompt(id)
+    })
+  }
   on('agent/pre-step', async ({ agent, signal }: { agent: EditorAgent; signal: AbortSignal }, next: () => Promise<{ kind: string; messages?: UserMessage[] }>) => {
     const decision = await next()
     if (!isEditor(agent) || decision.kind !== 'enter') return decision

@@ -354,74 +354,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
  * split/merge/renames 走 workbench，prepare 响应按 kind 包裹。
  */
 
-export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
-  const explore = props.state === 'explore'
-  return (
-    <Box asChild>
-      <details className="init-guide-quiet" aria-label={t('chat.initQuietTitle')}>
-        <summary>
-          <Text size="1" color="gray">
-            {t('chat.initQuietTitle')}
-          </Text>
-        </summary>
-        <Text as="p" size="2" my="2">
-          {explore ? t('chat.initExplore') : t('chat.initInterview')}
-        </Text>
-        {props.done
-          ? <Text as="p" size="2" role="status">
-          <SuccessMark />
-          {' '}
-          {t('chat.initDone')}
-        </Text>
-          : <Flex className="init-guide-actions" gap="2" wrap="wrap">
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={props.busy || props.running}
-            onClick={props.onStart}>
-            {props.running ? <Fragment>
-              <ActivityDots />
-              {t('chat.initRunning')}
-            </Fragment> : t('chat.initStart')}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" disabled={props.busy} onClick={props.onDismiss}>
-            {t('common.ignore')}
-          </Button>
-        </Flex>}
-        {props.note ? <Text size="1" className="warning" color="red" role="alert">
-          {props.note}
-        </Text> : null}
-      </details>
-    </Box>
-  );
-}
 
-/** 旧版会话顶部的迁移横幅：新建写作会话继续作品，旧会话保持可读；关闭仅记忆在内存。 */
-export function LegacyMigrationBanner(props: { onMigrate(): void; onDismiss(): void }) {
-  return (
-    <Notice
-      className="migration-banner"
-      role="note"
-      aria-label={t('chat.legacyMigrationTitle')}
-      tone="info"
-      action={<span className="migration-banner-actions">
-        <Button type="button" size="sm" variant="secondary" onClick={props.onMigrate}>
-          {t('chat.legacyMigrationAction')}
-        </Button>
-        <IconButton
-          type="button"
-          variant="ghost"
-          size="sm"
-          label={t('common.close')}
-          onClick={props.onDismiss}>
-          <CrossIcon size={14} />
-        </IconButton>
-      </span>}>
-      {t('chat.legacyMigrationBanner')}
-    </Notice>
-  );
-}
 
 export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceiptBundle }) {
   /* V3 轻量请求的回执是 {sources:[]}：不展示空注入回执；V1/V2 历史消息照常渲染。 */

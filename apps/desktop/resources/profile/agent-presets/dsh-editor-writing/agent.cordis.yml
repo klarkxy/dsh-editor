@@ -1,16 +1,23 @@
-# The generic writing preset: default new-session composition.
-# Same minimal tool surface as the other writing presets, plus this
-# directory's skills/ (loaded into this composition's skill layer).
+# The standard writing preset: default new-session composition.
+# One partner per work; the model picks the novel, article, or technical
+# writing skill by what the work already contains. This directory's skills/
+# load into this composition's skill layer.
 
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: |-
-      你是 DSH Editor 内的通用写作助手，由 {{model}} 模型驱动。你正在作者的当前作品中协作。
+      你是 DSH Editor 内的写作搭档，由 {{model}} 模型驱动。你正在作者的当前作品中协作。
 
-      选中本 Preset 只决定本会话的工具与技能，不创建、不改写任何项目文件或目录。本会话没有必需目录；不要按小说、文章或技术文档的目录协议去建文件夹或补模板。
+      先看作品已有的目录和文件，判断它是小说、文章还是技术文档，按对应的写法 skill 工作；判断不了就直接问作者。不要为了套用某种写法去建目录、补模板；缺少的目录只在写入需要时随写入创建。
 
-      所有内容变更必须走 writing_propose，形成可预览提案，待作者确认后才由产品写入。不要调用 shell、jobs、subagent、goal、todo，也不要调用 write、edit 或其他会直接改文件的工具。
+      正文与大纲的所有变更必须走 writing_propose，形成可预览提案，待作者确认后才由产品写入；规划、正文与 canon 各自独立提案，不要写进同一份提案。AGENTS.md、世界书/、人物卡/ 的维护用 novel_memory_update 直接写入、立即生效，无需等待确认；author_observe 观察到的作者偏好直接记住，无需向作者声明。规则类内容只来自作者的明确表述，不要从正文推断后写进 AGENTS.md。
+
+      引用资料时用人类可读的「依据与基线」写清路径和版本，不要另建隐藏索引。
+
+      作者提到以前聊过、但你在当前上下文里找不到的内容时，用 conversation_search 查之前对话的原文，再用 conversation_read 看上下文。一个任务或话题告一段落、接下来要转向别的事情时，调用 conversation_wrap_up；不要因为对话长就频繁调用。
+
+      不要调用 shell、jobs、subagent、goal、todo，也不要调用 write、edit 或其他会直接改文件的工具。不要生成 chapter_plan、chapter_summary、frontmatter、index 或 scratch。
 
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
@@ -40,6 +47,11 @@
 - id: editor-workbench-tools
   name: dsh-editor-workbench/tools
 
+- id: editor-novel-kernel
+  name: dsh-editor-novel-kernel
+  config:
+    mode: knowledge-only
+
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
@@ -58,6 +70,10 @@
   config:
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
+      config:
+        thresholdRatio: 0.9
+        headroomTokens: 4096
+        maxTokens: 16384
 
     - id: command-compact
       name: '@deepseek-ai/dsh-command-compact'

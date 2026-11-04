@@ -834,7 +834,6 @@ try {
   const suggestCount = await suggest.count()
   if (suggestCount !== 3) failures.push(`partner-empty: expected 3 suggestions, found ${suggestCount}`)
   const nodesBefore = await page.locator(S.chatRail).getAttribute('data-chat-nodes')
-  const titleBefore = await page.locator(S.partnerTitle).innerText().catch(() => '')
   if (suggestCount > 0) {
     const wanted = (await suggest.first().innerText()).trim()
     await suggest.first().click()
@@ -877,27 +876,6 @@ try {
     if (sendState.bg === TRANSPARENT || WHITEISH.test(sendState.bg)) failures.push(`partner-send: enabled bg is transparent/white (${sendState.bg})`)
   }
 
-  // C17: with a draft, 新对话 must prompt; cancel keeps place and draft.
-  // 新对话是页签行右端的 + 按钮：点开模式菜单，选第一个可用项。
-  await page.locator(S.partnerNew).click()
-  await page.getByRole('menuitem', { disabled: false }).first().click()
-  const draftDialog = page.locator('#discard-message-draft, [role="alertdialog"]:has-text("放弃")')
-  if (await draftDialog.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await page.getByRole('button', { name: '取消', exact: true }).click()
-    await page.waitForTimeout(400)
-    const keptDraft = await page.locator(S.composerInputInner).first().inputValue().catch(() => '')
-    const titleAfter = await page.locator(S.partnerTitle).innerText().catch(() => '')
-    if (!keptDraft.trim()) failures.push('C17: draft lost after cancelling the leave confirm')
-    if (titleAfter !== titleBefore) failures.push(`C17: conversation switched despite cancel ('${titleBefore}' -> '${titleAfter}')`)
-    note('partner', `C17 cancel keeps draft (${keptDraft.length} chars) on '${titleAfter}'`)
-    // Clear the draft again for downstream steps.
-    await page.locator(S.composerInputInner).first().fill('').catch(() => undefined)
-    await page.waitForTimeout(300)
-    const sendAfterClear = await page.evaluate(() => document.querySelector('aside.chat .composer-actions .send')?.disabled)
-    if (sendAfterClear !== true) failures.push('partner-send: should be disabled once the composer is empty')
-  } else {
-    failures.push('C17: leaving with a draft did not show the discard-draft confirm')
-  }
 
   // §4 margin rules: both 版心竖线 must draw in the same margin-rule colour
   // (a stray grey/different element over the right rule once showed up).

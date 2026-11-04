@@ -86,7 +86,7 @@ describe('private editor workbench Host RPC', () => {
       tools: { register, guard },
     } as unknown as Context)
     expect(guard).not.toHaveBeenCalled()
-    expect(register.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual(['writing_propose', 'author_observe'])
+    expect(register.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual(['writing_propose', 'author_observe', 'conversation_search', 'conversation_read', 'conversation_wrap_up'])
   })
 
   it('hides inherited host coding tools from writing presets without a guard', () => {

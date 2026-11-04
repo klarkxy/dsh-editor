@@ -147,8 +147,6 @@ export const S = Object.freeze({
 
   // ---- assistant rail -------------------------------------------------------
   partnerHead: '[data-testid="dsh-partner-head"]',
-  partnerTitle: '[data-testid="dsh-partner-title"]',
-  partnerNew: '[data-testid="dsh-partner-new"]',
   partnerSetup: '[data-testid="dsh-partner-setup"]',
   chatRail: 'aside.chat',
   chat: '.chat',
@@ -159,8 +157,6 @@ export const S = Object.freeze({
   composerInput: 'aside.chat textarea[aria-label="输入消息"]',
   composerInputInner: 'textarea[aria-label="输入消息"]',
   chatMarkdown: '.chat-markdown',
-  archivedConversations: '.archived-conversations',
-  archivedConversationsSummary: '.archived-conversations summary',
 
   // ---- command palette -------------------------------------------------------
   paletteTrigger: '.palette-trigger',
@@ -269,16 +265,8 @@ export const S = Object.freeze({
   pluginInstallProgress: '[data-testid="plugin-install-progress"]',
   pluginInstallResult: '[data-testid="plugin-install-result"]',
   pluginsSettings: '[data-testid="plugins-settings"]',
-  pluginsWritingPresets: '[data-testid="plugins-writing-presets"]',
   pluginsDiscovery: '[data-testid="plugins-discovery"]',
-  pluginsPresetToggleNovel: '[data-testid="plugins-catalog-preset-toggle-dsh-editor-novel"]',
-  pluginsPresetWriting: '[data-testid="plugins-catalog-preset-dsh-editor-writing"]',
-  pluginsPreset: (id) => `[data-testid="plugins-catalog-preset-${id}"]`,
-  pluginsPresetToggle: (id) => `[data-testid="plugins-catalog-preset-toggle-${id}"]`,
-  pluginsCatalogPresetToggleAny: '[data-testid^="plugins-catalog-preset-toggle-"]',
-  pluginsCatalogPresets: '.plugins-catalog-subsection',
   pluginsCatalogAdvanced: '.plugins-catalog-advanced',
-  pluginsCatalogPresetLocked: '.plugins-catalog-preset-locked',
   pluginsCatalogSwitch: '.plugins-catalog-switch',
   pluginsCard: '.dsh-plugins-card',
   pluginsComposition: '.dsh-plugins-composition',

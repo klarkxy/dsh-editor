@@ -29,5 +29,13 @@ export function installNovelWorkbenchTools(ctx: Context): void {
   tools.register(createNovelOverviewTool({
     resolveAccess: (sessionId, signal) => resolveOverviewAccess(host, sessionId, signal),
   }))
+  installNovelMemoryTool(ctx)
+}
+
+/** Registers only novel_memory_update. Called by novel-kernel's knowledge-only mode. */
+export function installNovelMemoryTool(ctx: Context): void {
+  const host = asHost(ctx) as ManuscriptHostWithTools
+  const tools = host.tools
+  if (!tools || typeof tools.register !== 'function') return
   tools.register(createMemoryUpdateTool((sessionId, signal) => resolveMemoryAccess(ctx, sessionId, signal)))
 }

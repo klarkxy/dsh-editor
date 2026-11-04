@@ -381,6 +381,7 @@ export function CustomProviderCard(props: {
           api: protocol,
           baseURL,
           models: models.map((model) => ({ ...model })),
+          cacheRetention: 'long',
         }
         if (displayName.trim().length > 0) profile['displayName'] = displayName.trim()
         if (storesKey) profile['apiKeyEnv'] = keyRef

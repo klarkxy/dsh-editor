@@ -14,7 +14,7 @@
 - 改写预设栏：选区上方提供内置改写预设与自定义指令入口（src/client/rewrite-presets-bar.tsx）。
 - 设置页：通用设置、模型、助手、写作、用量、插件、知乎资料、关于 8 个分类（插件与知乎资料不可用时隐藏，分类名以 src/i18n/messages.zh.ts 为准）。
 - 模型设置的后台刷新保留正在编辑的名称、模型声明与 API key 输入；原设置 revision 已变化时显示冲突并阻止旧草稿写入。对话模型与思考档位以 Host 目录为准，打开选择器不补写模型能力或猜测默认强度。
-- 对话名称、归档、置顶与会话顺序以 Host 为准；改名失败可重试。自动名称写入前再次检查最新名称与官方标题管理状态，不覆盖作者已确认的名称。
+- 搭档对话：一部作品一个搭档，没有会话列表与新建按钮。打开作品时按 `.dsh-editor/bot.json` 接回当前段，没有时以作品的文件会话为第一段；空作品显示固定开场，已有内容的作品首次接入时发一次隐藏的作品概况提示。之前的段经 workbench `bot.history` 冷读，只读拼在当前段之上，段间留「对话已整理」标记与回顾。换段（闲置超过缓存有效期、提示词输入变化、上下文超过约 70%、模型收尾、换模型）只在两轮之间、无待审批与待处理提案时进行（src/client/bot-conversation.ts、src/model/bot-conversation.ts）。设计见[搭档对话设计](../../docs/bot-conversation.md)。
 - 作者侧写由 Host 的 `author_observe` 工具直接更新现有写作设置；聊天历史中的旧结果保持隐藏，读取历史不再追加侧写。既有作者记忆保留。
 - 破限模式：通用设置页的独立卡片与开关（src/limit-break-config.ts、src/client/settings-general.tsx）。开启后宿主把 `resources/limit-break/agents-spec.md` 作为最后一段系统提示词追加到每次组装，关闭时不贡献文本。卡片常驻封号风险声明，从关到开须过一次确认框。
 
@@ -26,16 +26,16 @@
 | --- | --- | --- |
 | `editor-shell` | 写作界面 | 本包根插件（三栏稿纸与设置，锁定） |
 | `dsh-editor-writing` | 写作偏好 | `dsh-editor-shell/writing-config`（原生写作配置，锁定） |
-| `ui-developer` | 开发者偏好 | `dsh-editor-shell/developer-config`（developerMode 开关，锁定） |
 | `ui-limit-break` | 破限模式 | `dsh-editor-shell/limit-break-config`（limitBreakMode 开关，锁定） |
+| `ui-bot` | 搭档对话 | `dsh-editor-shell/bot-config`（闲置回顾时间与缓存有效期，锁定） |
 
-映射关系见 package.json 的 `dshEditor.entries` 与 cordis.patch.yml。注意区分两个相近命名：「写作偏好」是本包的原生写作设置项（补全方式、写作/改写/对话模型路由、字号行宽等，src/writing-config.ts）；「通用写作」是桌面 profile 的 agent preset（apps/desktop/resources/profile/agent-presets/dsh-editor-writing/preset.yml），由 [dsh-editor-plugins](../dsh-editor-plugins/README.md) 的「写作模式」开关管理。
+映射关系见 package.json 的 `dshEditor.entries` 与 cordis.patch.yml。注意区分两个相近命名：「写作偏好」是本包的原生写作设置项（补全方式、写作/改写/对话模型路由、字号行宽等，src/writing-config.ts）；「写作搭档」是桌面 profile 唯一的 agent preset（apps/desktop/resources/profile/agent-presets/dsh-editor-writing/），不可开关。
 
 ## 公开导出
 
 - `./client`：浏览器侧 shell 客户端（src/client.ts）。
 - `./seats`：原样转发 [dsh-editor-seats](../dsh-editor-seats/README.md) 的座位合同（src/seats.ts）。
-- `./writing-config`、`./developer-config`、`./limit-break-config`：上表的设置项插件。
+- `./writing-config`、`./limit-break-config`、`./bot-config`：上表的设置项插件；客户端读取 `ui-bot` 走无 schema 依赖的 src/bot-settings.ts。
 
 ## 兼容约束
 

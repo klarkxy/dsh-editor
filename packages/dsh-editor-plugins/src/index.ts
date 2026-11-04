@@ -1,6 +1,5 @@
 import { readPluginCatalog, type CatalogManager } from './catalog.ts'
 import { RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
-import { syncPresetDeclarations } from './preset-config.ts'
 import { adaptNativeToolProjection, readNativeToolState, type NativeToolManager } from './native-tools.ts'
 import type { NativeToolState } from './preset-config.ts'
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,21 +20,7 @@ import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceS
 import { npmMarketplaceListing, parseNpmSpec } from './npm.ts'
 import { emptyPluginState, parsePluginState, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
-import {
-  CORE_WRITING_PRESET_ID,
-  listWritingPresets,
-  readCompositionPresets,
-  updateAppOwnedPreset,
-} from './writing-presets.ts'
-import {
-  defaultPersistIo,
-  isEnoent,
-  PluginPersistError,
-  replaceFileAtomic,
-  runQueuedSorted,
-  writeJsonAtomic,
-  type PersistIo,
-} from './persist.ts'
+import type { PersistIo } from './persist.ts'
 
 export const name = 'dsh-editor-plugins'
 export const inject = ['connection', 'webServer'] as const
@@ -127,71 +112,10 @@ async function listLocalMarketplaceListings(profileDir: string): Promise<Marketp
   return listings
 }
 
-export async function readPluginState(paths: PluginPaths): Promise<PluginState> {
-  try {
-    const parsed = parsePluginState(JSON.parse(await readFile(paths.stateFile, 'utf8')))
-    return parsed ?? emptyPluginState()
-  } catch {
-    return emptyPluginState()
-  }
-}
 
-async function readOptionalText(path: string, io: PersistIo): Promise<string | undefined> {
-  try {
-    return await io.readFile(path, 'utf8')
-  } catch (error) {
-    if (isEnoent(error)) return undefined
-    throw error
-  }
-}
 
-async function restoreText(path: string, previous: string | undefined, io: PersistIo): Promise<void> {
-  if (previous === undefined) {
-    await io.rm(path, { force: true })
-    return
-  }
-  await replaceFileAtomic(path, previous, io)
-}
 
-async function setWritingPreset(paths: PluginPaths, id: string, source: string, enabled: boolean, io: PersistIo, options: {
-  reloadProfile?: () => Promise<boolean>
-  readToolState?: () => Promise<NativeToolState | undefined>
-}): Promise<boolean> {
-  return runQueuedSorted([paths.home, paths.stateFile], async () => {
-    const previousState = await readOptionalText(paths.stateFile, io)
-    const declarationFile = join(paths.profileDir, 'node_modules', 'dsh-editor-profile-config', 'presets.patch.json')
-    const previousDeclarations = await readOptionalText(declarationFile, io)
-    const state: Record<string, unknown> = previousState === undefined ? emptyPluginState() : JSON.parse(previousState)
-    if (!state || typeof state !== 'object' || Array.isArray(state) || state.schema !== 1) throw new Error('写作模式记录格式无效，未改动。')
-    const presets = state.presets && typeof state.presets === 'object' && !Array.isArray(state.presets) ? state.presets : {}
-    await updateAppOwnedPreset(paths.home, id, source, enabled, async () => {
-      try {
-        // Only the application's writing selection changes; native plugin settings
-        // and the author's home patch are outside this operation's ownership.
-        await writeJsonAtomic(paths.stateFile, { ...state, presets: { ...presets, [id]: enabled } }, io)
-        await syncPresetDeclarations(paths.home, paths.profileDir, { io, native: await options.readToolState?.() })
-      } catch (error) {
-        const cause = error instanceof Error ? error.message : String(error)
-        try {
-          await restoreText(paths.stateFile, previousState, io)
-          await restoreText(declarationFile, previousDeclarations, io)
-        } catch (recovery) {
-          throw new PluginPersistError('未能保存写作模式，请重试。', { cause, recovery: 'failed', recoveryCause: String(recovery) })
-        }
-        throw new PluginPersistError('未能保存写作模式，请重试。', { cause, recovery: 'restored' })
-      }
-    })
-    return await options.reloadProfile?.().catch(() => false) === true
-  })
-}
 
-function persistFailed(error: unknown): PluginsRpcResult {
-  if (error instanceof PluginPersistError) {
-    return fail('internal', error.message, error.details)
-  }
-  const cause = error instanceof Error ? error.message : String(error)
-  return fail('internal', '未能保存写作模式，请重试。', { cause })
-}
 
 export async function handlePluginsRpc(
   endpoint: string,
@@ -241,30 +165,9 @@ export async function handlePluginsRpc(
       const seen = new Set(matchedLocal.map((item) => item.spec))
       return { ok: true, value: { listings: [...matchedLocal, ...listings.filter((item) => !seen.has(item.spec))] } }
     }
-    if (endpoint === 'presets.list') {
-      const state = await readPluginState(options.paths)
-      return { ok: true, value: await listWritingPresets(options.paths, state) }
-    }
-    if (endpoint === 'presets.setEnabled') {
-      const id = typeof body.id === 'string' ? body.id : ''
-      if (!id || typeof body.enabled !== 'boolean') return bad('请指定要开关的写作模式')
-      if (id === CORE_WRITING_PRESET_ID) return forbidden('通用写作是核心写作模式，不能关闭')
-      const declared = await readCompositionPresets(options.paths.profileDir)
-      const row = declared.find((item) => item.id === id)
-      if (!row) return fail('not-found', '未找到该写作模式')
-      const source = join(options.paths.profileDir, 'node_modules', row.packageName, row.path)
-      let applied: boolean
-      try {
-        applied = await setWritingPreset(options.paths, id, source, body.enabled, options.io ?? defaultPersistIo, options)
-      } catch (error) {
-        return persistFailed(error)
-      }
-      return { ok: true, value: { restartRequired: applied !== true } satisfies PluginActionReceipt }
-    }
     return bad('不支持的插件操作')
   } catch (error) {
     if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return cancelled()
-    if (error instanceof PluginPersistError) return persistFailed(error)
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes('GitHub') || message.includes('fetch') || message.includes('network')) {
       return fail('network', '网络请求失败，请稍后重试。', { cause: message })

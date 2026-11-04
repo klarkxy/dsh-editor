@@ -713,8 +713,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 workspaceId={currentWorkspace?.workspaceId}
                 activePath={path}
                 getActiveDocTitle={getActiveDocTitle}
-                authorPreferences={authorPreferences}
-                authorMemory={authorMemory}
                 renderSlot={renderSlot}
                 hidden={!assistantVisible || layout.aux.tab !== 'partner'}
                 overlay={false}
@@ -827,11 +825,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               contentRevision={contentRevision}
               onDirtyChange={setEditorDirty}
               reveal={reveal}
+              authorPreferences={authorPreferences}
+              authorMemory={authorMemory}
               completionPreference={writing.completion}
               completionDelayMs={writing.completionDelayMs}
               completionEnabled={capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false}
-              authorPreferences={authorPreferences}
-              authorMemory={authorMemory}
               typewriter={writing.typewriter}
               focusParagraph={writing.focusParagraph}
               typography={typography}

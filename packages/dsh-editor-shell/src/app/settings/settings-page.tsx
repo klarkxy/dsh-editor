@@ -26,13 +26,12 @@ import {
 } from '../../writing-settings.tsx'
 import { normalizeAuthorPreferences } from '../../author-preferences.ts'
 import { completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from '../../model/settings-assistant.ts'
-import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings, type DeveloperSettings } from '../../developer-settings.ts'
 import { composeSettingsNavGroups, isPluginsSection, persistTab } from '../../model/settings.ts'
 import { configTargetOf, mergeSections, type ConfigLink } from '../../model/plugins-page.ts'
 import { type PluginCatalogCard } from '../../model/plugins-catalog.ts'
 import { PluginDetailPage } from '../../client/plugin-detail.tsx'
 import { PluginInstallDialog } from '../../client/plugin-install-dialog.tsx'
-import { AdvancedSection, AppearanceSection, AssistantBusyEnterRow, useDeveloperMode } from '../../client/settings-general.tsx'
+import { AdvancedSection, AppearanceSection, AssistantBotBlock, AssistantBusyEnterRow } from '../../client/settings-general.tsx'
 import { AssistantSettings } from '../../client/settings-assistant.tsx'
 import { SettingsChatModelRoute, SettingsEditorModelsSection, SettingsModelsSection } from '../../client/settings-models.tsx'
 import { ShortcutsSettings } from '../../client/settings-shortcuts.tsx'
@@ -48,7 +47,7 @@ import {
 import { PluginModelSettingsSurface, usePluginModelSettings } from '../../client/plugin-surfaces.tsx'
 import { PluginConfigurationPage, usePluginConfigurations } from '../../client/plugin-configurations.tsx'
 import type { PluginConfigurationEntry } from '../../model/plugin-configurations.ts'
-import { PluginsCatalog, usePluginCatalog, useWritingPresets } from '../../client/plugins-catalog.tsx'
+import { PluginsCatalog, usePluginCatalog } from '../../client/plugins-catalog.tsx'
 import { pluginManagerStoreOf, usePluginManager } from '../../client/plugin-manager.ts'
 import { PLUGINS_SETTINGS_SLOT } from '../../root-registration.ts'
 import { titleBarDoubleClick } from '../../model/window-controls.ts'
@@ -112,7 +111,6 @@ export function SettingsPage(props: SettingsPageProps) {
   const official = usePluginConfigurations(props.ctx)
   const models = usePluginModelSettings(props.ctx, locale)
   const catalog = usePluginCatalog(props.ctx)
-  const presets = useWritingPresets(props.ctx)
   const managerStore = pluginManagerStoreOf(props.ctx)
   const { snapshot: managerSnapshot } = usePluginManager(props.ctx)
   const inventory = useManagerInventory(managerStore)
@@ -122,11 +120,6 @@ export function SettingsPage(props: SettingsPageProps) {
   const [installedQuery, setInstalledQuery] = useState('')
   const [note, setNote] = useState('')
   const [aboutBusy, setAboutBusy] = useState(false)
-  const [developerRevealed, setDeveloperRevealed] = useState(false)
-  const developerScope = useMemoDevScope(props.ctx)
-  const [developerMode] = useDeveloperMode(developerScope)
-  const developerGate = developerRevealed || developerMode
-  const authorChrome = authorSettingsChrome(developerGate)
   const backRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const visible = props.visible !== false
@@ -206,8 +199,7 @@ export function SettingsPage(props: SettingsPageProps) {
     if (visible) return
     setNote('')
     setAboutBusy(false)
-    if (!developerMode) setDeveloperRevealed(false)
-  }, [visible, developerMode])
+  }, [visible])
 
   const links: ConfigLink[] = [
     ...(props.renderSlot ? official.entries.map(entry => ({ id: `official:${entry.id}`, label: entry.label, entry })) : []),
@@ -276,16 +268,6 @@ export function SettingsPage(props: SettingsPageProps) {
     if (enabled && card.installed === false && card.installSpec) { openInstall(card.installSpec); return }
     void catalog.toggle(card, enabled)
   }
-  const openConfigFile = async () => {
-    setNote('')
-    try {
-      const response = await props.ctx.remote.settings.openSettingsDocument()
-      if (!response.ok) setNote(t('settings.openConfigFailed', { error: response.error.message ?? '' }))
-    } catch (error) {
-      setNote(t('settings.openConfigFailed', { error: error instanceof Error ? error.message : String(error) }))
-    }
-  }
-
   const labelOf = (id: string): string => {
     for (const group of navGroups) {
       const item = group.items.find(entry => entry.id === id)
@@ -370,11 +352,6 @@ export function SettingsPage(props: SettingsPageProps) {
       </Button>
       <h1 className="dsh-settings-page__title">{t('common.settings')}</h1>
       <div className="dsh-settings-page__tools">
-        {authorChrome.showOpenConfig && props.ctx.connection.isLoopback ? <Button
-          variant="secondary" size="sm" className="settings-open-config"
-          onClick={() => void openConfigFile()}>
-          {t('settings.openConfig')}
-        </Button> : null}
         <WindowControls />
       </div>
     </div>
@@ -404,6 +381,7 @@ export function SettingsPage(props: SettingsPageProps) {
             onKeepDraft={() => setAuthorState({ value: authorDraft.value, saved: savedAuthor, conflicted: false })}
             onSave={() => void saveAuthor()} />
           <AssistantBusyEnterRow ctx={props.ctx} />
+          <AssistantBotBlock ctx={props.ctx} />
         </>)}
         {section('appearance', t('settings.appearanceTitle'), <AppearanceSection ctx={props.ctx} />)}
         {section('shortcuts', t('settings.shortcuts'), <ShortcutsSettings commands={props.commands} renderSlot={props.renderSlot} />)}
@@ -415,14 +393,10 @@ export function SettingsPage(props: SettingsPageProps) {
             query={installedQuery}
             pending={catalog.pending}
             actionError={catalog.actionError}
-            presets={presets.presets}
-            presetError={presets.error}
-            presetPending={presets.pending}
-            restartRequired={catalog.restartRequired || presets.restartRequired}
+            restartRequired={catalog.restartRequired}
             installing={managerSnapshot.install.phase === 'starting' || managerSnapshot.install.phase === 'running' || managerSnapshot.install.phase === 'cancelling'}
             onRetry={catalog.reload}
             onToggle={toggleCard}
-            onTogglePreset={(preset, enabled) => { void presets.setEnabled(preset, enabled) }}
             onConfigure={openDetail}
             onDetail={openDetail} />
           {orphanLinks.length ? <div className="dsh-settings-nav-group plugins-orphan-config">
@@ -482,9 +456,7 @@ export function SettingsPage(props: SettingsPageProps) {
         {section('usage', t('settings.usage'), <SettingsUsageSection ctx={props.ctx} />)}
         {section('about', t('settings.about'), <AboutSettingsSection active={active === 'about' && visible} onBusyChange={setAboutBusy} />)}
         {section('advanced', t('settings.advanced'), <AdvancedSection
-          ctx={props.ctx}
-          showDeveloperMode={authorChrome.showDeveloperMode}
-          onRevealDeveloper={() => setDeveloperRevealed(true)} />)}
+          ctx={props.ctx} />)}
         {activeModel && props.renderSlot ? <div className="dsh-settings-section">
           <PluginModelSettingsSurface key={activeModel.id} ctx={props.ctx} id={activeModel.id} renderSlot={props.renderSlot}
             sessionId={props.sessionId} locale={locale}
@@ -510,21 +482,6 @@ export function SettingsPage(props: SettingsPageProps) {
       </nav>
     </Drawer>
   </section>
-}
-
-/* configForms.get 的分区钩子需要一个稳定 scope 引用；宿主还没有 configForms
-   时给一个只读占位，分区照常渲染且控件不可写。 */
-const UNAVAILABLE_SCOPE = {
-  subscribe: () => () => {},
-  getSnapshot: () => ({ status: 'unavailable' }),
-} as unknown as SettingsScope<DeveloperSettings>
-
-function useMemoDevScope(ctx: ShellContext): SettingsScope<DeveloperSettings> {
-  return useMemo(() => {
-    const get = (ctx as { configForms?: { get?: unknown } }).configForms?.get
-    if (typeof get !== 'function') return UNAVAILABLE_SCOPE
-    return ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE)
-  }, [ctx])
 }
 
 /** The manuscript keeps its instance and dimensions while the settings page is open. */

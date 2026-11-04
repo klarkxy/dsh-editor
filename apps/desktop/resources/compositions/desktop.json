@@ -4,8 +4,7 @@
   "features": [
     "assistant",
     "completion",
-    "overview-panel",
-    "writing-presets"
+    "overview-panel"
   ],
   "preinstalled": [
     "dsh-editor-cards",

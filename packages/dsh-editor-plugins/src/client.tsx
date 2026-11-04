@@ -13,7 +13,6 @@ import {
   PLUGINS_SETTINGS_SLOT,
   type MarketplaceListing,
   type PluginsRpcResult,
-  type WritingPresetCard,
 } from './contracts.ts'
 import { pluginsClientStyles } from './client-styles.ts'
 import type { ShellToolSeatContext } from 'dsh-editor-seats'
@@ -153,38 +152,6 @@ function Switch(props: HostSwitchProps) {
   </button>
 }
 
-/** Preset rows are rendered by the shell settings page; kept for reuse, not mounted here. */
-export function WritingPresetGroup(props: {
-  presets: WritingPresetCard[]
-  busyPreset: string | null
-  onToggle(id: string, enabled: boolean): void
-}) {
-  return (
-    <details className="dsh-plugins-group dsh-plugins-core" data-testid="plugins-writing-presets">
-      <summary>
-        <h3>写作模式</h3>
-      </summary>
-      <p className="dsh-plugins-core-hint">仅影响新对话，进行中的对话不变。</p>
-      {props.presets.map((preset) => {
-        const titleId = `preset-title-${preset.id}`
-        return (
-          <article key={preset.id} className="dsh-plugins-card" data-testid={`plugins-preset-${preset.id}`}>
-            <div>
-              <div id={titleId} className="dsh-plugins-card-title">{preset.title}</div>
-              {preset.description ? <div className="dsh-plugins-card-desc">{preset.description}</div> : null}
-            </div>
-            <div className="dsh-plugins-actions">
-              {preset.locked
-                ? <span className="dsh-plugins-locked">必需</span>
-                : <Switch checked={preset.enabled} busy={props.busyPreset === preset.id} labelledBy={titleId}
-                  testId={`plugins-preset-toggle-${preset.id}`} onToggle={() => props.onToggle(preset.id, !preset.enabled)} />}
-            </div>
-          </article>
-        )
-      })}
-    </details>
-  )
-}
 
 export function PluginDiscovery(props: {
   query: string

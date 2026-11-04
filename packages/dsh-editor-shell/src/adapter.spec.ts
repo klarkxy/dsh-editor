@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -210,23 +210,6 @@ describe('DSH snapshot adapter', () => {
     await stop(session)
     expect(prompt).toHaveBeenCalledWith([{ type: 'text', text: '问剧情' }], 'queue')
     expect(cancel).toHaveBeenCalledTimes(1)
-  })
-  it('submits one project-context envelope and projects its user request and receipt back to the UI', async () => {
-    const prompt = vi.fn().mockResolvedValue({ ok: true })
-    const session = { prompt } as never
-    const compiled = await compileProjectContext('请审这一段', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
-    const sent = await sendProjectContext(session, '  请审这一段  ', async () => compiled)
-    expect(prompt).toHaveBeenCalledTimes(1)
-    const canonical = prompt.mock.calls[0]?.[0]?.[0]?.text
-    expect(canonical).toBe(compiled.serialized)
-    const [row] = chatRows({ nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: canonical }] }] } as never)
-    expect(row).toMatchObject({ role: 'user', text: '请审这一段' })
-    expect(row?.projectContextReceipt).toEqual(sent?.receipt)
-  })
-  it('does not prompt when project-context compilation fails', async () => {
-    const prompt = vi.fn()
-    await expect(sendProjectContext({ prompt } as never, '请审这一段', async () => { throw new Error('compile failed') })).rejects.toThrow('compile failed')
-    expect(prompt).not.toHaveBeenCalled()
   })
   it('projects a canonical V2 message without exposing source text in the UI receipt', async () => {
     const compiled = await compileProjectContextV2('写港口冲突', async () => ({ ok: true as const, value: { text: '固定秘密', version: 'v1' } }), {

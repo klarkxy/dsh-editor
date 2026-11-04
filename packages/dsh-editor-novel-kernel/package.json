@@ -23,7 +23,6 @@
   "files": [
     "lib",
     "resources",
-    "presets",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -41,12 +40,6 @@
         "title": "小说工具",
         "description": "提案、知识卡与写作搭档工具",
         "feature": "assistant"
-      }
-    ],
-    "presets": [
-      {
-        "id": "dsh-editor-novel",
-        "path": "presets/dsh-editor-novel"
       }
     ]
   },

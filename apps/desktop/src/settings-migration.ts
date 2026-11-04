@@ -26,7 +26,7 @@ export async function migrateWritingSettings(home: string, profileDir: string): 
   const document: Document = parseDocument(await readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return '[]'; throw error }))
   if (document.errors.length || !isSeq(document.contents)) throw new Error('Cannot migrate editor settings: invalid profile patch')
   let changed = false
-  const owned = ['dsh-editor-writing', 'ui-developer']
+  const owned = ['dsh-editor-writing']
   for (const id of owned) {
     const value = legacy[id]
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue
@@ -59,4 +59,33 @@ export async function migrateWritingSettings(home: string, profileDir: string): 
   }
   // Written last: a failed conversion can safely retry; original data has a durable backup.
   await writeFile(marker, 'DSH 0.1.7 editor settings imported\n')
+}
+
+/** Backfill cacheRetention: 'long' on existing llm-pi-ai providers that never set it. */
+export async function migratePiAiCacheRetention(profileDir: string): Promise<void> {
+  const marker = join(profileDir, '.pi-ai-cache-retention-migrated')
+  try { await readFile(marker); return } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+  const file = join(profileDir, 'cordis.patch.yml')
+  const document: Document = parseDocument(await readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return '[]'; throw error }))
+  if (document.errors.length || !isSeq(document.contents)) throw new Error('Cannot migrate pi-ai cache retention: invalid profile patch')
+  let changed = false
+  for (const row of document.contents.items) {
+    if (!isMap(row) || row.get('id') !== 'llm-pi-ai') continue
+    const config = row.get('config', true)
+    const providers = isMap(config) ? config.get('providers', true) : undefined
+    if (!isMap(providers)) continue
+    for (const pair of providers.items) {
+      if (!isMap(pair.value)) continue
+      if (pair.value.has('cacheRetention')) continue
+      pair.value.set('cacheRetention', 'long')
+      changed = true
+    }
+  }
+  if (changed) {
+    document.contents.flow = false
+    const stage = `${file}.${process.pid}.tmp`
+    await writeFile(stage, String(document))
+    await rename(stage, file)
+  }
+  await writeFile(marker, 'pi-ai cacheRetention backfilled\n')
 }

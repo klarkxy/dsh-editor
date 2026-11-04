@@ -12,8 +12,6 @@ export const PLUGINS_RPC_CHANNEL = '/dsh-editor-plugins'
 /** The Connection only accepts one-segment channels; manager methods live under /api. */
 export const PLUGIN_MANAGER_RPC_CHANNEL = '/api'
 export const CATALOG_ENDPOINT = 'catalog.list'
-export const PRESETS_ENDPOINT = 'presets.list'
-export const PRESET_ENABLED_ENDPOINT = 'presets.setEnabled'
 export const BUNDLE_ENABLED_ENDPOINT = 'pluginManager/setBundleEnabled'
 export const PLUGIN_ENABLED_ENDPOINT = 'pluginManager/setPluginEnabled'
 
@@ -49,18 +47,7 @@ export type PluginCatalogCard = {
 }
 export type PluginCatalogSectionId = 'official' | 'builtin' | 'user'
 export type PluginCatalogSection = { id: PluginCatalogSectionId; items: PluginCatalogCard[] }
-export type WritingPresetCard = {
-  id: string
-  title: string
-  description: string
-  enabled: boolean
-  locked: boolean
-  packageName?: string
-}
-
 export type CatalogStatus = 'loading' | 'ready' | 'error'
-/** Presets are optional: a host without them simply has no sub-group. */
-export type PresetsStatus = 'loading' | 'ready' | 'error'
 
 const SECTION_IDS: readonly PluginCatalogSectionId[] = ['official', 'builtin', 'user']
 const ACTIONS: readonly PluginCatalogAction[] = ['switch', 'config', 'detail']
@@ -149,23 +136,6 @@ export function catalogSectionsOf(value: unknown): PluginCatalogSection[] {
   return SECTION_IDS.map((id) => ({ id, items: byId.get(id)! }))
 }
 
-export function writingPresetsOf(value: unknown): WritingPresetCard[] {
-  const rows = Array.isArray(recordOf(value).presets) ? recordOf(value).presets as unknown[] : []
-  return rows.flatMap((raw) => {
-    const row = recordOf(raw)
-    const id = text(row.id)
-    if (!id) return []
-    const packageName = text(row.packageName)
-    return [{
-      id,
-      title: text(row.title) || id,
-      description: text(row.description),
-      enabled: row.enabled === true,
-      locked: row.locked === true,
-      ...(packageName ? { packageName } : {}),
-    }]
-  })
-}
 
 /**
  * The shell owns the configuration routes, so every `plugins.item` entry also
@@ -223,12 +193,6 @@ export function filterCatalogSections(
   }))
 }
 
-export function filterWritingPresets(presets: readonly WritingPresetCard[], query: string): WritingPresetCard[] {
-  const needle = query.trim().toLocaleLowerCase()
-  if (!needle) return presets.filter((preset) => true)
-  return presets.filter((preset) => [preset.title, preset.description, preset.packageName ?? '']
-    .some((field) => field.toLocaleLowerCase().includes(needle)))
-}
 
 export type RpcCaller = (channel: string, endpoint: string, payload: Record<string, unknown>) => Promise<unknown>
 
@@ -248,9 +212,6 @@ export function catalogToggleRequest(card: PluginCatalogCard, enabled: boolean):
   return null
 }
 
-export function presetEnabledRequest(preset: WritingPresetCard, enabled: boolean): RpcRequestShape {
-  return { channel: PLUGINS_RPC_CHANNEL, endpoint: PRESET_ENABLED_ENDPOINT, payload: { id: preset.id, enabled } }
-}
 
 /** Cordis throws on uninjected service properties; an absent channel is a state, not a crash. */
 export function rpcCallerOf(ctx: unknown): RpcCaller | undefined {
@@ -315,14 +276,6 @@ export function changeReceipt(value: unknown): ChangeReceipt {
   }
 }
 
-export type WritingPresetsBundle = {
-  status: PresetsStatus
-  presets: WritingPresetCard[]
-  error: string
-  pending: string
-  restartRequired: boolean
-  setEnabled(preset: WritingPresetCard, enabled: boolean): Promise<void>
-}
 
 /**
  * The author's brand art when the Host supplied one and it has not failed to

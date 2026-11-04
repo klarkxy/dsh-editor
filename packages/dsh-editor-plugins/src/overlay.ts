@@ -7,15 +7,13 @@ export type InstalledPlugin = { name: string; spec: string; version: string }
 export type PluginState = {
   schema: typeof PLUGIN_STATE_SCHEMA
   overrides: Record<string, boolean>
-  /** 第一方写作模式 preset 的开关；缺省（无记录）视为启用。 */
-  presets: Record<string, boolean>
   installed: InstalledPlugin[]
 }
 
 export const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 
 export function emptyPluginState(): PluginState {
-  return { schema: PLUGIN_STATE_SCHEMA, overrides: {}, presets: {}, installed: [] }
+  return { schema: PLUGIN_STATE_SCHEMA, overrides: {}, installed: [] }
 }
 
 export function parsePluginState(value: unknown): PluginState | undefined {
@@ -42,11 +40,5 @@ export function parsePluginState(value: unknown): PluginState | undefined {
       })
     }
   }
-  const presets: Record<string, boolean> = {}
-  if (row.presets && typeof row.presets === 'object' && !Array.isArray(row.presets)) {
-    for (const [id, enabled] of Object.entries(row.presets as Record<string, unknown>)) {
-      if (isSafeEntryId(id) && typeof enabled === 'boolean') presets[id] = enabled
-    }
-  }
-  return { schema: PLUGIN_STATE_SCHEMA, overrides, presets, installed }
+  return { schema: PLUGIN_STATE_SCHEMA, overrides, installed }
 }

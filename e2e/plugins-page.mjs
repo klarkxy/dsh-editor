@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertCatalogDetailsOpenable, assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, expandAllDetails, openPluginDetail, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertCatalogDetailsOpenable, assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, expandAllDetails, openPluginDetail, showPluginList } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -76,7 +76,6 @@ try {
     const pluginPage = page.locator(S.pluginsPage)
     await assertDefaultPluginPage(page, pluginPage)
     await assertCatalogIconsRendered(pluginPage)
-    await openWritingPresets(pluginPage)
     await shot(theme + '-overview-1440')
     if (theme === '浅色') {
       // Agent 循环 is an entry card; its row opens the official plugins.item page.

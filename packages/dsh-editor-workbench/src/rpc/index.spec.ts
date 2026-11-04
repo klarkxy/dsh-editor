@@ -33,6 +33,7 @@ const PREVIOUS_MUTATIONS = [
   'entry.delete',
   'entry.rename',
   'progress.record',
+  'bot.initialize',
 ] as const
 
 describe('workbench handler table', () => {

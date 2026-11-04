@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { installNovelWorkbenchTools } from 'dsh-editor-workbench'
+import { installNovelWorkbenchTools, installNovelMemoryTool } from 'dsh-editor-workbench'
 import { asHost } from 'dsh-manuscript/host-api'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
 import { createIndexWriteTool, type IndexWriter } from './index-write-tool.ts'
@@ -17,7 +17,7 @@ export const inject = ['tools', 'systemPrompt', 'fs', 'sandboxPolicy', 'sessions
 
 /** Historical full surface. Mode is required; `full` remains a legacy alias of `legacy`. */
 export const NOVEL_KERNEL_LEGACY_MODE = 'legacy'
-/** Read-only surface: `novel_knowledge` only. New `dsh-editor-novel` must pass this explicitly. */
+/** Read-only surface: `novel_knowledge` only. The writing preset mounts this mode explicitly. */
 export const NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE = 'knowledge-only'
 
 export type NovelKernelMode = typeof NOVEL_KERNEL_LEGACY_MODE | typeof NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
@@ -110,14 +110,14 @@ function makeScratchStore(ctx: Context): ScratchStore {
 
 /**
  * Registers novel tools for this composition.
- * knowledge-only: `novel_knowledge` only (persona + Skill own workflow).
+ * knowledge-only: `novel_knowledge` + `novel_memory_update` (persona + Skill own workflow).
  * legacy (`full` alias): full historical surface, guard, and prompt sections.
  */
 export function apply(ctx: Context, config?: unknown): void {
   const mode = resolveNovelKernelMode(config)
   const host = ctx as KernelHost
   host.tools.register(createNovelKnowledgeTool())
-  if (mode === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) return
+  if (mode === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) { installNovelMemoryTool(ctx); return }
   host.tools.register(createProposalTool())
   host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(ctx) }))
   const scratch = makeScratchStore(ctx)

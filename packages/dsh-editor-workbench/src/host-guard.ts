@@ -4,10 +4,6 @@
  */
 export const WRITING_AGENT_PRESETS = [
   'dsh-editor-writing',
-  'dsh-editor-novel',
-  'dsh-editor-article',
-  'dsh-editor-technical',
-  'dsh-editor',
 ] as const
 
 export type WritingAgentPreset = typeof WRITING_AGENT_PRESETS[number]

@@ -22,19 +22,6 @@ export type PluginActionReceipt = {
   restartRequired: boolean
 }
 
-/** 第一方写作模式 preset 卡片：locked 的是核心通用写作，其余可在设置里开关。 */
-export type WritingPresetCard = {
-  id: string
-  title: string
-  description: string
-  enabled: boolean
-  locked: boolean
-  packageName?: string
-}
-
-export type WritingPresetInventory = {
-  presets: WritingPresetCard[]
-}
 
 export type PluginsErrorCode = 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal'
 

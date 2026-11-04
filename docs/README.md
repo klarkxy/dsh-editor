@@ -4,6 +4,7 @@
 - [桌面更新审查与恢复](update-audit.md)：下载校验、Windows 安装交接、恢复入口与验证边界。
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。
+- [搭档对话设计](bot-conversation.md)：一部作品一个搭档、换段与交接、闲置回顾、缓存与回读。
 - [2026-10-06 重构留档](refactoring/refactoring-plan.md)：当时的阶段方案与验收记录，部分接口已退役；[文档总览](refactoring/README.md)、[实施报告](refactoring/implementation-report.md)、[Phase 0 报告](refactor-phase1-adjusted.md)；历史参考：[早期执行摘要](refactoring-executive-summary.md)、[进度跟踪](refactoring-progress.md)、[Phase 2 索引](phase2-index.md)、[路线图](REFACTORING_ROADMAP.md)、[完整方案](refactoring-proposal.md)、[精简版方案](refactoring-proposal-focused.md)、[架构对比](architecture-comparison.md)、[审查报告](ARCHITECTURE_REVIEW_REPORT.md)、[审查摘要](REVIEW_SUMMARY.md)、[完成报告](refactor-completion-report.md)、[合并指南](MERGE_GUIDE.md)、[合并后验证](phase1-post-merge-validation.md)。当前边界以[架构决策](architecture.md)及包文档为准。
 - [界面设计](ui-design.md)：「原稿」设计系统契约——tokens、样式分层、`src/ui/` 组件、主题作用域与验证门禁（上游许可证归属保留）。
 - [UI/UX 实测记录](ui-ux-audit-2026-10.md)：真实前端里的测量结论、修复前后数字与仍未解决的问题。
