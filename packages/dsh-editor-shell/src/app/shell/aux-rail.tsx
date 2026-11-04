@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { SegmentedControl, Tab, TabList, TabPanel, Tabs } from '../../ui/index.ts'
 import { t } from '../../i18n/index.ts'
 import { useLocale } from '../../i18n/index.ts'
 import type { AuxTab } from '../../model/workbench-layout.ts'
 import type { SettingsRenderSlot } from '../../client/settings-plugins.tsx'
+
+/*
+ * 页头右端的动作位宿主：当前页签把自己的页头动作 portal 进来
+ * （搭档＝对话切换＋「新对话」）。元素只挂一次，靠 hidden 随页签显隐。
+ */
+export const AuxRailActionsContext = createContext<HTMLElement | null>(null)
+
+export function useAuxRailActionsHost(): HTMLElement | null {
+  return useContext(AuxRailActionsContext)
+}
 
 /*
  * 辅助栏（spec §2.1）：三个页签 —— 「搭档」承载对话，「资料」承载钉住预览
@@ -19,17 +29,25 @@ export function AuxRail(props: {
   tools: ReactNode
 }) {
   useLocale()
+  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null)
   return (
     <Tabs
       value={props.tab}
       onValueChange={(value) => props.onTabChange(value as AuxTab)}
       className="dsh-aux-rail">
-      <TabList aria-label={t('aux.tabs')} className="dsh-aux-rail__tabs">
-        <Tab value="partner">{t('aux.tabPartner')}</Tab>
-        <Tab value="reference">{t('aux.tabReference')}</Tab>
-        {props.hasTools ? <Tab value="tools">{t('aux.tabTools')}</Tab> : null}
-      </TabList>
-      <TabPanel value="partner" forceMount className="dsh-aux-panel">{props.partner}</TabPanel>
+      <div className="dsh-aux-rail__head">
+        <TabList aria-label={t('aux.tabs')} className="dsh-aux-rail__tabs">
+          <Tab value="partner">{t('aux.tabPartner')}</Tab>
+          <Tab value="reference">{t('aux.tabReference')}</Tab>
+          {props.hasTools ? <Tab value="tools">{t('aux.tabTools')}</Tab> : null}
+        </TabList>
+        <div className="dsh-aux-rail__actions" ref={setActionsHost} hidden={props.tab !== 'partner'} />
+      </div>
+      <TabPanel value="partner" forceMount className="dsh-aux-panel">
+        <AuxRailActionsContext.Provider value={actionsHost}>
+          {props.partner}
+        </AuxRailActionsContext.Provider>
+      </TabPanel>
       <TabPanel value="reference" forceMount className="dsh-aux-panel">{props.reference}</TabPanel>
       {props.hasTools ? <TabPanel value="tools" forceMount className="dsh-aux-panel">{props.tools}</TabPanel> : null}
     </Tabs>

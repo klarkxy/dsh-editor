@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, expandAllDetails, openPluginDetail, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertCatalogDetailsOpenable, assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, expandAllDetails, openPluginDetail, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
 import { toggleTheme } from './helpers/theme.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -94,13 +94,19 @@ try {
       await page.locator(S.pluginsTrigger).click()
       await showPluginList(pluginPage)
       // Rows arrive with catalog.list; expand their disclosure only once they exist.
-      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').waitFor({ state: 'attached' })
+      // The post-reload boot repeats the slow first catalog.list — same 90s budget.
+      await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').waitFor({ state: 'attached', timeout: 90_000 })
       await expandAllDetails(pluginPage.locator(S.pluginsCatalog))
       await pluginPage.locator('[data-testid="plugins-catalog-row-entry:plugins.item:agent-loop"]').click()
       await pluginPage.locator(S.pluginConfigAgentLoopParallel).waitFor()
       assert.equal(await pluginPage.locator(S.pluginConfigAgentLoopParallel).inputValue(), '7')
       await shot('official-config-saved-after-reload')
       report.checks.push('official Agent loop configuration saved through Host and survived full reload')
+      // 每张可点开的目录卡都不应落到「找不到这个插件」空态（入口卡指向
+      // 运行时包而非管理器 bundle，曾整块渲染找不到）。放在 agent-loop
+      // 流程之后，避免逐卡遍历改变它敏感的保存/重载前置状态。
+      const detailWalk = await assertCatalogDetailsOpenable(page, pluginPage)
+      console.log(`[plugins-page] catalog detail walk: ${detailWalk.length} cards, notFound=${detailWalk.filter(r => r.notFound).length}`)
     }
     await showPluginList(pluginPage)
     for (const width of [1024, 760, 390]) {
@@ -125,7 +131,8 @@ try {
     const project = page.getByRole('dialog', { name: '新建作品' })
     await project.getByLabel('作品名称').fill('plugin-page-acceptance')
     await project.getByRole('button', { name: '创建', exact: true }).click()
-    await page.locator(S.shellLayout).waitFor()
+    // 新建工程要跑一遍 profile 部署；目录卡遍历后机器仍在热路径，15s 默认值容易撞线。
+    await page.locator(S.shellLayout).waitFor({ timeout: 90_000 })
     // Narrow layouts may leave the file sidebar collapsed after returning to desktop width.
     if (!await page.locator(S.tree).isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
     await page.locator(S.treeEmpty).waitFor()

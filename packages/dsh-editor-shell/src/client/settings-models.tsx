@@ -1,7 +1,8 @@
 /** Models settings entry points and provider page orchestration. */
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { SettingsNamespaceView, SettingsScope } from '../dsh-compat.ts'
-import { addableRows, credentialDot, modelDrafts, protocolChoices, providerIdOf, providerUsable, type ProviderRow } from './settings-models-store.ts'
+import { addableRows, credentialDot, isAccountRow, modelDrafts, needsSetup, protocolChoices, providerIdOf, providerUsable, type ProviderRow } from './settings-models-store.ts'
+import { accountPresence, useDeepseekAccount, useDeepseekAccountControls, type DeepseekAccountStatus } from './settings-models-account.tsx'
 import { Badge, Box, Button, Card, Flex, Heading, Notice, Text } from '../ui/index.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
@@ -19,15 +20,6 @@ import { managedCredentialRef, ModelsStore, removeProviderProfile, type ModelsSn
 import { ProviderEditor, CustomProviderCard } from './settings-models-provider.tsx'
 
 type Store = ModelsStore
-
-/* Whether a row is the first-run setup posture: the only existing row whose
-   empty settingsPath is the whole section, and only while no other row can
-   already serve requests. */
-function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
-  if (anyUsable) return false
-  if (row.entry.settingsPath.length > 0) return false
-  return row.credential?.configured !== true
-}
 
 /* Top-level page state the section owns. The three card kinds each track
    their own draft; this object only records which card (if any) is open. */
@@ -226,9 +218,11 @@ function Loaded(props: {
 }): ReactNode {
   const { ctx, store, state } = props
   const [section, setSection] = useState<SectionState>(emptySectionState)
+  const account = useDeepseekAccount(ctx)
+  const presence = accountPresence(account)
   useEffect(() => {
     if (state.status !== 'ready' || state.refreshing) return
-    const anyUsable = state.rows.some(providerUsable)
+    const anyUsable = state.rows.some((row) => providerUsable(row, presence))
     setSection((current) => {
       const setups = new Map(current.setups)
       for (const row of state.rows) {
@@ -238,7 +232,7 @@ function Loaded(props: {
       }
       return setups.size === current.setups.size ? current : { ...current, setups }
     })
-  }, [state.rows, state.namespaces, state.status, state.refreshing])
+  }, [state.rows, state.namespaces, state.status, state.refreshing, presence])
   useEffect(() => {
     const saved = section.savedNote
     if (!saved || !isSuccessWorkbenchNote(saved)) return
@@ -289,7 +283,7 @@ function Loaded(props: {
   }
 
   const writable = state.writable
-  const anyUsable = state.rows.some(providerUsable)
+  const anyUsable = state.rows.some((row) => providerUsable(row, presence))
   const configured = state.rows.filter((row) => row.configured)
   if (!section.adding && section.editing && !configured.some((row) => providerIdOf(row.entry) === providerIdOf(section.editing!.entry))) {
     configured.push(section.editing)
@@ -370,7 +364,9 @@ function Loaded(props: {
             <Card asChild key={providerIdOf(target.entry)}>
               <li className="models-row-card">
               <RowHead
+                ctx={ctx}
                 row={target}
+                account={account}
                 writable={writable}
                 open={editing}
                 onEdit={() => {
@@ -513,17 +509,25 @@ function Header(props: { note?: string | null }): ReactNode {
   );
 }
 
-function RowHead(props: {
+export function RowHead(props: {
+  ctx: ShellContext
   row: ProviderRow
+  account: DeepseekAccountStatus
   writable: boolean
   open: boolean
   onEdit(): void
   onDelete(): void
 }): ReactNode {
   const { row, writable, open, onEdit, onDelete } = props
-  const dot = credentialDot(row)
+  const accountRow = isAccountRow(row)
+  const controls = useDeepseekAccountControls(props.ctx, props.account, accountRow)
+  const dot = credentialDot(row, accountPresence(props.account))
+  const dotLabel = accountRow
+    ? dot === 'configured' ? t('models.accountSignedIn') : t('models.accountSignedOut')
+    : dot === 'configured' ? t('models.keyConfigured') : t('models.keyMissing')
   const label = targetLabel(row)
   return (
+    <>
     <Flex className="models-row-head" align="center" justify="between" gap="3">
       <Flex className="models-row-identity" align="center" gap="2" minWidth="0">
         <Text size="2" weight="medium" className="models-row-name">
@@ -532,28 +536,20 @@ function RowHead(props: {
         {row.entry.declared === true ? <Badge tone="neutral" className="models-row-tag">
           {text().custom}
         </Badge> : null}
-        {dot === 'configured'
-          ? <span
-          className="models-credential-dot models-credential-dot-configured"
+        {dot === null ? null : <span
+          className={dot === 'configured' ? 'models-credential-dot models-credential-dot-configured' : 'models-credential-dot models-credential-dot-missing'}
           role="img"
-          aria-label={t('models.keyConfigured')}
-          title={t('models.keyConfigured')} />
-          : dot === 'missing'
-            ? <span
-          className="models-credential-dot models-credential-dot-missing"
-          role="img"
-          aria-label={t('models.keyMissing')}
-          title={t('models.keyMissing')} />
-            : null}
+          aria-label={dotLabel}
+          title={dotLabel} />}
       </Flex>
-      <Flex className="models-row-actions" align="center" gap="2">
-        <Button
+      <Flex className="models-row-actions" align="center" gap="2" wrap="wrap" justify="end">
+        {accountRow ? controls.actions : <Button
           variant="secondary"
           className="models-button"
           aria-label={formatTemplate(text().editProviderAria, label)}
           onClick={onEdit}>
           {text().edit}
-        </Button>
+        </Button>}
         {row.removable
           ? <Button
           variant="danger"
@@ -567,6 +563,8 @@ function RowHead(props: {
         {open ? null : <span className="models-row-state" aria-hidden={open ? 'true' : 'false'} />}
       </Flex>
     </Flex>
+    {controls.detail}
+    </>
   );
 }
 

@@ -208,6 +208,16 @@ function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode, section = 
 
 const emptyZhihuSlot = createElement('div', { 'data-slot': ZHIHU_SETTINGS_SLOT })
 
+it('does not mount a plugin detail seat for a legacy official section route', () => {
+  /* 旧版官方分区用 navId `plugin:<id>`；该路由只渲染分区页，不混进详情占位。 */
+  const html = navigation(
+    { 'settings.section': [{ options: { id: 'ui-legacy-probe', label: '旧分区' } }] },
+    emptyZhihuSlot,
+    'plugin:ui-legacy-probe',
+  )
+  expect(html).not.toContain('plugin-detail-seat-')
+})
+
 describe('plugin configuration navigation', () => {
   it('hides the legacy Zhihu page when the slot has no registration', () => {
     const rows: Record<string, Entry[]> = {
@@ -358,7 +368,7 @@ const SECTION_IDS = ['official', 'builtin', 'user'] as const
 const CATALOG_SECTIONS: PluginCatalogSection[] = [
   { id: 'official', items: [
     { key: 'bundle:@deepseek-ai/dsh-web-search', title: '网络搜索', description: '写作时检索公开资料', packageName: '@deepseek-ai/dsh-web-search', badges: ['experimental'], enabled: true, action: 'switch' },
-    { key: 'bundle:@klarkxy/dsh-terminal', title: '终端', description: '在应用内运行命令', packageName: '@klarkxy/dsh-terminal', badges: ['preinstalled'], action: 'detail' },
+    { key: 'bundle:@klarkxy/dsh-terminal', title: '终端', description: '在应用内运行命令', packageName: '@klarkxy/dsh-terminal', badges: ['installed'], action: 'detail' },
   ] },
   { id: 'builtin', items: [
     { key: 'bundle:dsh-editor-workbench', title: '文稿工作台', description: '文稿编辑工具', badges: ['builtin', 'session-managed'], action: 'config' },
@@ -420,7 +430,7 @@ describe('plugin catalog', () => {
   it('renders every badge as text and exactly one primary control per row', () => {
     const html = catalog()
     expect(html).toContain('实验性')
-    expect(html).toContain('预装')
+    expect(html).toContain('已安装')
     expect(html).toContain('内置')
     expect(html).toContain('由会话控制')
     expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')

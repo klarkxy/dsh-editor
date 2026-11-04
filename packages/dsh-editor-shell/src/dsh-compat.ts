@@ -153,6 +153,42 @@ export type ConfigurableProviderView = {
 export type CredentialView = { configured: boolean; source?: string; writable?: boolean }
 export type DiscoveredModelView = { id: string; name?: string; [key: string]: unknown }
 
+/* dsh-api-account-controller (0.2.1) remote `account` namespace. Optional on
+   the shell's remote proxy: hosts without the account controller leave it
+   absent and the page degrades to a muted note. */
+export type AccountClientMetadata = {
+  /** Requesting UI version; the Host derives Platform request headers from it. */
+  version: string
+  /** Active UI language; only its primary subtag selects the Platform wire locale. */
+  locale: string
+  /** Offset from UTC in seconds, positive east of Greenwich. */
+  timezoneOffsetSeconds: number
+}
+
+export type AccountSignInAttempt = {
+  id: string
+  phase: 'initializing' | 'waiting-browser' | 'exchanging' | 'committing' | 'succeeded' | 'cancelled' | 'expired' | 'failed'
+  authorizeUrl?: string
+  expiresAt?: number
+  errorCode?: 'no-response' | 'network' | 'protocol' | 'expired' | 'storage'
+}
+
+export type AccountView = {
+  status: 'signed-out' | 'credential-stored'
+  links: { usageUrl: string; topUpUrl: string }
+  attempt: AccountSignInAttempt | null
+}
+
+export type AccountProfileView = {
+  id: string | null
+  name: string | null
+  contact: string | null
+  avatarUrl?: string | null
+}
+
+/** `AccountDetails['profile']`: profile and balance failures resolve independently. */
+export type AccountProfileResult = { status: 'ready'; value: AccountProfileView } | { status: 'failed' }
+
 export type SettingsScopeSnapshot<T> = {
   status: 'loading' | 'ready' | 'unavailable'
   value: T | undefined
@@ -215,6 +251,22 @@ export type EditorRemote = {
   agentPresets: {
     list(): Promise<RpcResult<unknown>>
     select(sessionId: SessionId, id: string): Promise<RpcResult<string>>
+  }
+  /* DeepSeek account controller namespace; absent when the host composition
+     does not load it. */
+  account?: {
+    getState(): Promise<RpcResult<AccountView>>
+    startSignIn(
+      client: AccountClientMetadata,
+      callbackOrigin: string,
+      loginSource: 'web' | 'desktop',
+    ): Promise<RpcResult<AccountView>>
+    cancelSignIn(attemptId: string): Promise<RpcResult<AccountView>>
+    signOut(client: AccountClientMetadata): Promise<RpcResult<AccountView>>
+    getProfile(client: AccountClientMetadata): Promise<RpcResult<AccountProfileResult | null>>
+    hasRunningAccountTasks(): Promise<RpcResult<boolean>>
+    /** Streams the full state once, then every change; ends/errors on carrier loss. */
+    watch(signal?: AbortSignal): AsyncIterable<AccountView> & { dispose(): void }
   }
 }
 

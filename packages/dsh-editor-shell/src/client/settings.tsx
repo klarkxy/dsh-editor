@@ -1,6 +1,7 @@
 import { useLocale } from '../i18n/index.ts'
 import { t } from '../i18n/index.ts'
-import { PluginIcon, SettingsIcon } from './icons.tsx'
+import { PluginIcon } from './icons.tsx'
+import { SettingsIcon } from '../ui/icons.tsx'
 import { IconButton } from '../ui/index.ts'
 
 export type { SettingsRenderSlot } from './settings-plugins.tsx'
@@ -18,7 +19,7 @@ export function SettingsTrigger(props: { onOpen(): void }) {
         label={t('common.settings')}
         onClick={props.onOpen}>
         <span className="settings-trigger-icon" aria-hidden={true}>
-          <SettingsIcon size={16} />
+          <SettingsIcon size="md" />
         </span>
       </IconButton>
     </span>
@@ -30,6 +31,6 @@ export function PluginsTrigger(props: { onOpen(): void }) {
   useLocale()
   return <IconButton type="button" variant="ghost" size="md" className="plugins-trigger"
     label={t('plugins.open')} onClick={props.onOpen}>
-    <PluginIcon size={18} />
+    <PluginIcon size={16} />
   </IconButton>
 }

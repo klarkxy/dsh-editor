@@ -454,7 +454,7 @@ export function SettingsPage(props: SettingsPageProps) {
                 title: '', description: '', badges: [], action: 'detail' }) })
             : props.plugins} fallback={<p className="dsh-settings-error">{t('plugins.unavailable')}</p>} />
         </div>
-        {active.startsWith('plugin:') && props.renderSlot ? <PluginDetailPage
+        {active.startsWith('plugin:') && !activeLegacy && props.renderSlot ? <PluginDetailPage
           key={active}
           packageName={active.slice('plugin:'.length)}
           ctx={props.ctx}
@@ -469,6 +469,7 @@ export function SettingsPage(props: SettingsPageProps) {
           store={managerStore}
           onBack={() => selectSection('plugins-installed')}
           onInstall={openInstall}
+          onToggleCard={toggleCard}
           configVersion={official.version}
           renderModelSurface={(id) => <PluginModelSettingsSurface key={id} ctx={props.ctx} id={id}
             renderSlot={props.renderSlot!} sessionId={props.sessionId} locale={locale}

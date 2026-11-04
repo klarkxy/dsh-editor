@@ -180,7 +180,37 @@ async function measure(page) {
     const cm = rect(document.querySelector('.cm-content'))
     const launcher = rect(document.querySelector(SEL.launcher))
     const paperInput = document.querySelector('.paper-input')
+    let ruleGap = null
+    if (paperInput) {
+      const content = paperInput.querySelector('.cm-content')
+      if (content) {
+        /* 与 editor.tsx 同一量法：内容盒到稿纸边缘的实测间隙（阈值 48px）。 */
+        const inputRect = paperInput.getBoundingClientRect()
+        const contentRect = content.getBoundingClientRect()
+        const styles = getComputedStyle(content)
+        const gapLeft = contentRect.left + (parseFloat(styles.paddingLeft) || 0) - inputRect.left
+        const gapRight = inputRect.width - (contentRect.right - (parseFloat(styles.paddingRight) || 0) - inputRect.left)
+        ruleGap = { left: gapLeft, right: gapRight }
+      }
+    }
     const footer = rect(document.querySelector('.editor-tools'))
+    const topbarControls = topbar
+      ? [...topbar.querySelectorAll('button')].map((b) => {
+          const r = b.getBoundingClientRect()
+          const svg = b.querySelector('svg')
+          const gr = svg ? svg.getBoundingClientRect() : null
+          return {
+            h: r.height, cy: r.top + r.height / 2,
+            left: r.left, rightEdge: r.right,
+            glyphCy: gr ? gr.top + gr.height / 2 : null,
+            svg: svg ? gr.width : null,
+            win: Boolean(b.closest(SEL.windowControls)),
+            right: Boolean(b.closest('.dsh-topbar__group--right')),
+            iconBtn: b.classList.contains('dsh-icon-button'),
+            visible: r.width > 0 && r.height > 0,
+          }
+        }).filter((c) => c.visible)
+      : []
     const topbarOverflow = topbar
       ? [...topbar.querySelectorAll('*')].some((el) => {
           const r = el.getBoundingClientRect()
@@ -199,11 +229,13 @@ async function measure(page) {
       launcher,
       footer,
       rulesHidden: paperInput ? paperInput.hasAttribute('data-rules-hidden') : null,
+      ruleGap,
       topbarOverflow,
       scrollWidth: document.documentElement.scrollWidth,
       scrollLeft: document.documentElement.scrollLeft || document.body?.scrollLeft || 0,
+      topbarControls,
     }
-  }, { shellLayout: S.shellLayout, topbar: S.topbar, filesPane: S.filesPane, auxPane: S.auxPane, shellFrame: '[data-testid="dsh-shell-frame"]', dshDrawer: S.dshDrawer, composer: S.composer, launcher: S.launcher })
+  }, { shellLayout: S.shellLayout, topbar: S.topbar, filesPane: S.filesPane, auxPane: S.auxPane, shellFrame: '[data-testid="dsh-shell-frame"]', dshDrawer: S.dshDrawer, composer: S.composer, launcher: S.launcher, windowControls: S.windowControls })
 }
 
 function assertProbe(label, m) {
@@ -271,13 +303,50 @@ function assertProbe(label, m) {
     }
   }
 
-  // §4 版心线:有页边距的宽度画出两根线;390 贴边时两根都隐藏。
-  if (m.rulesHidden !== null) {
-    if (m.vw >= 760 && m.rulesHidden) fail(`margin rules hidden at ${m.vw}px (gap should be >= 32px)`)
-    if (m.vw < 760 && !m.rulesHidden) fail(`margin rules drawn at ${m.vw}px but content gap is < 32px`)
+  // §4 版心线:画/隐完全由实测间隙决定（两侧间隙 >= 48px 才画）。
+  // 1440 双栏停靠时间隙 ~53px，两根线仍应可见；抽屉遮罩才隐藏。
+  if (m.rulesHidden !== null && m.ruleGap) {
+    const shouldHide = m.ruleGap.left < 48 || m.ruleGap.right < 48
+    if (shouldHide !== m.rulesHidden) {
+      fail(`margin rules ${m.rulesHidden ? 'hidden' : 'drawn'} at ${m.vw}px but measured gaps are ${m.ruleGap.left.toFixed(0)}/${m.ruleGap.right.toFixed(0)} (threshold 48)`)
+    }
   }
 
   if (m.topbarOverflow) fail('topbar element overflows viewport horizontally')
+  /* 顶栏控件同一行高同一中心线；图标按钮的 svg 一律 16px。
+     窗口控制钮是系统字形，量中心线但不并入高度/图标断言。 */
+  if (m.topbarControls?.length) {
+    const sized = m.topbarControls.filter((c) => !c.win)
+    const h0 = sized[0]?.h
+    for (const c of sized) {
+      if (Math.abs(c.h - h0) > 0.5) fail(`topbar control height ${c.h.toFixed(1)} != ${h0.toFixed(1)}`)
+    }
+    const cy0 = m.topbarControls[0].cy
+    for (const c of m.topbarControls) {
+      if (Math.abs(c.cy - cy0) > 0.5) fail(`topbar control center ${c.cy.toFixed(1)} != ${cy0.toFixed(1)}`)
+    }
+    for (const c of m.topbarControls) {
+      if (c.iconBtn && !c.win && c.svg !== null && Math.abs(c.svg - 16) > 0.5) {
+        fail(`topbar icon-button svg ${c.svg.toFixed(1)}px != 16px`)
+      }
+    }
+    /* 字形中心线：所有带 svg 的控件（含窗口控制字形）同一中心 ±0.5px。 */
+    const glyphs = m.topbarControls.filter((c) => c.glyphCy !== null)
+    const gy0 = glyphs[0]?.glyphCy
+    for (const c of glyphs) {
+      if (Math.abs(c.glyphCy - gy0) > 0.5) fail(`topbar glyph center ${c.glyphCy.toFixed(1)} != ${gy0.toFixed(1)}`)
+    }
+    /* 右组相邻控件间距一致（space-1）；窗口控制钮前的间距允许不同。
+       ≤1040 抽屉形态下量测会吃到过渡帧，只在停靠宽度断言。 */
+    const right = m.vw > 1040 ? m.topbarControls.filter((c) => c.right) : []
+    for (let i = 0; i + 1 < right.length; i += 1) {
+      if (right[i + 1].win) continue
+      const gap = right[i + 1].left - right[i].rightEdge
+      const ref = right.find((c, j) => j > 0 && !c.win)
+      const refGap = ref ? ref.left - right[right.indexOf(ref) - 1].rightEdge : gap
+      if (Math.abs(gap - refGap) > 0.5) fail(`topbar right-group gap ${gap.toFixed(1)} != ${refGap.toFixed(1)} at index ${i}`)
+    }
+  }
   if (m.scrollWidth > m.vw + 1) fail(`horizontal page scroll: scrollWidth ${m.scrollWidth} > ${m.vw}`)
 }
 
@@ -765,7 +834,7 @@ try {
   const suggestCount = await suggest.count()
   if (suggestCount !== 3) failures.push(`partner-empty: expected 3 suggestions, found ${suggestCount}`)
   const nodesBefore = await page.locator(S.chatRail).getAttribute('data-chat-nodes')
-  const titleBefore = await page.locator(`${S.chatRail} .dsh-partner__title-text`).innerText().catch(() => '')
+  const titleBefore = await page.locator(S.partnerTitle).innerText().catch(() => '')
   if (suggestCount > 0) {
     const wanted = (await suggest.first().innerText()).trim()
     await suggest.first().click()
@@ -809,14 +878,15 @@ try {
   }
 
   // C17: with a draft, 新对话 must prompt; cancel keeps place and draft.
-  const newChat = page.locator(`${S.chatRail} button.dsh-split__main`)
-  await newChat.click()
+  // 新对话是页签行右端的 + 按钮：点开模式菜单，选第一个可用项。
+  await page.locator(S.partnerNew).click()
+  await page.getByRole('menuitem', { disabled: false }).first().click()
   const draftDialog = page.locator('#discard-message-draft, [role="alertdialog"]:has-text("放弃")')
   if (await draftDialog.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
     await page.getByRole('button', { name: '取消', exact: true }).click()
     await page.waitForTimeout(400)
     const keptDraft = await page.locator(S.composerInputInner).first().inputValue().catch(() => '')
-    const titleAfter = await page.locator(`${S.chatRail} .dsh-partner__title-text`).innerText().catch(() => '')
+    const titleAfter = await page.locator(S.partnerTitle).innerText().catch(() => '')
     if (!keptDraft.trim()) failures.push('C17: draft lost after cancelling the leave confirm')
     if (titleAfter !== titleBefore) failures.push(`C17: conversation switched despite cancel ('${titleBefore}' -> '${titleAfter}')`)
     note('partner', `C17 cancel keeps draft (${keptDraft.length} chars) on '${titleAfter}'`)

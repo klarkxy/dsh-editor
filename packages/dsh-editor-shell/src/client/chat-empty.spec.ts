@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { chatEmptyPrompt, chatPromptVoice, partnerSuggestions, partnerSuggestionTitle } from './chat-empty.ts'
+import { chatEmptyPrompt, chatPromptVoice, partnerSuggestionKind, partnerSuggestions, partnerSuggestionTitle } from './chat-empty.ts'
 
 afterEach(() => {
   resetLocaleForTests()
@@ -50,5 +50,34 @@ describe('partner empty-state suggestions', () => {
     setLocale('en')
     expect(partnerSuggestions('First Chapter')[0]).toContain('First Chapter')
     expect(partnerSuggestionTitle(undefined, undefined)).toBe('the draft')
+  })
+
+  it('narrows nested book-title marks inside an outer 《》 for zh', () => {
+    expect(partnerSuggestions('《越共》常见问题与自检清单', 'document')[0])
+      .toBe('审读《〈越共〉常见问题与自检清单》，指出含糊或重复的地方')
+  })
+
+  it('leaves 《》 untouched in en', () => {
+    setLocale('en')
+    expect(partnerSuggestions('《越共》常见问题与自检清单', 'document')[0])
+      .toContain('"《越共》常见问题与自检清单"')
+  })
+
+  it('gives document-kind suggestions for non-chapter docs', () => {
+    expect(partnerSuggestions('设定集', 'document')).toEqual([
+      '审读《设定集》，指出含糊或重复的地方',
+      '概括《设定集》的要点',
+      '列出《设定集》里需要核实的说法',
+    ])
+  })
+})
+
+describe('partner suggestion kind', () => {
+  it('stays chapter only for novel preset on 正文 chapters or no file', () => {
+    expect(partnerSuggestionKind('正文/第一章.md', 'dsh-editor-novel')).toBe('chapter')
+    expect(partnerSuggestionKind(undefined, 'dsh-editor-novel')).toBe('chapter')
+    expect(partnerSuggestionKind('资料/x.md', 'dsh-editor-novel')).toBe('document')
+    expect(partnerSuggestionKind('正文/第一章.md', 'dsh-editor-writing')).toBe('document')
+    expect(partnerSuggestionKind('正文/第一章.md', undefined)).toBe('document')
   })
 })

@@ -3,16 +3,16 @@ import type { ConversationFilter } from '../../native-conversation-state.ts'
 import type { ConversationPresetChoice } from '../../conversation-presets.ts'
 import { t } from '../../i18n/index.ts'
 import { Popover } from '../../ui/popover.tsx'
-import { SplitButton, type SplitButtonItem } from '../../ui/split-button.tsx'
 import { SegmentedControl } from '../../ui/segmented-control.tsx'
 import { ListRow } from '../../ui/list-row.tsx'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../ui/menu.tsx'
 import { IconButton } from '../../ui/icon-button.tsx'
-import { ChevronDownIcon, DotsIcon, PinIcon } from '../../ui/icons.tsx'
+import { ChevronDownIcon, DotsIcon, PinIcon, PlusIcon } from '../../ui/icons.tsx'
 import './assistant.styles.ts'
 
-/* 搭档页头与对话列表（shell-rewrite-spec §5）：左侧标题+箭头打开 Popover，
-   行内重命名/置顶/归档/恢复；右侧「新对话」SplitButton，主按钮用上次模式。 */
+/* 搭档页头与对话列表（shell-rewrite-spec §5）：标题+箭头打开 Popover，
+   行内重命名/置顶/归档/恢复；「新对话」是 + 图标按钮开的模式菜单。
+   页头本体渲染在辅助栏页签行右端的动作位（chat.tsx 经 portal 挂载）。 */
 
 export type PartnerConversationRow = {
   id: string
@@ -104,20 +104,11 @@ export function PartnerHeader(props: {
   presetsLoading: boolean
   newDisabled?: boolean
   onNew(presetId?: string): void
-  status?: ReactNode
   trailing?: ReactNode
   titleRef?: (node: HTMLButtonElement | null) => void
 }) {
-  const items: SplitButtonItem[] = props.presets.length
-    ? props.presets.map((preset) => ({
-      label: preset.name,
-      title: preset.available ? preset.description : preset.reason,
-      disabled: !preset.available,
-      onSelect: () => props.onNew(preset.id),
-    }))
-    : [{ label: t('chat.presetLoading'), disabled: true }]
   return (
-    <header className="chat-header dsh-partner__head">
+    <div className="dsh-partner__head" data-testid="dsh-partner-head">
       <Popover
         open={props.listOpen}
         onOpenChange={props.onListOpenChange}
@@ -126,6 +117,7 @@ export function PartnerHeader(props: {
           ref={props.titleRef}
           type="button"
           className="dsh-partner__title"
+          data-testid="dsh-partner-title"
           aria-label={t('chat.switchConversation')}
           title={props.title}
           disabled={props.busy}>
@@ -133,18 +125,33 @@ export function PartnerHeader(props: {
           <ChevronDownIcon size="sm" />
         </button>}
         content={props.list} />
-      {props.status}
-      <span className="dsh-partner__actions">
-        <SplitButton
-          className="dsh-partner__new"
-          variant="secondary"
-          label={t('chat.newConversation')}
-          menuLabel={t('chat.newConversationMode')}
-          items={items}
-          disabled={props.busy || props.newDisabled || props.presetsLoading}
-          onClick={() => props.onNew()} />
-        {props.trailing}
-      </span>
-    </header>
+      <Menu>
+        <MenuTrigger>
+          <IconButton
+            label={t('chat.newConversation')}
+            size="sm"
+            disabled={props.busy || props.newDisabled}
+            data-testid="dsh-partner-new">
+            <PlusIcon size="sm" />
+          </IconButton>
+        </MenuTrigger>
+        <MenuContent align="end" aria-label={t('chat.newConversationMode')}>
+          {props.presetsLoading
+            ? <MenuItem disabled>{t('chat.presetLoading')}</MenuItem>
+            : props.presets.length
+              ? props.presets.map((preset) => (
+                <MenuItem
+                  key={preset.id}
+                  title={preset.available ? preset.description : preset.reason}
+                  disabled={!preset.available}
+                  onSelect={() => props.onNew(preset.id)}>
+                  {preset.name}
+                </MenuItem>
+              ))
+              : <MenuItem onSelect={() => props.onNew()}>{t('chat.newConversation')}</MenuItem>}
+        </MenuContent>
+      </Menu>
+      {props.trailing}
+    </div>
   )
 }

@@ -149,18 +149,49 @@ export function joinProviderRows(
   })
 }
 
+/**
+ * The DeepSeek account provider row: sign-in goes through the host's
+ * `remote.account` namespace (browser PKCE), not an API-key editor. The row
+ * carries no credential reference; `AccountPresence` is the live answer the
+ * account stream reported, `undefined` when the remote is unavailable or has
+ * not answered yet.
+ */
+export const ACCOUNT_PROVIDER = 'deepseek-account'
+
+export function isAccountRow(row: ProviderRow): boolean {
+  return providerIdOf(row.entry) === ACCOUNT_PROVIDER
+}
+
+export type AccountPresence = 'signed-in' | 'signed-out' | undefined
+
 /** Whether a row can serve model requests as it stands. */
-export function providerUsable(row: ProviderRow): boolean {
+export function providerUsable(row: ProviderRow, account?: AccountPresence): boolean {
+  if (isAccountRow(row)) return row.entry.active !== false && account === 'signed-in'
   if (row.entry.active === false) return false
   if (row.apiKeyEnv === undefined) return true
   return row.credential?.configured === true
 }
 
 /** The status dot a row shows next to its name: configured, missing, or no dot. */
-export function credentialDot(row: ProviderRow): 'configured' | 'missing' | null {
+export function credentialDot(row: ProviderRow, account?: AccountPresence): 'configured' | 'missing' | null {
+  if (isAccountRow(row)) {
+    if (account === 'signed-in') return 'configured'
+    if (account === 'signed-out') return 'missing'
+    return null
+  }
   if (row.credential?.configured === true) return 'configured'
   if (row.apiKeyEnv !== undefined && row.credential?.configured === false) return 'missing'
   return null
+}
+
+/* Whether a row is the first-run setup posture: the only existing row whose
+   empty settingsPath is the whole section, and only while no other row can
+   already serve requests. The account row never takes the API-key setup card. */
+export function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
+  if (isAccountRow(row)) return false
+  if (anyUsable) return false
+  if (row.entry.settingsPath.length > 0) return false
+  return row.credential?.configured !== true
 }
 
 /** Rows the "add" picker offers: not yet configured, and addressing a known namespace. */

@@ -118,6 +118,11 @@ ${surfaceTokenAliases}
   font: var(--dsh-ui-weight-strong, 600) var(--font-size-3)/1.5 var(--s-font);
   color: var(--s-text);
 }
+.dsh-plugins-subhead {
+  margin: 0;
+  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--s-font);
+  color: var(--s-muted);
+}
 /* Raised rows match the shell's plugins-catalog rows. */
 .dsh-plugins-card {
   display: grid;

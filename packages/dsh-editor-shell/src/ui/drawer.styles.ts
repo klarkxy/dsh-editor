@@ -26,8 +26,8 @@ defineStyles('dsh.components', 'dsh-drawer', `
   overflow-y: auto; overflow-x: hidden;
 }
 .dsh-drawer__body > .dsh-pane-slot { flex: 1 1 auto; min-height: 0; }
-/* bare 模式：无标题条，关闭钮压在第一行（页签条，高约 37px）右端。 */
-.dsh-drawer__close { position: absolute; top: calc((37px - var(--dsh-ui-control-sm)) / 2); right: var(--dsh-ui-space-2); z-index: 2; }
+/* bare 模式：无标题条，关闭钮压在第一行（页头，与栏头同高）右端。 */
+.dsh-drawer__close { position: absolute; top: calc((var(--dsh-ui-header-height) - var(--dsh-ui-control-sm)) / 2); right: var(--dsh-ui-space-2); z-index: 2; }
 .dsh-drawer--bare .dsh-drawer__body { padding-top: 0; }
 @media (forced-colors: active) {
   .dsh-drawer { border: 1px solid CanvasText; }

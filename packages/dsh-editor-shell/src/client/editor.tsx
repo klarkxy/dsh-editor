@@ -431,8 +431,8 @@ export function Editor(props: {
       const right = contentRect.right - (Number.parseFloat(styles.paddingRight) || 0) - inputRect.left
       if (right <= left) return
       /* 窄窗下文字几乎贴到稿纸边缘时，两根线看起来像边框缺陷：内容盒到
-         稿纸边缘的实测间隙不足 32px 就整对隐藏。 */
-      paper.toggleAttribute('data-rules-hidden', left < 32 || inputRect.width - right < 32)
+         稿纸边缘的实测间隙不足 48px 就整对隐藏。 */
+      paper.toggleAttribute('data-rules-hidden', left < 48 || inputRect.width - right < 48)
       /* 1px 线内缘距内容盒 24px。 */
       paper.style.setProperty('--paper-rule-left', `${Math.round(left - 25)}px`)
       paper.style.setProperty('--paper-rule-right', `${Math.round(right + 24)}px`)

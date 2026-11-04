@@ -22,7 +22,6 @@ export type PluginCatalogBadge =
   | 'required'
   | 'locked'
   | 'builtin'
-  | 'preinstalled'
   | 'session-managed'
   | 'feature-managed'
   | 'installed'
@@ -77,7 +76,7 @@ const BADGE_LABELS: Record<string, () => string> = {
   required: () => t('plugins.badgeRequired'),
   locked: () => t('plugins.badgeLocked'),
   builtin: () => t('plugins.badgeBuiltin'),
-  preinstalled: () => t('plugins.badgePreinstalled'),
+
   'session-managed': () => t('plugins.badgeSessionManaged'),
   'feature-managed': () => t('plugins.badgeFeatureManaged'),
   installed: () => t('plugins.badgeInstalled'),

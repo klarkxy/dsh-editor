@@ -21,15 +21,16 @@ defineStyles('dsh.surfaces', 'dsh-editor', `
   z-index: 1;
   --paper-pad-inline: clamp(24px, 4vw, 64px);
   --paper-pad-block: 32px;
-  --paper-header-space: 96px;
+  --paper-header-space: var(--dsh-ui-header-height);
 }
 
-/* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶）。
-   页眉不显示标题文字（正文一级标题即章节名），只留右侧「⋯」菜单；
-   天头细线改由 live-preview 一级标题的底线承担。 */
-.radix-themes .paper-page-header { height: 100%; box-sizing: border-box; padding-top: 28px; color: var(--dsh-ui-text); }
-.radix-themes .paper-page-headline { position: relative; max-width: var(--paper-measure, 100%); margin-inline: auto; padding-inline: var(--paper-pad-inline); box-sizing: border-box; }
-.radix-themes .paper-page-menu { position: absolute; inset-inline-end: var(--paper-pad-inline); top: 0; display: inline-flex; align-items: center; }
+/* 稿纸页内页眉：挂在 .cm-scroller 顶部的宿主里，随文档滚走（不吸顶），
+   与栏头同一条 48px 带。页眉不显示标题文字（正文一级标题即章节名），
+   只留右侧「⋯」菜单（在带内垂直居中）；天头细线改由 live-preview
+   一级标题的底线承担。 */
+.radix-themes .paper-page-header { height: 100%; box-sizing: border-box; color: var(--dsh-ui-text); }
+.radix-themes .paper-page-headline { position: relative; height: 100%; max-width: var(--paper-measure, 100%); margin-inline: auto; padding-inline: var(--paper-pad-inline); box-sizing: border-box; }
+.radix-themes .paper-page-menu { position: absolute; inset-inline-end: var(--paper-pad-inline); top: 0; bottom: 0; display: inline-flex; align-items: center; }
 
 .radix-themes .editor-action-menu { min-width: 220px; }
 

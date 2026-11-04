@@ -29,7 +29,7 @@ const CARDS_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My
 /** Mirrors the prepared catalog written by scripts/desktop-compositions.mjs. */
 function defaultCatalog(): RuntimeCatalog {
   return {
-    bundles: ['dsh-editor-shell', 'dsh-editor-cards', '@klarkxy/dsh-web-search-manager'],
+    bundles: ['dsh-editor-shell', 'dsh-editor-cards'],
     entries: {
       'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
       'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
@@ -76,11 +76,10 @@ describe('plugin catalog classification', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
     expect(catalog.sections.map((row) => row.id)).toEqual(['official', 'builtin', 'user'])
     expect(section(catalog, 'official').map((card) => card.packageName)).toEqual(EXPERIMENTAL_BUNDLES)
-    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(1)
-    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(1)
+    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(0)
     expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(1)
     expect(byTitle(catalog, 'builtin', 'MCP 资源')).toHaveLength(1)
-    expect(section(catalog, 'user')).toEqual([])
+    expect(section(catalog, 'user').map((card) => card.packageName)).toEqual(['@klarkxy/dsh-web-search-manager'])
   })
 
   it('marks every official card experimental, switchable and titled from the prepared catalog', () => {
@@ -102,13 +101,27 @@ describe('plugin catalog classification', () => {
     expect(agentTeam?.title).toBe('@deepseek-ai/dsh-experimental-agent-team')
   })
 
-  it('marks the preinstalled public plugin preinstalled under the builtin section', () => {
+  it('routes a no-longer-preinstalled third-party package to user like any install', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
-    const card = byTitle(catalog, 'builtin', '网页搜索')[0]
-    expect(card?.packageName).toBe('@klarkxy/dsh-web-search-manager')
-    expect(card?.badges).toEqual(['preinstalled'])
+    const card = section(catalog, 'user').find((row) => row.packageName === '@klarkxy/dsh-web-search-manager')
+    expect(card?.badges).toEqual(['installed'])
     expect(card?.enabled).toBe(true)
     expect(card?.action).toBe('switch')
+    // 无 bundle 行时不残留「预装」卡片。
+    const noBundle = buildPluginCatalog({ catalog: defaultCatalog(), bundles: [{ name: 'dsh-editor-cards', enabled: true, installed: true }], plugins: DEFAULT_PLUGINS })
+    expect(noBundle.sections.flatMap((row) => row.items).some((row) => row.packageName === '@klarkxy/dsh-web-search-manager')).toBe(false)
+  })
+
+  it('hides foundation runtime UI entries unless the author disabled them', () => {
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
+    // 快捷键 enabled → 隐藏；资料预览 enabled === false → 保留可重开卡片。
+    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(0)
+    expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(1)
+    expect(byTitle(catalog, 'builtin', '资料预览')[0]?.enabled).toBe(false)
+    // 没有 live 行（状态未知）同样隐藏。
+    const noRow = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS.filter((row) => row.entryId !== 'ui-shortcuts' && row.entryId !== 'ui-sidebar-documentpreview') })
+    expect(byTitle(noRow, 'builtin', '快捷键')).toHaveLength(0)
+    expect(byTitle(noRow, 'builtin', '资料预览')).toHaveLength(0)
   })
 
   it('stamps required core bundles, drops the redundant locked badge and keeps their switch off', () => {
@@ -139,7 +152,7 @@ describe('plugin catalog classification', () => {
     })
     expect(catalog.sections.flatMap((row) => row.items).some((card) => card.badges.includes('builtin'))).toBe(false)
     // Optional builtin entries are neither required nor locked, so they read as plain cards.
-    expect(byTitle(catalog, 'builtin', '快捷键')[0]?.badges).toEqual([])
+    expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(0)
     expect(byTitle(catalog, 'builtin', '编辑器外壳')[0]?.badges).toEqual(['required'])
     // Locked but not required keeps locked on its own, on an entry card and a bundle card.
     expect(byTitle(catalog, 'builtin', '受管插件')[0]?.badges).toEqual(['locked'])
@@ -164,7 +177,7 @@ describe('plugin catalog classification', () => {
     expect(section(catalog, 'official').map((card) => card.title)).toEqual(['智能体团队', '自动授权审查', '自动化任务', '语音输入'])
     expect(section(catalog, 'official').every((card) => card.action === 'switch')).toBe(true)
     expect(section(catalog, 'builtin').some((card) => card.packageName === '@deepseek-ai/dsh-base')).toBe(false)
-    expect(section(catalog, 'user').map((card) => card.packageName)).toEqual([])
+    expect(section(catalog, 'user').map((card) => card.packageName)).toEqual(['@klarkxy/dsh-web-search-manager'])
   })
 
   it('projects catalog managedBy onto session and feature badges', () => {
@@ -232,19 +245,22 @@ describe('plugin catalog classification', () => {
         entries: {
           'ui-shortcuts': { title: '快捷键', description: '', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
           'mcp-resources': { title: 'MCP 资源', description: '', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
+          'ui-widget': { title: '部件', description: '', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-ui-widget' },
           cards: { title: '卡片', description: '', locked: false, builtin: false, packageName: 'dsh-editor-cards' },
         },
       },
       bundles: [{ name: 'dsh-editor-cards', enabled: true, installed: true, meta: { icon: CARDS_ICON } }],
       plugins: [
         { entryId: 'ui-shortcuts', patchId: 'ui-shortcuts', enabled: true },
+        { entryId: 'ui-widget', patchId: 'ui-widget', enabled: true },
         { entryId: 'mcp-resources', patchId: 'mcp-resources', enabled: true, meta: { icon: CARDS_ICON } },
       ],
     })
     expect(byTitle(catalog, 'builtin', '卡片')[0]?.icon).toBe(CARDS_ICON)
     expect(byTitle(catalog, 'builtin', 'MCP 资源')[0]?.icon).toBe(CARDS_ICON)
     // No icon field at all, not an empty one, when the row declares none.
-    expect('icon' in (byTitle(catalog, 'builtin', '快捷键')[0] ?? {})).toBe(false)
+    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(0)
+    expect('icon' in (byTitle(catalog, 'builtin', '部件')[0] ?? {})).toBe(false)
   })
 
   it('marks every author-installed card installed without mixing it with preinstalled', () => {
@@ -258,11 +274,11 @@ describe('plugin catalog classification', () => {
       plugins: DEFAULT_PLUGINS,
     })
     const user = section(catalog, 'user')
-    expect(user.map((card) => card.badges)).toEqual([['installed'], ['locked', 'installed']])
+    expect(user.map((card) => card.badges)).toEqual([['installed'], ['installed'], ['locked', 'installed']])
     const all = catalog.sections.flatMap((row) => row.items)
     expect(all.filter((card) => card.badges.includes('installed')).length).toBe(user.length)
     expect(all.some((card) => card.badges.includes('preinstalled') && card.badges.includes('installed'))).toBe(false)
-    expect(byTitle(catalog, 'builtin', '网页搜索')[0]?.badges).toEqual(['preinstalled'])
+    expect(section(catalog, 'user').find((row) => row.packageName === '@klarkxy/dsh-web-search-manager')?.badges).toEqual(['installed'])
   })
 
   it('routes author-installed bundles to user and keeps retired packages out of every section', () => {
@@ -278,6 +294,7 @@ describe('plugin catalog classification', () => {
       plugins: DEFAULT_PLUGINS,
     })
     expect(section(catalog, 'user').map((card) => card.packageName)).toEqual([
+      '@klarkxy/dsh-web-search-manager',
       '@klarkxy/dsh-zhihu',
       '@klarkxy/dsh-current-title',
       '@acme/author-plugin',
@@ -293,19 +310,18 @@ describe('plugin catalog classification', () => {
     const catalog = await readPluginCatalog(profileDir)
     expect(section(catalog, 'official')).toEqual([])
     expect(section(catalog, 'user')).toEqual([])
-    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(1)
-    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(1)
-    expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(1)
+    // 运行时基础组件（快捷键/资料预览）与不再预装的网页搜索都不进列表。
+    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(0)
+    expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(0)
+    expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(0)
     expect(byTitle(catalog, 'builtin', 'MCP 资源')).toHaveLength(1)
-    // No live state means no switch, but the distribution copy is still served.
-    expect(byTitle(catalog, 'builtin', '快捷键')[0]?.action).toBe('detail')
   })
 
   it('returns an empty catalog when neither the prepared catalog nor a manager exists', async () => {
     const profileDir = await mkdtemp(join(tmpdir(), 'dsh-catalog-empty-'))
     const catalog = await readPluginCatalog(profileDir)
     expect(section(catalog, 'official')).toEqual([])
-    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(1)
+    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(0)
   })
 
   it('survives a failing official manager and non-array inventory rows', async () => {
@@ -316,7 +332,7 @@ describe('plugin catalog classification', () => {
       listPlugins: async () => { throw new Error('manager unavailable') },
     })
     expect(section(catalog, 'official')).toEqual([])
-    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(1)
+    expect(byTitle(catalog, 'builtin', '网页搜索')).toHaveLength(0)
     const malformed = buildPluginCatalog({ catalog: defaultCatalog(), bundles: { nope: true }, plugins: 'rows' })
     expect(section(malformed, 'official')).toEqual([])
     expect(section(malformed, 'user')).toEqual([])

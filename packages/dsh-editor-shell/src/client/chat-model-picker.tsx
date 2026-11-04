@@ -9,7 +9,18 @@ import type { ShellContext } from './shared.ts'
 import { ModelsStore } from './settings-models-state.ts'
 import { currentModelNeedsKey, effortDisplay } from '../model/chat-model-picker.ts'
 
-export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; session: SessionFace; onConfigure(): void }) {
+/* 'unavailable' = 目录请求失败（有 note）；'empty' = 请求成功但没有任何可用模型组。 */
+export type ModelPickerState = 'loading' | 'ready' | 'empty' | 'unavailable'
+
+export function ModelPicker({ ctx, session, onConfigure, onStateChange, inlineSetup = true }: {
+  ctx: ShellContext
+  session: SessionFace
+  onConfigure(): void
+  onStateChange?(state: ModelPickerState): void
+  /* false 时空/不可用交给调用方的主状态呈现（搭档空态、composer 提示），
+     工具栏里的内联设置行不再渲染。 */
+  inlineSetup?: boolean
+}) {
   const providerStore = useMemo(() => new ModelsStore(ctx.remote, ctx.configForms.describe(), ctx.settingsSchema), [ctx])
   const providers = useSyncExternalStore(providerStore.subscribe, providerStore.getSnapshot, providerStore.getSnapshot)
   const [models, setModels] = useState<SessionModels | null>(null)
@@ -59,6 +70,11 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
       setBusy(false)
     }
   }
+  const state: ModelPickerState = models && models.groups.length > 0
+    ? 'ready'
+    : note ? 'unavailable' : models ? 'empty' : 'loading'
+  useEffect(() => { onStateChange?.(state) }, [state, onStateChange])
+  if (!inlineSetup && (state === 'empty' || state === 'unavailable')) return null
   if (!models || models.groups.length === 0) {
     return (
       <Flex className="model-picker" align="center" gap="2" wrap="wrap" minWidth="0">

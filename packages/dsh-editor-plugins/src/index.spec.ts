@@ -86,11 +86,11 @@ describe('plugin manager RPC', () => {
     expect(official[0]).toMatchObject({ key: 'bundle:@deepseek-ai/dsh-experimental-voice-input-bundle', action: 'switch', enabled: false })
     expect(official[0]?.badges).toContain('experimental')
     const builtin = value.sections[1]?.items ?? []
-    expect(builtin.some((card) => card.title === '快捷键' && card.enabled === true)).toBe(true)
-    expect(builtin.some((card) => card.title === '网页搜索' && card.badges.includes('preinstalled'))).toBe(true)
+    expect(builtin.some((card) => card.title === '快捷键')).toBe(false)
+    expect(builtin.some((card) => card.title === '网页搜索')).toBe(false)
     // The folded voice entry must not reappear in builtin.
     expect(builtin.some((card) => card.title === '语音输入')).toBe(false)
-    expect(value.sections[2]?.items).toEqual([])
+    expect(value.sections[2]?.items.some((card) => card.packageName === '@klarkxy/dsh-web-search-manager')).toBe(true)
     // catalog.list stays read-only.
     expect(await handlePluginsRpc('catalog.setEnabled', {}, signal(), { paths, manager })).toMatchObject({
       ok: false, error: { code: 'bad-request' },
@@ -104,8 +104,7 @@ describe('plugin manager RPC', () => {
     if (!result.ok) return
     const value = result.value as PluginCatalog
     expect(value.sections[0]?.items).toEqual([])
-    expect(value.sections[2]?.items).toEqual([])
-    expect(value.sections[1]?.items.some((card) => card.title === '网页搜索')).toBe(true)
+    expect(value.sections.flatMap((section) => section.items).some((card) => card.packageName === '@klarkxy/dsh-web-search-manager')).toBe(false)
   })
 })
 

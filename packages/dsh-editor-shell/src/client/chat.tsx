@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { OfficialInputActivity } from './official-surfaces.tsx'
 import type { OfficialInputActions } from '../model/official-surfaces.ts'
 import {
@@ -46,7 +47,7 @@ import { useObservable } from './components.tsx'
 import { isObservableSource } from '../model/components.ts'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.tsx'
 import { ActivityDots } from './ui/index.ts'
-import { Box, Button as UiButton, Flex, IconButton as UiIconButton, Notice, Text, TextArea } from '../ui/index.ts'
+import { Box, Button as UiButton, Flex, IconButton as UiIconButton, Notice, TextArea } from '../ui/index.ts'
 import { takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import {
@@ -69,9 +70,10 @@ import {
   EMPTY_TRANSCRIPT,
   type ChatLifecycle,
 } from './chat-conversation.ts'
-import { chatEmptyPrompt, partnerSuggestionTitle } from './chat-empty.ts'
+import { chatEmptyPrompt, partnerSuggestionKind, partnerSuggestionTitle } from './chat-empty.ts'
 import { ConversationListView, PartnerHeader, type PartnerConversationRow } from '../app/assistant/partner-header.tsx'
-import { PartnerEmptyState } from '../app/assistant/partner-empty.tsx'
+import { PartnerEmptyState, PartnerSetupState } from '../app/assistant/partner-empty.tsx'
+import { useAuxRailActionsHost } from '../app/shell/aux-rail.tsx'
 import { useChatConversationControls } from './chat-conversation-controls.ts'
 import { ChatHistory } from './chat-history.tsx'
 import type { ChatOutgoing } from '../model/chat-history.ts'
@@ -80,7 +82,7 @@ import {
   pendingProposalEntries,
   proposalTurnKeys,
 } from '../model/proposal-board.ts'
-import { ModelPicker } from './chat-model-picker.tsx'
+import { ModelPicker, type ModelPickerState } from './chat-model-picker.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { ProposalCard } from './chat-proposal.tsx'
 import {
@@ -119,6 +121,8 @@ export async function settleConversationStop(input: {
 
 export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, authorPreferences, authorMemory, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
   const locale = useLocale()
+  /* 搭档页头并入辅助栏页签行右端动作位；非栏内挂载（overlay/隐藏）退回内联页头。 */
+  const actionsHost = useAuxRailActionsHost()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
   useEffect(() => messageCards?.subscribe(() => setMessageCardTick((value) => value + 1)), [messageCards])
@@ -185,6 +189,11 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<ChatOutgoing | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
+  /* ModelPicker 自报状态：空/不可用时由空态或 composer 提示条主导，
+     工具栏的内联设置行让位（inlineSetup=false）。 */
+  const [modelState, setModelState] = useState<ModelPickerState>('loading')
+  const modelBlocked = modelState === 'empty' || modelState === 'unavailable'
+  const retryModels = () => setModelRevision((value) => value + 1)
   /* 迁移横幅的关闭按会话记在内存里，不落盘。 */
   const [dismissedMigrations, setDismissedMigrations] = useState<ReadonlySet<string>>(new Set())
   const historyRef = useRef<HTMLDivElement | null>(null)
@@ -495,6 +504,35 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     archived: archivedIds.includes(item.id),
     current: item.id === session.sessionId,
   }))
+  const suggestionKind = partnerSuggestionKind(activePath, currentMode?.id)
+  const partnerHeader = <PartnerHeader
+    title={currentConversationTitle}
+    titleRef={(node) => { conversationListTrigger.current = node }}
+    busy={conversationBusy}
+    listOpen={conversationListOpen}
+    onListOpenChange={setConversationListOpen}
+    list={<ConversationListView
+      filter={conversationFilter}
+      onFilterChange={setConversationFilter}
+      rows={conversationListRows}
+      busy={conversationBusy}
+      canArchiveCurrent={canMutateConversation}
+      onSelect={(id) => { setConversationListOpen(false); if (id !== session.sessionId) void switchConversation(id) }}
+      onRename={(id) => { setConversationListOpen(false); setRenameTarget(id as SessionId) }}
+      onTogglePin={(id) => { void toggleConversationPinFor(id) }}
+      onArchive={(id) => { void archiveConversation(id) }}
+      onRestore={(id) => { void restoreConversation(id) }} />}
+    presets={presetChoices ?? []}
+    presetsLoading={presetChoices === undefined}
+    newDisabled={!workspaceId}
+    onNew={(presetId) => void newConversation(presetId)}
+    /* Overlay drawers cover the dismiss scrim, so the header carries
+       an explicit close control (Escape and the topbar toggle still work). */
+    trailing={overlay && onHide ? <UiIconButton
+      label={t('chat.closeAssistant')}
+      onClick={onHide}>
+      <CrossIcon size="sm" />
+    </UiIconButton> : null} />
   return (
     <aside
       className={overlay ? 'chat chat-overlay' : 'chat'}
@@ -507,38 +545,9 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
         tone="danger"
         title={t('chat.renameFailed')}
         action={<UiButton variant="secondary" size="sm" onClick={() => queueConversationRename(titleOverrides[session.sessionId]!.title, t('chat.renameFailed'))}>{t('common.retry')}</UiButton>} /> : null}
-      <PartnerHeader
-        title={currentConversationTitle}
-        titleRef={(node) => { conversationListTrigger.current = node }}
-        busy={conversationBusy}
-        listOpen={conversationListOpen}
-        onListOpenChange={setConversationListOpen}
-        list={<ConversationListView
-          filter={conversationFilter}
-          onFilterChange={setConversationFilter}
-          rows={conversationListRows}
-          busy={conversationBusy}
-          canArchiveCurrent={canMutateConversation}
-          onSelect={(id) => { setConversationListOpen(false); if (id !== session.sessionId) void switchConversation(id) }}
-          onRename={(id) => { setConversationListOpen(false); setRenameTarget(id as SessionId) }}
-          onTogglePin={(id) => { void toggleConversationPinFor(id) }}
-          onArchive={(id) => { void archiveConversation(id) }}
-          onRestore={(id) => { void restoreConversation(id) }} />}
-        presets={presetChoices ?? []}
-        presetsLoading={presetChoices === undefined}
-        newDisabled={!workspaceId}
-        onNew={(presetId) => void newConversation(presetId)}
-        status={connected ? null : <Text size="1" color="gray" className="chat-status" role="status">
-          <ActivityDots />
-          {t('chat.reconnecting')}
-        </Text>}
-        /* Overlay drawers cover the dismiss scrim, so the header carries
-           an explicit close control (Escape and the topbar toggle still work). */
-        trailing={overlay && onHide ? <UiIconButton
-          label={t('chat.closeAssistant')}
-          onClick={onHide}>
-          <CrossIcon size="sm" />
-        </UiIconButton> : null} />
+      {actionsHost && !hidden
+        ? createPortal(partnerHeader, actionsHost)
+        : <header className="chat-header">{partnerHeader}</header>}
       {showMigrationBanner ? <LegacyMigrationBanner
         onMigrate={() => { void newConversation() }}
         onDismiss={() => setDismissedMigrations((current) => new Set(current).add(session.sessionId))} /> : null}
@@ -551,14 +560,26 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
         partial={partial} hasPartial={Boolean(chatLegacy.partial)} visibleCalls={visibleCalls}
         queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
         outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}
-        empty={showEmptyHistory ? <PartnerEmptyState
-          title={partnerSuggestionTitle(activePath, workspace?.title, getActiveDocTitle?.())}
-          onPick={fillComposerDraft} /> : null}
+        empty={showEmptyHistory
+          ? (modelBlocked
+            ? <PartnerSetupState
+              unavailable={modelState === 'unavailable'}
+              onConfigure={onConfigure}
+              onRetry={retryModels} />
+            : <PartnerEmptyState
+              title={partnerSuggestionTitle(activePath, workspace?.title, getActiveDocTitle?.())}
+              kind={suggestionKind}
+              onPick={fillComposerDraft} />)
+          : null}
         initGuide={showInitGuide ? <InitGuideCard
           state={initState as 'explore' | 'interview'} busy={initBusy}
           running={initState === 'explore' ? internalIndexActive : snapshot.running}
           done={initCompleted} note={initNote} onStart={startInitGuide} onDismiss={dismissInitGuide} /> : null} />
       <form className="composer" onSubmit={submit}>
+        {!connected ? <div className="composer-status" role="status">
+          <ActivityDots />
+          {t('chat.reconnecting')}
+        </div> : null}
         <TextArea
           ref={composerRef}
           minRows={1}
@@ -580,13 +601,23 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
           action={note === t('chat.defaultModelFailed') ? <UiButton variant="secondary" size="sm" type="button" onClick={onConfigure}>
             {t('chat.fixDefaultModel')}
           </UiButton> : undefined} /> : null}
+        {!showEmptyHistory && modelBlocked ? <Notice
+          tone="warning"
+          className="composer-note"
+          title={modelState === 'unavailable' ? t('chat.apiUnavailable') : t('chat.noModels')}
+          action={<Flex gap="2" wrap="nowrap">
+            <UiButton variant="secondary" size="sm" type="button" onClick={onConfigure}>{t('chat.setApi')}</UiButton>
+            <UiButton variant="secondary" size="sm" type="button" onClick={retryModels}>{t('common.retry')}</UiButton>
+          </Flex>} /> : null}
         <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="nowrap" minWidth="0">
           <Box className="composer-model" flexGrow="1" minWidth="0">
             <ModelPicker
               key={`${session.sessionId}:${modelRevision}`}
               ctx={ctx}
               session={session}
-              onConfigure={onConfigure} />
+              onConfigure={onConfigure}
+              inlineSetup={false}
+              onStateChange={setModelState} />
           </Box>
           <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
             expanded={voiceActive}

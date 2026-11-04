@@ -22,6 +22,21 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 .dsh-topbar__group { display: flex; align-items: center; gap: var(--dsh-ui-space-1); min-width: 0; }
 .dsh-topbar__group--left { flex: 0 0 auto; }
 .dsh-topbar__group--right { flex: 0 0 auto; }
+/* 顶栏控件同一 32px 行高、图标同一 16px；窗口控制钮保留自己的宽度。 */
+.dsh-topbar .dsh-icon-button { width: var(--dsh-ui-control-sm); height: var(--dsh-ui-control-sm); }
+.dsh-topbar .window-controls .dsh-icon-button { width: var(--dsh-ui-control-md); }
+/* 图标统一 16px；窗口控制是 12px 系统字形，不并入图标集。 */
+.dsh-topbar .dsh-icon-button:not(:where(.window-controls *)) svg { width: var(--dsh-ui-icon-md); height: var(--dsh-ui-icon-md); }
+.dsh-topbar .native-settings-control { display: inline-flex; align-items: center; }
+/* 设置齿轮套在 inline span 里会抬出基线；inline-flex 让字形与同行图标同轴。 */
+.dsh-topbar .settings-trigger-icon { display: inline-flex; }
+/* 命令面板触发器与开关同行同高：图标/「命令」/Kbd 落在同一中心线。 */
+.dsh-topbar .palette-trigger { min-height: var(--dsh-ui-control-sm); height: var(--dsh-ui-control-sm); }
+.dsh-topbar .palette-trigger .dsh-button__label {
+  display: inline-flex; align-items: center; gap: var(--dsh-ui-space-1);
+}
+.dsh-topbar .palette-trigger .palette-trigger-icon { display: inline-flex; }
+.dsh-topbar .palette-trigger-kbd { display: inline-flex; align-items: center; }
 
 .workspace-menu-trigger {
   display: inline-flex; align-items: center; gap: var(--dsh-ui-space-1);
@@ -77,17 +92,28 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
   opacity: var(--dsh-ui-dim-opacity);
 }
 
-/* 辅助栏页签头 */
+/* 辅助栏页头：与文件栏头同一 48px 基线，chrome 底 + 满宽底线。 */
 .dsh-aux-rail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-/* §5：chrome 底；抽屉里（bare）页签条兼任抽屉顶行，右端给关闭钮留位。 */
-.dsh-aux-rail__tabs {
-  flex: none; border-bottom: 0.5px solid var(--dsh-ui-line);
+.dsh-aux-rail__head {
+  flex: none; display: flex; align-items: center; gap: var(--dsh-ui-space-2);
+  height: var(--dsh-ui-header-height); min-height: var(--dsh-ui-header-height);
+  border-bottom: 0.5px solid var(--dsh-ui-line);
   background: var(--dsh-ui-chrome);
   padding-inline: var(--dsh-ui-space-2);
 }
-.dsh-drawer--bare .dsh-aux-rail__tabs {
+/* §5：抽屉里（bare）页头兼任抽屉顶行，右端给关闭钮留位。 */
+.dsh-drawer--bare .dsh-aux-rail__head {
   padding-right: calc(var(--dsh-ui-control-sm) + var(--dsh-ui-space-3));
 }
+/* 页签行吃满页头高度：激活下划线正好落在页头底线上。 */
+.dsh-aux-rail__head .dsh-tabs__list { border-bottom: 0; height: 100%; }
+.dsh-aux-rail__head .dsh-tabs__tab { height: 100%; }
+/* 页头右端当前页签的动作位：搭档页头经 portal 挂进来（aux-rail.tsx）。 */
+.dsh-aux-rail__actions {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--dsh-ui-space-1);
+}
+.dsh-aux-rail__actions[hidden] { display: none; }
 .dsh-aux-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dsh-aux-panel .chat { flex: 1 1 auto; min-height: 0; }
 .dsh-aux-panel__head {
@@ -146,7 +172,6 @@ defineStyles('dsh.surfaces', 'dsh-shell', `
 @media (max-width: 760px) {
   .dsh-topbar .palette-trigger-kbd { display: none; }
   .dsh-topbar .palette-trigger { padding-inline: var(--dsh-ui-space-2); min-width: var(--dsh-ui-control-sm); }
-  .dsh-topbar .dsh-icon-button { width: var(--dsh-ui-control-sm); height: var(--dsh-ui-control-sm); }
   .dsh-topbar__group { gap: 0; }
   .dsh-topbar .workspace-menu-trigger { max-width: min(12rem, 30vw); }
   .dsh-topbar .workspace-menu-trigger .workspace-name { min-width: min(7em, 22vw); }

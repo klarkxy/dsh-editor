@@ -11,7 +11,7 @@ import { titleBarDoubleClick } from '../../model/window-controls.ts'
 
 /*
  * 顶栏（spec §2.1）：左区文件开关＋作品菜单＋位置面包屑；中区搜索与命令
- * 触发器；右区扩展坞、设置、专注与辅助栏开关。主题切换移去命令面板。
+ * 触发器；右区专注与辅助栏开关、命令面板、扩展坞、插件与设置。主题切换移去命令面板。
  * 作品菜单维持原有平铺项与 menuYields 焦点让位约定（对话框打开时不抢焦）。
  */
 export function Topbar(props: {
@@ -53,6 +53,13 @@ export function Topbar(props: {
   return (
     <header className="dsh-topbar" role="banner" data-testid="dsh-shell-topbar" onDoubleClick={titleBarDoubleClick}>
       <div className="dsh-topbar__group dsh-topbar__group--left">
+        <IconButton
+          label={props.filesVisible ? t('workspace.hideFiles') : t('workspace.showFiles')}
+          pressed={props.filesVisible}
+          onClick={props.onToggleFiles}
+          data-testid="dsh-shell-files-toggle">
+          <PanelLeftIcon />
+        </IconButton>
         <Menu open={props.workspaceMenuOpen} onOpenChange={props.onWorkspaceMenuOpenChange}>
           <MenuTrigger>
             <button
@@ -136,13 +143,6 @@ export function Topbar(props: {
       </div>
       <div className="dsh-topbar__drag" aria-hidden="true" />
       <div className="dsh-topbar__group dsh-topbar__group--right">
-        <IconButton
-          label={props.filesVisible ? t('workspace.hideFiles') : t('workspace.showFiles')}
-          pressed={props.filesVisible}
-          onClick={props.onToggleFiles}
-          data-testid="dsh-shell-files-toggle">
-          <PanelLeftIcon />
-        </IconButton>
         <IconButton
           label={props.focus ? t('workspace.exitFocusShort') : t('workspace.enterFocus')}
           pressed={props.focus}

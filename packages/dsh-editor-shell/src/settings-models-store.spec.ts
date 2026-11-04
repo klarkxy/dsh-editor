@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ConfigurableProviderView, CredentialView, SettingsNamespaceView, SettingsPathOpView } from './dsh-compat.ts'
 import {
+  ACCOUNT_PROVIDER,
   ENV_LINE,
   LEGAL_API_KEY,
   PROBE_ROUTE,
@@ -11,10 +12,12 @@ import {
   apiKeyFailure,
   credentialDot,
   deriveKeyRef,
+  isAccountRow,
   isQuoted,
   joinProviderRows,
   layoutOf,
   modelDrafts,
+  needsSetup,
   pathOps,
   protocolChoices,
   providerUsable,
@@ -452,6 +455,26 @@ describe('credentialDot', () => {
   it('reports null when apiKeyEnv is set but no credential view was returned (describe failed)', () => {
     expect(credentialDot({ ...baseRow, credential: undefined })).toBeNull()
   })
+
+  it('keeps the key semantics for non-account rows when an account presence is passed', () => {
+    expect(credentialDot({ ...baseRow, credential: { configured: true, writable: false } }, 'signed-out')).toBe('configured')
+    expect(credentialDot({ ...baseRow, credential: { configured: false, writable: true } }, 'signed-in')).toBe('missing')
+    expect(credentialDot({ ...baseRow, credential: undefined }, 'signed-in')).toBeNull()
+  })
+
+  it('maps the account presence onto the dot and ignores the credential view entirely', () => {
+    const accountRow: ProviderRow = {
+      entry: entry({ provider: ACCOUNT_PROVIDER, id: ACCOUNT_PROVIDER, displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account', settingsPath: [] }),
+      configured: true,
+      removable: false,
+      apiKeyEnv: 'DEEPSEEK_ACCOUNT_API_KEY',
+      credential: { configured: true, writable: false },
+    }
+    expect(credentialDot(accountRow, 'signed-in')).toBe('configured')
+    expect(credentialDot(accountRow, 'signed-out')).toBe('missing')
+    expect(credentialDot(accountRow, undefined)).toBeNull()
+    expect(credentialDot(accountRow)).toBeNull()
+  })
 })
 
 describe('providerUsable', () => {
@@ -477,6 +500,72 @@ describe('providerUsable', () => {
 
   it('is false when apiKeyEnv is required and the credential is missing', () => {
     expect(providerUsable({ ...baseRow, credential: { configured: false, writable: true } })).toBe(false)
+  })
+
+  it('keeps the key semantics for non-account rows when an account presence is passed', () => {
+    expect(providerUsable(baseRow, 'signed-out')).toBe(true)
+    expect(providerUsable({ ...baseRow, credential: { configured: false, writable: true } }, 'signed-in')).toBe(false)
+  })
+
+  it('requires the account row to be active and signed in', () => {
+    const accountRow: ProviderRow = {
+      entry: entry({ provider: ACCOUNT_PROVIDER, id: ACCOUNT_PROVIDER, displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account', settingsPath: [] }),
+      configured: true,
+      removable: false,
+      apiKeyEnv: undefined,
+      credential: undefined,
+    }
+    expect(providerUsable(accountRow, 'signed-in')).toBe(true)
+    expect(providerUsable(accountRow, 'signed-out')).toBe(false)
+    expect(providerUsable(accountRow, undefined)).toBe(false)
+    expect(providerUsable(accountRow)).toBe(false)
+    expect(providerUsable({ ...accountRow, entry: entry({ provider: ACCOUNT_PROVIDER, id: ACCOUNT_PROVIDER, settingsNs: 'llm-deepseek-account', settingsPath: [], active: false }) }, 'signed-in')).toBe(false)
+  })
+})
+
+describe('isAccountRow', () => {
+  it('recognizes the deepseek-account provider id and nothing else', () => {
+    const accountRow: ProviderRow = {
+      entry: entry({ provider: ACCOUNT_PROVIDER, id: ACCOUNT_PROVIDER, settingsNs: 'llm-deepseek-account', settingsPath: [] }),
+      configured: true,
+      removable: false,
+      apiKeyEnv: undefined,
+      credential: undefined,
+    }
+    expect(isAccountRow(accountRow)).toBe(true)
+    expect(isAccountRow({ ...accountRow, entry: entry({ provider: 'deepseek', id: 'deepseek', settingsNs: 'llm-deepseek', settingsPath: [] }) })).toBe(false)
+  })
+})
+
+describe('needsSetup', () => {
+  const keyRow: ProviderRow = {
+    entry: entry({ provider: 'deepseek', id: 'deepseek', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] }),
+    configured: true,
+    removable: false,
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    credential: { configured: false, writable: true },
+  }
+
+  it('is the setup posture for the only key-based row while nothing is usable', () => {
+    expect(needsSetup(keyRow, false)).toBe(true)
+    expect(needsSetup({ ...keyRow, credential: { configured: true, writable: false } }, false)).toBe(false)
+  })
+
+  it('never prompts for a routed row or once another row is usable', () => {
+    expect(needsSetup({ ...keyRow, entry: entry({ settingsPath: ['providers', 'deepseek'] }) }, false)).toBe(false)
+    expect(needsSetup(keyRow, true)).toBe(false)
+  })
+
+  it('never sends the account row to the API-key setup card', () => {
+    const accountRow: ProviderRow = {
+      entry: entry({ provider: ACCOUNT_PROVIDER, id: ACCOUNT_PROVIDER, displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account', settingsPath: [] }),
+      configured: true,
+      removable: false,
+      apiKeyEnv: undefined,
+      credential: undefined,
+    }
+    expect(needsSetup(accountRow, false)).toBe(false)
+    expect(needsSetup(accountRow, true)).toBe(false)
   })
 })
 

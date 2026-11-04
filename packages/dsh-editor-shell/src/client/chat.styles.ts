@@ -17,9 +17,10 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
 :is(.shell, .dsh-drawer) .chat > * { min-width: 0; max-width: 100%; }
 :is(.shell, .dsh-drawer) .chat-header {
   flex-shrink: 0; min-height: var(--dsh-ui-header-height);
+  display: flex; align-items: center; min-width: 0;
+  padding-inline: var(--dsh-ui-space-2);
   border-bottom: 0; background: var(--dsh-ui-sidebar);
 }
-:is(.shell, .dsh-drawer) .chat-status { font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted); }
 :is(.shell, .dsh-drawer) .chat > .chat-history { flex: 1 1 0%; min-width: 0; min-height: 0; height: auto; overflow: hidden; }
 :is(.shell, .dsh-drawer) .chat-history .dsh-scroll-area { overscroll-behavior: contain; }
 :is(.shell, .dsh-drawer) .chat-history .dsh-scroll-area > .dsh-flex { min-height: 100%; gap: var(--dsh-ui-space-6); padding: var(--dsh-ui-space-5); }

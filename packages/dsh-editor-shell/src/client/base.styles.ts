@@ -101,7 +101,7 @@ defineStyles('dsh.surfaces', 'dsh-shell-frame', `
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--dsh-ui-space-2);
+  gap: var(--dsh-ui-space-1);
   min-width: 0;
   position: fixed;
   top: 0;
@@ -126,6 +126,9 @@ defineStyles('dsh.surfaces', 'dsh-shell-frame', `
   margin-left: 0;
   flex: 1 1 auto;
 }
+/* 工作台顶栏：dock 包裹层不再生成盒子——空 dock 不占右组 gap 槽位，
+   有贡献时其子项直接参与顶栏 flex，间距仍是统一 space-1。 */
+.shell .dsh-topbar .shell-extensions-dock { display: contents; }
 
 .shell .panel-resizer {
   position: relative;

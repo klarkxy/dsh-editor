@@ -48,6 +48,40 @@ export function builtinPluginRows(plugins) {
   return plugins.locator(S.pluginsCatalogBuiltin).locator(S.pluginsCatalogRow)
 }
 
+/**
+ * Every catalog card that can navigate must land on a real detail page —
+ * none may hit the 找不到这个插件 EmptyState (entry cards point at runtime
+ * packages that are not manager bundles). Returns the per-card result list.
+ */
+export async function assertCatalogDetailsOpenable(page, plugins) {
+  const results = []
+  const rowIds = await plugins.locator('[data-testid^="plugins-catalog-row-entry:"], [data-testid^="plugins-catalog-row-bundle:"]')
+    .evaluateAll(els => els.map(el => el.getAttribute('data-testid')))
+  for (const rowId of rowIds) {
+    const row = plugins.locator(`[data-testid="${rowId}"]`).first()
+    await row.scrollIntoViewIfNeeded().catch(() => undefined)
+    // 唯一安全的导航目标是行内标题钮 plugins-catalog-open-*；裸点行体或
+    // 任意 button 会落到右侧开关上，把 bundle/组件关掉。
+    const openTarget = row.locator('[data-testid^="plugins-catalog-open-"]').first()
+    if (await openTarget.count()) await openTarget.click().catch(() => undefined)
+    else {
+      results.push({ rowId, seatId: null, notFound: false, skipped: 'no-open-target' })
+      continue
+    }
+    await page.waitForTimeout(600)
+    const seat = page.locator(S.pluginDetailSeat).first()
+    const seatVisible = await seat.isVisible().catch(() => false)
+    const notFound = seatVisible ? (await seat.innerText().catch(() => '')).includes('找不到这个插件') : false
+    const seatId = seatVisible ? await seat.getAttribute('data-testid') : null
+    results.push({ rowId, seatId, notFound })
+    assert.ok(!notFound, `catalog row ${rowId} lands on 找不到这个插件`)
+    // 回到已安装列表继续下一张卡。
+    await page.locator(S.pluginsNavOverview).first().click().catch(() => undefined)
+    await page.waitForTimeout(400)
+  }
+  return results
+}
+
 export async function openWritingPresets(plugins) {
   await showPluginList(plugins)
   const builtin = plugins.locator(S.pluginsCatalogBuiltin)
@@ -233,7 +267,9 @@ export async function assertDefaultPluginPage(page, plugins) {
   const official = plugins.locator(S.pluginsCatalogOfficial)
   const builtin = plugins.locator(S.pluginsCatalogBuiltin)
   const user = plugins.locator(S.pluginsCatalogUser)
-  for (const section of [official, builtin, user]) await section.waitFor()
+  // First catalog.list after a cold Electron boot can take well past 15s.
+  await official.waitFor({ timeout: 90_000 })
+  for (const section of [builtin, user]) await section.waitFor()
   // Rows populate after the sections mount; sample after a builtin row exists.
   await builtinPluginRows(plugins).first().waitFor()
   const userText = await user.innerText()

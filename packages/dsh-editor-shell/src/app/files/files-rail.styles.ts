@@ -13,8 +13,13 @@ defineStyles('dsh.surfaces', 'dsh-files-rail', `
 .dsh-files-rail__tabs { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .dsh-files-rail__head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--dsh-ui-space-2);
-  flex: none; min-height: var(--dsh-ui-header-height); padding-inline: var(--dsh-ui-space-2) var(--dsh-ui-space-1);
+  flex: none; height: var(--dsh-ui-header-height); min-height: var(--dsh-ui-header-height);
+  padding-inline: var(--dsh-ui-space-2) var(--dsh-ui-space-1);
+  border-bottom: 0.5px solid var(--dsh-ui-line);
 }
+/* 页签行吃满页头高度：激活下划线正好落在页头底线上。 */
+.dsh-files-rail__head .dsh-tabs__list { border-bottom: 0; height: 100%; }
+.dsh-files-rail__head .dsh-tabs__tab { height: 100%; }
 .dsh-files-rail__actions { display: flex; align-items: center; gap: var(--dsh-ui-space-1); flex: none; }
 .dsh-files-rail__panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dsh-files-rail__files { overflow: hidden; }

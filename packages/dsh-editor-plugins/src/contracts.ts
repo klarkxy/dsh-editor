@@ -48,7 +48,6 @@ export type PluginCatalogBadge =
   | 'required'
   | 'locked'
   | 'builtin'
-  | 'preinstalled'
   | 'installed'
   | 'experimental'
   | 'session-managed'

@@ -146,14 +146,14 @@ describe('plugin discovery', () => {
       searching: false,
       note: '已复制 link:/profile/bundled-packages/node_modules/dsh-editor-cards。请在官方插件页使用「添加插件」粘贴。',
       error: '',
+      inventory: { status: 'ready', packages: [] },
       onQuery() {},
       onSearch() {},
       onCopy() {},
     })
     expect(tree.type).toBe('section')
     expect(tree.props.open).toBeUndefined()
-    // 页面标题在宿主设置页，发现页内部不再重复 h3。
-    expect(elements(tree).some(el => el.type === 'h3')).toBe(false)
+    // 页面标题在宿主设置页；可重新添加区段自己的小标题不算重复页标题。
     expect((Array.isArray(tree.props.children) ? tree.props.children[0] : tree.props.children)?.type).toBe('p')
     const html = collectText(tree)
     expect(html).toContain('人物卡与世界书')
@@ -164,8 +164,8 @@ describe('plugin discovery', () => {
     expect(html).not.toContain('在 GitHub 打开')
     expect(collectHrefs(tree)).toEqual([])
     expect(html).toContain('搜索')
-    expect(html).toContain('留空查看本机可选插件')
-    expect(collectPlaceholders(tree).some((text) => text.includes('留空列出本机可选包'))).toBe(true)
+    expect(html).not.toContain('留空查看本机可选插件')
+    expect(collectPlaceholders(tree).every((text) => !text.includes('留空列出本机可选包'))).toBe(true)
     const github = listingPresentation({
       spec: 'github:acme/plug', owner: 'acme', repo: 'plug', description: '纸', stars: 3,
       url: 'https://github.com/acme/plug', updatedAt: '', topics: [],
@@ -189,8 +189,8 @@ describe('plugin discovery', () => {
     const onOpen = vi.fn()
     const local: MarketplaceListing = { spec: 'link:/profile/optional', source: 'local', packageName: 'optional', title: '文稿助手',
       owner: '', repo: 'optional', description: '文稿辅助', stars: 0, url: '', updatedAt: '', topics: [] }
-    const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[]) => PluginDiscovery({
-      query: '', listings: [local], searching: false, note: '', error: '', inventory: { status: 'ready', packages },
+    const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[], submittedQuery?: string) => PluginDiscovery({
+      query: '', listings: [local], searching: false, note: '', error: '', submittedQuery, inventory: { status: 'ready', packages },
       onInstall, onOpen, onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn(),
     })
     const absent = render([])
@@ -199,7 +199,8 @@ describe('plugin discovery', () => {
     expect(install.props.disabled).toBe(false)
     ;(install.props.onClick as () => void)()
     expect(onInstall).toHaveBeenCalledExactlyOnceWith(local.spec)
-    const present = render([{ name: 'optional', installed: true, optional: false, enabled: false }])
+    // 已安装条目只在提交搜索词后出现；浏览态只列可重新添加的包。
+    const present = render([{ name: 'optional', installed: true, optional: false, enabled: false }], '文稿')
     expect(collectText(present)).toContain('已安装 · 未启用')
     const configure = elements(present).find(el => el.props.children === '配置与详情')!
     // 已安装条目的「配置与详情」是次级操作；primary 只留给「安装」。
@@ -220,8 +221,38 @@ describe('plugin discovery', () => {
     expect(collectText(miss)).toContain('没有找到与「不存在插件zzz」匹配的插件。')
     expect(collectText(miss)).not.toContain('留空点「搜索」')
     const initial = render('')
-    expect(collectText(initial)).toContain('留空点「搜索」')
+    expect(collectText(initial)).toContain('输入关键词、npm 包名或 GitHub 仓库搜索插件。')
     expect(collectText(initial)).not.toContain('没有找到')
+  })
+
+  it('browse view only lists removable bundled packages behind the re-add heading', () => {
+    const local: MarketplaceListing = {
+      spec: 'link:/profile/bundled-packages/node_modules/dsh-editor-cards',
+      source: 'local', packageName: 'dsh-editor-cards', title: '人物卡与世界书',
+      owner: '', repo: 'dsh-editor-cards', description: '卡片列表与引用', stars: 0, url: '', updatedAt: '', topics: [],
+    }
+    const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[],
+      submittedQuery?: string, status = 'ready') => PluginDiscovery({
+      query: '', listings: [local], searching: false, note: '', error: '', submittedQuery,
+      inventory: { status, packages },
+      onInstall: vi.fn(), onOpen: vi.fn(), onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn(),
+    })
+    // 已安装的随附包不在浏览态出现：无卡片、无「配置与详情」，只给搜索提示。
+    const hidden = render([{ name: 'dsh-editor-cards', installed: true, optional: false, enabled: true }])
+    expect(collectText(hidden)).not.toContain('人物卡与世界书')
+    expect(elements(hidden).some((el) => el.props.children === '配置与详情')).toBe(false)
+    expect(collectText(hidden)).toContain('输入关键词、npm 包名或 GitHub 仓库搜索插件。')
+    // 被作者移除的随附包落在「可重新添加的随附插件」下，带「安装」。
+    const shown = render([])
+    expect(collectText(shown)).toContain('可重新添加的随附插件')
+    expect(elements(shown).some((el) => el.props.children === '安装')).toBe(true)
+    // inventory 未就绪时浏览态不渲染卡片。
+    const notReady = render([], undefined, 'loading')
+    expect(elements(notReady).some((el) => el.props.className === 'dsh-plugins-card')).toBe(false)
+    // 提交搜索词后已安装条目照常出现，带「配置与详情」。
+    const queried = render([{ name: 'dsh-editor-cards', installed: true, optional: false, enabled: true }], '人物卡')
+    expect(collectText(queried)).toContain('人物卡与世界书')
+    expect(elements(queried).some((el) => el.props.children === '配置与详情')).toBe(true)
   })
 
   it('disables installation when the native inventory is unavailable or an install is pending', () => {
@@ -241,7 +272,7 @@ describe('plugin discovery', () => {
       query: 'npm:@scope/plugin@2.0.0',
       listings: [{ spec: 'npm:@scope/plugin@2.0.0', source: 'npm', packageName: '@scope/plugin',
         owner: '@scope', repo: 'plugin', description: '写作插件', stars: 0, url: '', updatedAt: '', topics: [] }],
-      searching: false, note: '', error: '',
+      searching: false, note: '', error: '', submittedQuery: 'npm:@scope/plugin@2.0.0',
       inventory: { status: 'ready', packages: [{ name: '@scope/plugin', installed: true, optional: false, enabled: true }] },
       onInstall, onOpen, onCopy: vi.fn(), onQuery: vi.fn(), onSearch,
     })

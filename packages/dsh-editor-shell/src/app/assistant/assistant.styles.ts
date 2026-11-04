@@ -6,14 +6,19 @@ import { defineStyles } from '../../design-system/layers.ts'
  * 视觉只落在 dsh-partner__* 类上。
  */
 defineStyles('dsh.surfaces', 'dsh-partner', `
-/* ── 页头：标题按钮 + 右侧新对话 SplitButton ─────────────────── */
-.chat-header.dsh-partner__head {
-  display: flex; align-items: center; gap: var(--dsh-ui-space-2);
-  min-width: 0; padding-inline: var(--dsh-ui-space-2);
+/* ── 页头：并入辅助栏页签行的动作位 —— 对话切换 + 「新对话」+ 菜单 ── */
+.dsh-partner__head {
+  display: flex; align-items: center; gap: var(--dsh-ui-space-1);
+  flex: 0 1 auto; min-width: 0;
 }
+/* 内联回落（overlay 或栏外挂载）：页头撑满 .chat-header 一行，
+   标题放开 14rem 上限，把右侧操作顶到行尾。 */
+.chat-header > .dsh-partner__head { flex: 1 1 auto; }
+.chat-header .dsh-partner__title { flex: 1 1 auto; max-width: none; }
 .dsh-partner__title {
-  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--dsh-ui-space-1);
-  min-height: var(--dsh-ui-control-md); padding-inline: var(--dsh-ui-space-2);
+  flex: 0 1 auto; min-width: 0; max-width: 14rem;
+  display: flex; align-items: center; gap: var(--dsh-ui-space-1);
+  min-height: var(--dsh-ui-control-sm); padding-inline: var(--dsh-ui-space-2);
   border: 0; border-radius: var(--dsh-ui-radius-md); background: transparent;
   color: var(--dsh-ui-text); font: inherit; font-weight: var(--dsh-ui-weight-medium); cursor: pointer;
 }
@@ -22,8 +27,6 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .dsh-partner__title:focus-visible { outline: 2px solid var(--dsh-ui-accent); outline-offset: -2px; }
 .dsh-partner__title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-partner__title > svg { flex: none; color: var(--dsh-ui-muted); }
-.dsh-partner__actions { flex: none; display: flex; align-items: center; gap: var(--dsh-ui-space-1); }
-.dsh-partner__actions .chat-status { display: inline-flex; align-items: center; gap: var(--dsh-ui-space-1); }
 
 /* ── 对话列表 Popover ──────────────────────────────────────── */
 .dsh-partner__list { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); width: 19rem; max-width: calc(100vw - 32px); }
@@ -34,9 +37,15 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .dsh-partner__rows .dsh-list-row__meta { color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); }
 .dsh-partner__row-menu { flex: none; display: inline-flex; }
 
-/* ── 空状态起步建议 ────────────────────────────────────────── */
-.dsh-partner__empty { margin-block: auto; padding-block: var(--dsh-ui-space-5); }
-.dsh-partner__suggestions { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); width: min(19rem, 100%); }
+/* ── 空状态：建议锚在历史列底部贴住 composer、左对齐；
+   无模型的接入引导保持垂直居中 ─────────────────────────────── */
+.dsh-partner__empty { margin-block: auto 0; padding-block: var(--dsh-ui-space-5); justify-items: stretch; text-align: start; }
+.dsh-partner__empty .dsh-empty-state__title {
+  font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium);
+}
+.dsh-partner__empty .dsh-empty-state__actions { width: 100%; margin-top: 0; }
+.dsh-partner__setup { margin-block: auto; }
+.dsh-partner__suggestions { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); width: 100%; }
 .dsh-partner__suggest {
   display: block; width: 100%; text-align: start;
   min-height: var(--dsh-ui-control-md); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3);
@@ -85,7 +94,8 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 .chat-process-stack .dsh-disclosure__summary { min-height: var(--dsh-ui-space-8); color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium); }
 .chat-process-stack .dsh-disclosure__content { display: flex; flex-direction: column; gap: 2px; }
 
-/* 空状态居中：历史列撑满视口高度，empty 用 margin auto 垂直居中
+/* 空状态锚位：历史列撑满视口高度；建议空态 margin-top:auto 贴底，
+   接入引导 margin-block:auto 垂直居中
    （.dsh-scroll-area > .dsh-flex 的 min-height/gap/padding 在 client/chat.styles.ts）。 */
 
 /* ── Composer：ui TextArea 去描边，焦点环留给整个 composer 表面 ── */
@@ -96,11 +106,18 @@ defineStyles('dsh.surfaces', 'dsh-partner', `
 }
 .composer .dsh-textarea:focus-visible { box-shadow: none; outline: 0; }
 .composer .composer-note { margin-block: var(--dsh-ui-space-1) 0; }
+/* 重连提示挪进 composer 顶部，页头随页签行常显不再重复状态。 */
+.composer .composer-status {
+  display: flex; align-items: center; gap: var(--dsh-ui-space-1);
+  padding: 0 var(--dsh-ui-space-2) var(--dsh-ui-space-1);
+  color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs);
+}
 
 /* 模型/思考芯片：长名截断（全称在 title）、思考档不再被压成「思…」。
    窄栏（含 760/390 抽屉）里整条工具栏保持单行：模型芯片吃掉收缩量，
-   思考档不缩到标签以下，语音与发送钉在行尾。 */
-.composer-model { flex: 0 1 auto; min-width: 0; }
+   思考档不缩到标签以下，语音与发送钉在行尾。模型格始终占满中间
+   （picker 缺省渲染为空时右侧操作也不漂移）。 */
+.composer-model { flex: 1 1 auto; min-width: 0; }
 .composer-model .select { min-width: 0; flex: 0 1 auto; display: flex; }
 .composer-model .select-trigger { min-width: 0; max-width: 100%; }
 .composer-model .select-trigger > span:not(.dsh-select__icon) {

@@ -22,8 +22,14 @@ import { ConfigurationOutlet } from './plugin-configurations.tsx'
 type ManagerBundle = BundleInfo
 
 function cardOfPackage(sections: readonly PluginCatalogSection[], name: string): PluginCatalogCard | undefined {
+  // bundle 卡优先；入口卡（entry:<id>，packageName 可能是运行时包而非
+  // 管理器 bundle）次之。
   for (const section of sections) {
-    const hit = section.items.find(card => card.packageName === name || card.key === `bundle:${name}`)
+    const hit = section.items.find(card => card.key === `bundle:${name}`)
+    if (hit) return hit
+  }
+  for (const section of sections) {
+    const hit = section.items.find(card => card.packageName === name)
     if (hit) return hit
   }
   return undefined
@@ -54,6 +60,8 @@ export function PluginDetailPage(props: {
   notice?: string
   onBack(): void
   onInstall(spec: string): void
+  /** 非 bundle 目录卡的开关（如上游运行时组件），走目录卡的 toggle 路径。 */
+  onToggleCard?(card: PluginCatalogCard, enabled: boolean): void
   /** model: 链接需要的 provider/chat 渲染器归设置页所有。 */
   renderModelSurface(id: string): ReactNode
   /** Configuration boundary identity version (config-entries ledger). */
@@ -137,7 +145,7 @@ export function PluginDetailPage(props: {
     props.onBack()
   }, [store, name, props])
 
-  if (snapshot.status === 'ready' && !bundle) {
+  if (snapshot.status === 'ready' && !bundle && !card) {
     return <div className="dsh-settings-section" data-testid={`plugin-detail-seat-${name}`}>
       <EmptyState title={t('plugins.detailNotFound')} body={name}
         actions={<ThemeButton variant="secondary" data-testid="plugin-detail-back" onClick={props.onBack}>{t('plugins.detailBack')}</ThemeButton>} />
@@ -190,7 +198,11 @@ export function PluginDetailPage(props: {
               ? <SwitchControl checked={bundle.enabled} disabled={pending}
                 aria-label={title} data-testid="plugin-detail-toggle"
                 onCheckedChange={(enabled) => void runToggle(enabled)} />
-              : null}
+              : card && card.enabled !== undefined && !card.badges.includes('locked') && card.action === 'switch'
+                ? <SwitchControl checked={card.enabled} disabled={pending}
+                  aria-label={title} data-testid="plugin-detail-toggle"
+                  onCheckedChange={(enabled) => props.onToggleCard?.(card, enabled)} />
+                : null}
         {props.renderSlot('plugins.detail.actions', { subject })}
       </div>
     </div>
@@ -254,6 +266,11 @@ export function PluginDetailPage(props: {
       <SettingRow title={t('plugins.detailVersion')}><Text size="1">{bundle.version ?? '—'}</Text></SettingRow>
       <SettingRow title={t('plugins.detailSource')}><Text size="1">{bundle.source ?? bundle.installTarget?.spec ?? '—'}</Text></SettingRow>
       <SettingRow title={t('plugins.detailAvailability')}><Text size="1">{t(`plugins.availability.${bundle.availability}` as never)}</Text></SettingRow>
+    </SettingsGroup> : null}
+
+    {/* 非 bundle 的目录卡（上游运行时组件）只有包名一条信息。 */}
+    {!bundle && card ? <SettingsGroup title={t('plugins.detailInfo')}>
+      <SettingRow title={t('plugins.detailName')}><Text size="1">{name}</Text></SettingRow>
     </SettingsGroup> : null}
 
     {bundle ? <SettingsGroup title={t('plugins.detailRemove')}>

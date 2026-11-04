@@ -17,14 +17,16 @@ import type { NativeToolManager } from './native-tools.ts'
 
 /** Upstream opt-in bundles the author switches from 官方插件. */
 const EXPERIMENTAL_PACKAGE_PREFIX = '@deepseek-ai/dsh-experimental-'
-/** Preinstalled public plugins ship with the distribution and belong to 内置功能. */
-const PREINSTALLED_PUBLIC_PLUGINS: Readonly<Record<string, { title: string; description: string }>> = {
-  '@klarkxy/dsh-web-search-manager': { title: '网页搜索', description: '' },
-}
+/**
+ * 常驻运行时 UI（快捷键、文档预览等）：发行版依赖的基础能力，不是作者
+ * 视角的插件，不进「已安装」列表；仅当作者此前通过旧卡片把它关掉
+ * （enabled === false）时才保留卡片，以便重新打开。
+ */
+const FOUNDATION_ENTRY_IDS = new Set(['ui-shortcuts', 'ui-sidebar-documentpreview'])
 
 /**
  * Upstream experimental bundles carry no prepared-catalog entry of their own,
- * so their product names live next to the preinstalled map.
+ * so their product names live next to each other in this table.
  */
 const UPSTREAM_DISPLAY: Readonly<Record<string, { title: string; description: string }>> = {
   '@deepseek-ai/dsh-experimental-agent-team-profile': { title: '智能体团队', description: '启用团队协作、团队工具、成员列表和共享任务看板。' },
@@ -45,7 +47,6 @@ const BADGE_ORDER: readonly PluginCatalogBadge[] = [
   'required',
   'locked',
   'builtin',
-  'preinstalled',
   'installed',
   'experimental',
   'session-managed',
@@ -208,7 +209,7 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
   const builtinBundleNames = new Set<string>()
   const coveredPackages = new Set<string>()
   const consumedCatalogEntries = new Set<string>()
-  const titledFromCatalog = new Set<PluginCatalogCard>()
+
 
   const official: PluginCatalogCard[] = []
   for (const row of bundles) {
@@ -253,6 +254,7 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
     const locked = entry.locked || readOnlyReason(plugin)
     const required = CORE_PLUGIN_ENTRY_IDS.has(id) || REQUIRED_CORE_BUNDLES.has(entry.packageName)
     const enabled = !locked && typeof plugin?.enabled === 'boolean' ? plugin.enabled : undefined
+    if (FOUNDATION_ENTRY_IDS.has(id) && enabled !== false) continue
     const card: PluginCatalogCard = {
       key: `entry:${id}`,
       title: entry.title || entry.packageName,
@@ -294,32 +296,7 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       ...(enabled === undefined ? {} : { enabled }),
       action: cardAction(enabled, locked),
     }
-    if (copy) titledFromCatalog.add(card)
     builtin.push(card)
-  }
-
-  for (const [packageName, preset] of Object.entries(PREINSTALLED_PUBLIC_PLUGINS)) {
-    const existing = builtin.find((card) => card.packageName === packageName)
-    if (existing) {
-      existing.badges = orderedBadges([...existing.badges, 'preinstalled'])
-      if (!titledFromCatalog.has(existing)) existing.title = preset.title
-      continue
-    }
-    const row = bundleByName.get(packageName)
-    const entry = Object.values(entries).find((item) => item.packageName === packageName)
-    const locked = Boolean(entry?.locked) || readOnlyReason(row)
-    const enabled = !locked && typeof row?.enabled === 'boolean' ? row.enabled : undefined
-    const required = REQUIRED_CORE_BUNDLES.has(packageName)
-    builtin.push({
-      key: `bundle:${packageName}`,
-      title: entry?.title || preset.title,
-      description: entry?.description ?? preset.description,
-      ...iconField(row?.meta),
-      packageName,
-      badges: orderedBadges([...capabilityBadges(required, locked), 'preinstalled']),
-      ...(enabled === undefined ? {} : { enabled }),
-      action: cardAction(enabled, locked),
-    })
   }
 
   const user: PluginCatalogCard[] = []
@@ -330,7 +307,7 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
     if (row.installed === false && row.enabled !== true
       && typeof row.installTarget?.spec === 'string' && row.installTarget.spec.trim()) continue
     if (officialNames.has(name) || builtinBundleNames.has(name)) continue
-    if (coveredPackages.has(name) || name in PREINSTALLED_PUBLIC_PLUGINS) continue
+    if (coveredPackages.has(name)) continue
     // Upstream runtime packages are never author-installed plugins.
     if (name.startsWith('@deepseek-ai/')) continue
     if (RETIRED_PLUGIN_PACKAGES.has(name)) continue

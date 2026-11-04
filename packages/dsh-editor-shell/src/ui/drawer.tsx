@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 import { IconButton } from './icon-button.tsx'
+import { CrossIcon } from './icons.tsx'
 import { cx, useDshPortalContainer } from './shared.ts'
 import './drawer.styles.ts'
 
@@ -70,7 +71,9 @@ export function Drawer(props: {
                   {/* 关闭钮压在页签条右端（抽屉内第一行）；Dialog.Title 只
                       保留可访问名称。 */}
                   <DialogPrimitive.Close asChild>
-                    <IconButton className="dsh-drawer__close" size="sm" label={props.closeLabel} />
+                    <IconButton className="dsh-drawer__close" size="sm" label={props.closeLabel}>
+                      <CrossIcon size="sm" />
+                    </IconButton>
                   </DialogPrimitive.Close>
                   <div className="dsh-drawer__body">{props.children}</div>
                 </>
@@ -78,7 +81,7 @@ export function Drawer(props: {
                 <>
                   <div className="dsh-drawer__header">
                     <DialogPrimitive.Title className="dsh-drawer__title">{props.title}</DialogPrimitive.Title>
-                    <DialogPrimitive.Close asChild><IconButton label={props.closeLabel} /></DialogPrimitive.Close>
+                    <DialogPrimitive.Close asChild><IconButton label={props.closeLabel}><CrossIcon /></IconButton></DialogPrimitive.Close>
                   </div>
                   <div className="dsh-drawer__body">{props.children}</div>
                 </>

@@ -213,12 +213,12 @@ export function PluginDiscovery(props: {
   return (
     <section className="dsh-plugins-group" data-testid="plugins-settings" aria-label="发现插件">
       <p className="dsh-plugins-intro">
-        搜索写作需要的功能，或留空查看本机可选插件。选择「安装」后，在安装窗口确认；已有插件可打开配置与详情。
+        搜索写作需要的功能。选择「安装」后，在安装窗口确认；已有插件可打开配置与详情。
       </p>
       <form className="dsh-plugins-search" onSubmit={onSubmit}>
         {props.Input
-          ? <props.Input aria-label="搜索插件" value={props.query} onChange={props.onQuery} placeholder="关键词、包名，或留空列出本机可选包" />
-          : <input aria-label="搜索插件" value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="关键词、包名，或留空列出本机可选包" />}
+          ? <props.Input aria-label="搜索插件" value={props.query} onChange={props.onQuery} placeholder="关键词、npm 包名或 GitHub 仓库" />
+          : <input aria-label="搜索插件" value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="关键词、npm 包名或 GitHub 仓库" />}
         <SeatButton host={props.Button} type="submit" variant="primary" className="dsh-plugins-primary"
           disabled={props.searching || (Boolean(parsed) && !discoveryCanInstall(props.inventory, props.onInstall))}>
           {parsed?.packageName ? '安装指定版本' : parsed ? '安装' : '搜索'}
@@ -230,12 +230,29 @@ export function PluginDiscovery(props: {
         {props.inventory?.status === 'loading' || props.inventory?.status === 'idle' ? '正在读取已安装状态…' : '安装管理当前不可用，暂时无法安装或确认已安装状态。'}
       </p> : discoveryInstallBusy(props.inventory) ? <p className="dsh-plugins-status" role="status">安装正在进行，请在「安装与卸载」页查看进度。</p> : null}
       {props.searching ? <p className="dsh-plugins-status">正在搜索…</p> : null}
-      {!props.searching && props.listings.length === 0
-        ? (props.submittedQuery?.trim()
-          ? <p className="dsh-plugins-empty">没有找到与「{props.submittedQuery.trim()}」匹配的插件。</p>
-          : <p className="dsh-plugins-empty">留空点「搜索」列出本机可选包，或输入关键词搜索 GitHub、npm 包名、GitHub 仓库。</p>)
-        : <div className="dsh-plugins-group">
-          {props.listings.map((item) => {
+      {(() => {
+        if (props.searching) return null
+        // 浏览态（未提交搜索词）只列出「已移除、可重新添加」的随附本地包；
+        // 已安装的随附包属于「已安装」页，不在发现页展开。
+        const browsing = !props.submittedQuery?.trim()
+        const inventoryReady = props.inventory?.status === 'ready'
+        const installedNames = inventoryReady ? new Set(props.inventory!.packages.map((row) => row.name)) : null
+        const visible = browsing
+          ? (installedNames
+            ? props.listings.filter((item) => item.source === 'local'
+              && Boolean(item.packageName || parseNpmSpec(item.spec)?.name)
+              && !installedNames.has(item.packageName || parseNpmSpec(item.spec)!.name!))
+            : [])
+          : props.listings
+        if (visible.length === 0) {
+          return <p className="dsh-plugins-empty">{browsing
+            ? '输入关键词、npm 包名或 GitHub 仓库搜索插件。'
+            : `没有找到与「${props.submittedQuery?.trim() ?? ''}」匹配的插件。`}</p>
+        }
+        return <>
+          {browsing ? <h3 className="dsh-plugins-subhead">可重新添加的随附插件</h3> : null}
+          <div className="dsh-plugins-group">
+          {visible.map((item) => {
             const view = listingPresentation(item)
             const npm = parseNpmSpec(item.spec)
             const explicit = discoverInstallSpec(item.spec)
@@ -278,7 +295,9 @@ export function PluginDiscovery(props: {
               </details>
             </article>
           })}
-        </div>}
+          </div>
+        </>
+      })()}
     </section>
   )
 }
