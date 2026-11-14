@@ -27,7 +27,7 @@ token 声明输出到 `SCOPE` / `SCOPE_DARK`（tokens.ts）：`html[data-dsh-ui=
 token 作用域内还带两组别名：
 
 - `RADIX_ALIASES`：`--font-size-*`、`--line-height-*`、`--space-*`、`--radius-*`、`--shadow-*`、`--paper-fill` 等旧梯级名映射到 `--dsh-ui-*`（官方制品与 manuscript 挂件样式仍在读这些名字）。`--gray-*` 调色板变量已随第 6a 阶段删除，不再输出。
-- `compat.ts` 的 `--dsw-*` / `--ds-*` 兼容层：官方制品读到的变量按 `ALIAS_MAP` / `SPECIFIC_MAP` / 前缀规则映射到 `var(--dsh-ui-*)`。当前 **431** 个已扫描变量中 **143** 个映射、**288** 个留在 `DSW_PENDING` 不猜值。清单由 `node scripts/scan-dsw-vars.mjs --check` 保鲜，`check-ui-design` 会复核。
+- `compat.ts` 的 `--dsw-*` / `--ds-*` 兼容层：官方制品读到的变量按 `ALIAS_MAP` / `SPECIFIC_MAP` / 前缀规则映射到 `var(--dsh-ui-*)`。当前 **432** 个已扫描变量中 **143** 个映射、**289** 个留在 `DSW_PENDING` 不猜值。清单由 `node scripts/scan-dsw-vars.mjs --check` 沿声明依赖检查，兼容 Windows 缩短的 pnpm 存储目录名；`check-ui-design` 会复核。
 
 插件表面的 `--s-*` 别名链在 `packages/dsh-editor-seats/src/tokens.ts`：`--s-*` → `--dsh-ui-*` → 官方 `--dsw-*` → 上游兜底值，使插件在独立 DSH 宿主（没有 `--dsh-ui-*`）下仍完整可读。
 

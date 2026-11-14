@@ -329,6 +329,7 @@ export const DSW_VARS = [
   '--dsw-gradient-onboarding-blue-stops',
   '--dsw-gradient-onboarding-cyan-stops',
   '--dsw-gradient-onboarding-violet-stops',
+  '--dsw-hovercard-bg',
   '--dsw-linear-gradient-think',
   '--dsw-linear-think-select',
   '--dsw-mask-blur',
