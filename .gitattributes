@@ -1,0 +1,2 @@
+# The generated inventory is compared byte-for-byte with its LF template.
+packages/dsh-editor-shell/src/design-system/dsw-vars.ts text eol=lf

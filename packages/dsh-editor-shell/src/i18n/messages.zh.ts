@@ -16,7 +16,7 @@ export const zh = {
   'writing.completionDelay': '停顿时间',
   'writing.seconds': '{seconds} 秒',
   'writing.delayHelp': '停顿触发补全；建议仍需模型响应。',
-  'writing.triggerCompletion': '手动补全（有改写预览时接受改写）',
+  'writing.triggerCompletion': '手动补全',
   'writing.acceptCompletion': '接受补全',
   'writing.dismissCompletion': '取消生成或建议',
   'writing.allShortcuts': '查看全部快捷键',

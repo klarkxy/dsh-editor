@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -26,6 +27,22 @@ async function pkg(directory, manifest, text = '') {
 }
 
 describe('published DSW artifact inventory', () => {
+  it('checks out the generated inventory with LF when Git autocrlf is enabled', async () => {
+    const { root } = await fixture()
+    await writeFile(join(root, '.gitattributes'), await readFile(new URL('../.gitattributes', import.meta.url)))
+    const relative = 'packages/dsh-editor-shell/src/design-system/dsw-vars.ts'
+    const file = join(root, relative)
+    await mkdir(join(root, 'packages/dsh-editor-shell/src/design-system'), { recursive: true })
+    const text = "export const DSW_VARS = ['--dsw-test'] as const\n"
+    await writeFile(file, text)
+    const git = args => execFileSync('git', args, { cwd: root, windowsHide: true, stdio: 'pipe' })
+    git(['init', '-q'])
+    git(['-c', 'core.autocrlf=true', 'add', '--', '.gitattributes', relative])
+    await writeFile(file, 'changed\r\n')
+    git(['-c', 'core.autocrlf=true', 'checkout-index', '--force', '--all'])
+    expect(await readFile(file, 'utf8')).toBe(text)
+  })
+
   it('follows declared package edges and ignores unrelated store copies and vendor folders', async () => {
     const { root, manifest } = await fixture()
     const scope = join(root, 'node_modules/@deepseek-ai')

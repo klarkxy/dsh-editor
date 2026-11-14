@@ -73,7 +73,7 @@
 
 目标桌面版本为 `0.5.0`。本轮保留前述升级基线，没有跟随上游更换版本。
 
-首轮标签 `v0.5.0` 的干净环境检查发现设计清单差异，发行未公开。后续修复扫描器以兼容 Windows 缩短的 pnpm 存储目录名，并沿声明依赖排除旧缓存与全局包干扰；核实锁定的 `dsh-web-frontend/dist/assets/index-lh_YM6sT.css` 后，清单只新增此前漏扫的 `--dsw-hovercard-bg`。后续发行目标为 `0.5.1`，保留失败标签。
+首轮标签 `v0.5.0` 的干净环境检查发现设计清单差异，发行未公开。后续修复扫描器以兼容 Windows 缩短的 pnpm 存储目录名，并沿声明依赖排除旧缓存与全局包干扰；核实锁定的 `dsh-web-frontend/dist/assets/index-lh_YM6sT.css` 后，清单只新增此前漏扫的 `--dsw-hovercard-bg`。`v0.5.1` 的 Linux 检查与 macOS 单测通过，Windows 检出 CRLF 导致逐字校验失败；生成文件随后增加 LF 属性和真实 Git 检出回归。发行目标改为 `0.5.2`，保留未公开的失败标签。
 
 - `pnpm install --frozen-lockfile`、全工作区构建与类型检查通过；完整测试 218 个文件、1831 项通过、4 项跳过。新增真实 Cordis 作用域回归，检查搭档 RPC 与回忆工具能实际读取声明的服务。
 - 修复工作台与工具入口缺失的服务依赖声明。此前真实宿主的 `bot.check`、`bot.history`、换模型时的 `bot.attach` 会返回 `cannot get property "sessionQuery" without inject`；对象模拟测试没有触发 Cordis 的检查。

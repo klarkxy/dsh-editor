@@ -18,7 +18,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'writing.completionDelay': 'Pause before suggesting',
   'writing.seconds': '{seconds} s',
   'writing.delayHelp': 'The pause triggers completion; the model still needs time to respond.',
-  'writing.triggerCompletion': 'Request completion (accept a rewrite when its preview is open)',
+  'writing.triggerCompletion': 'Request completion',
   'writing.acceptCompletion': 'Accept suggestion',
   'writing.dismissCompletion': 'Cancel generation or dismiss suggestion',
   'writing.allShortcuts': 'View all shortcuts',
