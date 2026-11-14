@@ -173,9 +173,20 @@ function cardMatches(card: PluginCatalogCard, needle: string): boolean {
     .some((field) => field.toLocaleLowerCase().includes(needle))
 }
 
+/** Official plugins directly relevant to manuscript writing stay top-level; the rest fold by default. */
+const WRITING_OFFICIAL_IDENTITIES = /(?:^|[:/#-])(?:web-search|voice-input)(?:$|[:/#-])/i
+/** Author-facing built-in writing features stay top-level even when locked as required. */
+const AUTHOR_BUILTIN_IDENTITIES = /(?:^|[:/#])(?:editor-cards|editor-memory-panel|editor-overview-panel|manuscript-assist)(?:$|[:/#])/i
+
 /** Stable component identities, not localized labels, identify developer surfaces. */
-export function advancedCatalogCard(card: PluginCatalogCard): boolean {
+export function advancedCatalogCard(card: PluginCatalogCard, sectionId?: PluginCatalogSectionId): boolean {
   const identity = `${card.packageName ?? ''}/${card.entryId ?? ''}/${card.key}`
+  if (sectionId === 'official') {
+    return !WRITING_OFFICIAL_IDENTITIES.test(identity)
+  }
+  if (AUTHOR_BUILTIN_IDENTITIES.test(identity)) {
+    return false
+  }
   const developerSurface = /(?:^|[:/#-])(?:terminal|mcp|agent-loop|developer)(?:$|[:/#-])/i.test(identity)
   const internalRequired = card.badges.includes('required') && card.action === 'detail'
   const unnamedComponent = Boolean(card.packageName && card.title === card.packageName)

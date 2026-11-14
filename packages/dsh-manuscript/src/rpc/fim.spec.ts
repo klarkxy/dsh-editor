@@ -81,6 +81,19 @@ describe('completeFim', () => {
     expect(system).not.toContain(CHAPTER_CONTEXT_GUIDANCE)
   })
 
+  it('keeps the complete preceding text so successive requests share a stable prefix', async () => {
+    async function* stream() { yield { type: 'text-delta', text: '续句' } }
+    const request = vi.fn(() => stream())
+    const prefix = `${'原稿开头。'.repeat(1_100)}正文末尾`
+    await completeFim({
+      ctx: testAiScope(request),
+      provider: 'provider', model: 'model', prefix, suffix: '后文', signal: new AbortController().signal,
+    })
+    const { user } = captured(request)
+    expect(user).toContain(`【光标前】\n${prefix}\n\n【光标后】`)
+    expect(user).toContain('原稿开头。')
+  })
+
   it('places optional project rules once after global author preferences', async () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())

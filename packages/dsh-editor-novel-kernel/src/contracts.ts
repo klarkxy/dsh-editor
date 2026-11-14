@@ -1,24 +1,7 @@
 /** Browser-safe protocol shared with the editor Shell. */
 export const NOVEL_KNOWLEDGE_TOOL_NAME = 'novel_knowledge'
+/** Historical preview tool name. This package no longer registers the tool; the shell still parses its V1 markers. */
 export const PROPOSAL_TOOL_NAME = 'novel_propose'
-export const ZHIHU_SEARCH_TOOL_NAME = 'zhihu_search'
-export const ZHIHU_GLOBAL_SEARCH_TOOL_NAME = 'zhihu_global_search'
-export const ZHIHU_HOT_LIST_TOOL_NAME = 'zhihu_hot_list'
-export const ZHIHU_ASK_TOOL_NAME = 'zhihu_ask'
-export const ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME = 'zhihu_knowledge_search'
-export const NOVEL_OVERVIEW_TOOL_NAME = 'novel_overview'
-export const NOVEL_INDEX_WRITE_TOOL_NAME = 'novel_index_write'
-/** DSH 运行时自带的提问工具；写作助手在需要作者拍板时使用，经 editorToolGuard 校验后放行。 */
-export const USER_QUESTION_TOOL_NAME = 'ask_user_question'
-/** agent 临时工作区：.dsh-editor/scratch/ 内自由读写，路径软禁、有界、对作者视图隐藏。 */
-export const SCRATCH_DIRECTORY = '.dsh-editor/scratch'
-export const NOVEL_SCRATCH_WRITE_TOOL_NAME = 'novel_scratch_write'
-export const NOVEL_SCRATCH_READ_TOOL_NAME = 'novel_scratch_read'
-export const NOVEL_SCRATCH_LIST_TOOL_NAME = 'novel_scratch_list'
-export const SCRATCH_MAX_FILE_CHARS = 20_000
-export const SCRATCH_MAX_FILES = 20
-/** 作品索引是产品内部状态：固定路径，由 novel_index_write 直接写入，不走提案确认。 */
-export const NOVEL_INDEX_PATH = '.dsh-editor/作品索引.md'
 export const PROPOSAL_MARKER = 'dsh-editor.proposal'
 
 export {

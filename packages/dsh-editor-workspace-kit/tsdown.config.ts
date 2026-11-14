@@ -15,7 +15,7 @@ export default defineConfig([
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
-    entry: { frontmatter: 'src/frontmatter.ts' },
+    entry: { frontmatter: 'src/frontmatter.ts', 'natural-order': 'src/natural-order.ts' },
     format: ['esm'],
     dts: true,
     clean: false,

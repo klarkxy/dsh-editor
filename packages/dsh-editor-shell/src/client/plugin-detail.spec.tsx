@@ -109,4 +109,21 @@ describe('plugin detail for non-bundle catalog cards', () => {
     expect(html).toContain('plugin-detail-toggle')
     expect(html).toContain('0.1.0')
   })
+
+  it('hides switch and uninstall button and localizes management-required on core built-in bundles', () => {
+    const html = page({
+      packageName: 'dsh-editor-cards',
+      catalogSections: [{ id: 'builtin', title: '', items: [entryCard({
+        key: 'entry:editor-cards', packageName: 'dsh-editor-cards',
+        entryId: 'editor-cards', title: '人物卡与世界书', description: '在文件树中定位人物卡与世界书',
+        badges: ['required'], action: 'detail',
+      })] }],
+      snapshot: { status: 'ready', bundles: [{ name: 'dsh-editor-cards', enabled: true, installed: true, removable: true, readOnlyReason: 'management-required', availability: 'installation', official: false, rows: [], meta: {}, version: '0.1.0' }] },
+      store: { listVersionExemptions: async () => ({ ok: true, value: { exemptions: {} } }) },
+    })
+    expect(html).toContain('内置必需组件，不可停用或卸载。')
+    expect(html).not.toContain('management-required')
+    expect(html).not.toContain('plugin-detail-toggle')
+    expect(html).not.toContain('plugin-detail-uninstall-dsh-editor-cards')
+  })
 })

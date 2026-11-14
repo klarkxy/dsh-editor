@@ -214,6 +214,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const known = fixedIds.has(props.section as never) || (typeof props.section === 'string' && props.section.startsWith('plugin:'))
     || links.some(link => link.id === props.section)
   const active = known ? props.section : 'writing'
+  const isPluginSubpage = !fixedIds.has(active as never)
   const activeLink = links.find(link => link.id === active)
   const activeModel = models.sections.find(entry => 'model:' + entry.id === active)
   const activeLegacy = legacy.sections.find(entry => entry.navId === active)
@@ -273,6 +274,14 @@ export function SettingsPage(props: SettingsPageProps) {
       const item = group.items.find(entry => entry.id === id)
       if (item) return t(item.label)
     }
+    if (id.startsWith('plugin:')) {
+      const pkg = id.slice('plugin:'.length)
+      for (const group of sections) {
+        const hit = group.items.find(card => card.packageName === pkg)
+        if (hit?.title) return hit.title
+      }
+      return pkg
+    }
     return links.find(link => link.id === id)?.label ?? t('common.settings')
   }
 
@@ -308,13 +317,23 @@ export function SettingsPage(props: SettingsPageProps) {
         key={item.id}
         label={t(item.label)}
         leading={item.warn ? <WarningIcon /> : undefined}
-        selected={active === item.id}
+        selected={active === item.id || (item.id === 'plugins-installed' && isPluginSubpage)}
         onSelect={() => onPick(item.id)}
         className="dsh-settings-nav-item"
         data-warn={item.warn || undefined}
         data-testid={`settings-nav-${item.id}`} />)}
     </div>
   </Fragment>)
+
+  const pluginBackBar = (
+    <div className="plugin-subpage-bar">
+      <Button type="button" variant="secondary" size="sm" data-testid="plugin-detail-back"
+        className="plugin-subpage-back" onClick={() => selectSection('plugins-installed')}
+        icon={<ChevronLeftIcon size="sm" />}>
+        {t('plugins.detailBack')}
+      </Button>
+    </div>
+  )
 
   const section = (id: string, title: string, children: ReactNode, opts?: { tools?: ReactNode }) => (
     <div hidden={active !== id} className="dsh-settings-section" data-testid={`settings-section-${id}`}>
@@ -458,19 +477,24 @@ export function SettingsPage(props: SettingsPageProps) {
         {section('advanced', t('settings.advanced'), <AdvancedSection
           ctx={props.ctx} />)}
         {activeModel && props.renderSlot ? <div className="dsh-settings-section">
+          {pluginBackBar}
           <PluginModelSettingsSurface key={activeModel.id} ctx={props.ctx} id={activeModel.id} renderSlot={props.renderSlot}
             sessionId={props.sessionId} locale={locale}
             renderProviders={() => <SettingsModelsSection ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} showWritingRoutes={false} />}
             renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} />} />
         </div> : null}
         {active === 'zhihu' ? <div className="dsh-settings-section">
+          {pluginBackBar}
           <PluginSettingsContent contribution={props.zhihu} fallback={null} />
         </div> : null}
         {activeLink?.entry && props.renderSlot ? <PluginConfigurationPage key={activeLink.entry.id} ctx={props.ctx} renderSlot={props.renderSlot}
           entry={activeLink.entry} version={official.version} locale={locale} onClose={() => selectSection('plugins-installed')} /> : null}
-        {activeLegacy && props.renderSlot ? <OfficialSettingsSectionPage renderSlot={props.renderSlot}
-          sectionId={activeLegacy.id} version={legacy.version} sessionId={props.sessionId} locale={locale}
-          onClose={() => selectSection('plugins-installed')} /> : null}
+        {activeLegacy && props.renderSlot ? <div className="dsh-settings-section">
+          {pluginBackBar}
+          <OfficialSettingsSectionPage renderSlot={props.renderSlot}
+            sectionId={activeLegacy.id} version={legacy.version} sessionId={props.sessionId} locale={locale}
+            onClose={() => selectSection('plugins-installed')} />
+        </div> : null}
       </div>
     </div>
     <Drawer open={navDrawerOpen} side="left"

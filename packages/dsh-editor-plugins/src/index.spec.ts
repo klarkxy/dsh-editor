@@ -1,14 +1,12 @@
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, handlePluginsRpc, resolveProfileArtifactDir } from './index.ts'
 import { defaultPersistIo } from './persist.ts'
 import { RUNTIME_CATALOG_FILE } from './core.ts'
 import { PLUGIN_CATALOG_ENDPOINT, type PluginCatalog } from './contracts.ts'
 import type { PluginPaths } from './paths.ts'
-import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
 const signal = () => new AbortController().signal
 
@@ -157,25 +155,6 @@ describe('native manager host integration', () => {
   })
 })
 
-describe('plugin paths', () => {
-  it('uses the editor home and the booted profile name', () => {
-    const paths = resolvePluginPaths({ DSH_HOME: 'D:/editor-home' }, ['node', 'dsh', '--profile', 'dsh-editor'], 'D:/Users/x')
-    expect(paths.home).toBe('D:/editor-home')
-    expect(paths.profile).toBe('dsh-editor')
-    expect(paths.patchFile.replaceAll('\\', '/')).toBe('D:/editor-home/cordis.patch.yml')
-  })
-
-  it('prefers the profile that actually loaded this package', () => {
-    const home = join(tmpdir(), 'isolated-home')
-    const profileDir = join(home, 'profiles', 'dsh-editor')
-    const moduleUrl = pathToFileURL(join(profileDir, 'node_modules', 'dsh-editor-plugins', 'lib', 'index.js')).href
-    expect(profileDirFromPluginModule(moduleUrl)).toBe(profileDir)
-    const paths = resolvePluginPaths({}, ['node', 'dsh'], join(tmpdir(), 'other-user'), moduleUrl)
-    expect(paths.profileDir).toBe(profileDir)
-    expect(paths.home).toBe(home)
-  })
-})
-
 describe('local distribution discovery', () => {
   async function writeBundle(root: string, name: string, manifest: Record<string, unknown>) {
     const dir = join(root, ...name.split('/'))
@@ -186,16 +165,18 @@ describe('local distribution discovery', () => {
   async function localFixture() {
     const paths = await fixture()
     const artifacts = join(paths.profileDir, 'bundled-packages', 'node_modules')
+    await writeBundle(artifacts, 'dsh-editor-sample-alpha', { name: 'dsh-editor-sample-alpha', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'dsh-editor-sample-beta', { name: 'dsh-editor-sample-beta', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, 'dsh-editor-cards', { name: 'dsh-editor-cards', dsh: { bundle: { patch: './cordis.patch.yml' } } })
-    await writeBundle(artifacts, 'dsh-editor-memory-panel', { name: 'dsh-editor-memory-panel', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, '@klarkxy/dsh-web-search-manager', { name: '@klarkxy/dsh-web-search-manager', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, 'dsh-editor-shell', { name: 'dsh-editor-shell', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, 'dsh-editor-profile-config', { name: 'dsh-editor-profile-config', dsh: { bundle: { patch: './base.patch.yml' } } })
     await writeBundle(artifacts, '@klarkxy/dsh-memory', { name: '@klarkxy/dsh-memory', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
       nativeDependencies: {
+        'dsh-editor-sample-alpha': 'file:./bundled-packages/node_modules/dsh-editor-sample-alpha',
+        'dsh-editor-sample-beta': 'file:./bundled-packages/node_modules/dsh-editor-sample-beta',
         'dsh-editor-cards': 'file:./bundled-packages/node_modules/dsh-editor-cards',
-        'dsh-editor-memory-panel': 'file:./bundled-packages/node_modules/dsh-editor-memory-panel',
         '@klarkxy/dsh-web-search-manager': 'file:./bundled-packages/node_modules/@klarkxy/dsh-web-search-manager',
         'dsh-editor-shell': 'file:./bundled-packages/node_modules/dsh-editor-shell',
         'dsh-editor-profile-config': 'link:./profile-config',
@@ -203,10 +184,11 @@ describe('local distribution discovery', () => {
       },
     }))
     await writeFile(join(paths.profileDir, 'dsh-editor-catalog.json'), JSON.stringify({
-      bundles: ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-shell'],
+      bundles: ['dsh-editor-sample-alpha', 'dsh-editor-sample-beta', 'dsh-editor-cards', 'dsh-editor-shell'],
       entries: {
-        'editor-cards': { title: '人物卡与世界书', description: '卡片列表与引用', locked: false, packageName: 'dsh-editor-cards' },
-        'editor-memory-panel': { title: '写作记忆', description: '阅读与撤回写作记忆', locked: false, packageName: 'dsh-editor-memory-panel' },
+        'sample-alpha': { title: '示例资料甲', description: '示例列表与引用', locked: false, packageName: 'dsh-editor-sample-alpha' },
+        'sample-beta': { title: '示例资料乙', description: '阅读与撤回示例记录', locked: false, packageName: 'dsh-editor-sample-beta' },
+        'editor-cards': { title: '人物卡与世界书', description: '卡片列表与引用', locked: true, packageName: 'dsh-editor-cards' },
         'web-search-manager': { title: '网页搜索', description: '按需检索网页资料', locked: false, packageName: '@klarkxy/dsh-web-search-manager' },
         'editor-shell': { title: '写作界面', description: '三栏稿纸', locked: true, packageName: 'dsh-editor-shell' },
       },
@@ -223,28 +205,28 @@ describe('local distribution discovery', () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for empty local query') }
     const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { paths, fetch }))
-    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-cards', 'dsh-editor-memory-panel', '@klarkxy/dsh-web-search-manager'])
+    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-sample-alpha', 'dsh-editor-sample-beta', '@klarkxy/dsh-web-search-manager'])
     expect(listings[0]).toMatchObject({
       source: 'local',
-      title: '人物卡与世界书',
-      packageName: 'dsh-editor-cards',
-      description: '卡片列表与引用',
+      title: '示例资料甲',
+      packageName: 'dsh-editor-sample-alpha',
+      description: '示例列表与引用',
     })
     expect(String(listings[0]?.spec)).toMatch(/^link:/)
-    expect(String(listings[0]?.spec).replaceAll('\\', '/')).toContain('/bundled-packages/node_modules/dsh-editor-cards')
+    expect(String(listings[0]?.spec).replaceAll('\\', '/')).toContain('/bundled-packages/node_modules/dsh-editor-sample-alpha')
     expect(listings[0]).not.toHaveProperty('enabled')
     expect(listings[0]).not.toHaveProperty('installed')
-    expect(listings.some((row) => row.packageName === 'dsh-editor-shell' || row.packageName === 'dsh-editor-profile-config' || row.packageName === '@klarkxy/dsh-memory')).toBe(false)
+    expect(listings.some((row) => row.packageName === 'dsh-editor-cards' || row.packageName === 'dsh-editor-shell' || row.packageName === 'dsh-editor-profile-config' || row.packageName === '@klarkxy/dsh-memory')).toBe(false)
   })
 
   it('matches exact private names and ASCII keywords before unversioned npm listings', async () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for local name or keyword') }
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-cards' }, signal(), { paths, fetch }))).toEqual([
-      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards', title: '人物卡与世界书' }),
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-sample-alpha' }, signal(), { paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-sample-alpha', title: '示例资料甲' }),
     ])
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'cards' }, signal(), { paths, fetch }))).toEqual([
-      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards' }),
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'sample-alpha' }, signal(), { paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-sample-alpha' }),
     ])
     expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager' }, signal(), { paths, fetch }))).toEqual([
       expect.objectContaining({ source: 'local', packageName: '@klarkxy/dsh-web-search-manager', title: '网页搜索' }),
@@ -261,21 +243,21 @@ describe('local distribution discovery', () => {
 
   it('keeps local choices after the profile node_modules copy is gone', async () => {
     const paths = await localFixture()
-    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '人物卡' }, signal(), {
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '示例资料甲' }, signal(), {
       paths,
       fetch: async () => { throw new Error('network must not run when a local query matches') },
     }))
-    expect(listings).toEqual([expect.objectContaining({ packageName: 'dsh-editor-cards', title: '人物卡与世界书', source: 'local' })])
-    const byName = listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-memory-panel' }, signal(), { paths }))
-    expect(byName).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
+    expect(listings).toEqual([expect.objectContaining({ packageName: 'dsh-editor-sample-alpha', title: '示例资料甲', source: 'local' })])
+    const byName = listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-sample-beta' }, signal(), { paths }))
+    expect(byName).toEqual([expect.objectContaining({ packageName: 'dsh-editor-sample-beta' })])
     const byDescription = listingsOf(await handlePluginsRpc('marketplace.search', { query: '阅读与撤回' }, signal(), { paths }))
-    expect(byDescription).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
+    expect(byDescription).toEqual([expect.objectContaining({ packageName: 'dsh-editor-sample-beta' })])
   })
 
   it('refuses unsafe names, outside paths, identity spoof, and non-bundles', async () => {
     const paths = await fixture()
     const artifacts = join(paths.profileDir, 'bundled-packages', 'node_modules')
-    await writeBundle(artifacts, 'dsh-editor-cards', { name: 'dsh-editor-cards', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'dsh-editor-sample-alpha', { name: 'dsh-editor-sample-alpha', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, 'wrong-id', { name: 'other-name', dsh: { bundle: { patch: './cordis.patch.yml' } } })
     await writeBundle(artifacts, 'plain-lib', { name: 'plain-lib' })
     const outside = join(paths.profileDir, '..', 'escape-pkg')
@@ -286,7 +268,7 @@ describe('local distribution discovery', () => {
         'wrong-id': 'file:./bundled-packages/node_modules/wrong-id',
         'plain-lib': 'file:./bundled-packages/node_modules/plain-lib',
         'escape-pkg': 'file:../escape-pkg',
-        'dsh-editor-cards': 'file:../../../etc',
+        'dsh-editor-sample-alpha': 'file:../../../etc',
       },
     }))
     expect(resolveProfileArtifactDir(paths.profileDir, '../evil')).toBeUndefined()
@@ -294,7 +276,7 @@ describe('local distribution discovery', () => {
       paths,
       fetch: async () => { throw new Error('network must not run for empty local query') },
     }))
-    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-cards'])
+    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-sample-alpha'])
     expect(listings.some((row) => row.packageName === 'wrong-id' || row.packageName === 'plain-lib' || row.packageName === 'escape-pkg')).toBe(false)
     expect(outside.replaceAll('\\', '/')).toContain('escape-pkg')
   })

@@ -1,5 +1,5 @@
 import {
-  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode,
+  useCallback, useEffect, useMemo, useRef, useState, type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { EditorSelection } from '@codemirror/state'
@@ -12,7 +12,7 @@ import { useEditorCommands } from './editor-commands.ts'
 import { usePaperView, type PaperViewCallbacks } from './editor-view.ts'
 import { createDraftSyncTimer } from './draft-sync.ts'
 import { countWords } from '../../text-stats.ts'
-import { defaultFimPayload, defaultPatchPayload, extractText } from './completion-payload.ts'
+import { defaultFimPayload, extractText } from './completion-payload.ts'
 import type {
   EditorCoreDraft, EditorCoreDraftBackup, EditorCoreHandle, EditorCorePaperProjection,
   EditorCoreProps, EditorCoreRpc, EditorCoreStatus,
@@ -30,17 +30,13 @@ type RpcResult<T = unknown> =
 import {
   addCompletionCandidate,
   applyGhost,
-  applySelectionPatch,
   canApplyGhost,
   isDirty,
-  isSelectionCurrent,
   saveState,
-  selectionTicket,
   projectedPaperUnchanged,
   shouldRetainDraftAfterSave,
   type EditorDocument,
   type SaveState,
-  type SelectionTicket,
   type StoredDraft,
 } from './editor-state.ts'
 import { automaticCompletionReady, type CompletionPreference } from './completion-preference.ts'
@@ -50,16 +46,13 @@ import { normalizeTypography } from './typography.ts'
 export {
   addCompletionCandidate,
   applyGhost,
-  applySelectionPatch,
   canApplyGhost,
   documentKey,
   hasUnsavedChanges,
   isDirty,
-  isSelectionCurrent,
   isStaleWriteError,
   parseStoredDraft,
   saveState,
-  selectionTicket,
   shouldApplyRead,
   shouldRetainDraftAfterSave,
   projectedPaperUnchanged,
@@ -68,7 +61,6 @@ export {
   type EditorDocument,
   type EditorStatus,
   type SaveState,
-  type SelectionTicket,
   type StoredDraft,
 } from './editor-state.ts'
 
@@ -82,9 +74,9 @@ export {
 export type {
   EditorCoreRpc, EditorCoreHandle, EditorCoreDraftBackup, EditorCoreDraft,
   EditorCorePaperProjection, EditorCoreTypography, EditorCoreProps, EditorCoreStatus,
-  EditorCoreSlot, FimPayloadInput, PatchPayloadInput,
+  EditorCoreSlot, FimPayloadInput,
 } from './editor-contracts.ts'
-export { defaultFimPayload, defaultPatchPayload } from './completion-payload.ts'
+export { defaultFimPayload } from './completion-payload.ts'
 export { createDraftSyncTimer, type DraftSyncTimer } from './draft-sync.ts'
 
 const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
@@ -133,11 +125,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     maxGhostCandidates = 3,
     showGhostTip = false,
     buildFimPayload = defaultFimPayload,
-    buildPatchPayload = defaultPatchPayload,
     extractFimText = extractText,
-    extractPatchText = extractText,
-    enablePatch = false,
-    showProposalDiff = true,
     enableRewriteSelection = false,
     onRewriteSelection,
     paperProjection = IDENTITY_PROJECTION,
@@ -189,14 +177,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const [note, setNote] = useState('')
   const [revision, setRevision] = useState(0)
   const [selection, setSelection] = useState({ start: 0, end: 0 })
-  const [proposal, setProposal] = useState<{ ticket: SelectionTicket; text: string } | null>(null)
-  const proposalRef = useRef<HTMLDivElement | null>(null)
-  useLayoutEffect(() => {
-    if (!proposal) return
-    const reduce = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches
-    proposalRef.current?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
-  }, [proposal])
-  const [patching, setPatching] = useState(false)
   const [userEditRevision, setUserEditRevision] = useState(0)
   const [error, setError] = useState('')
   const [hasSelection, setHasSelection] = useState(false)
@@ -207,10 +187,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   // Cursor position (paper coordinates) to apply after the next external
-  // doc sync; set by acceptGhost / acceptPatch before they call setText.
+  // doc sync; set by acceptGhost before it calls setText.
   const pendingCursorRef = useRef<number | null>(null)
   const fimAbort = useRef<AbortController | null>(null)
-  const patchAbort = useRef<AbortController | null>(null)
   const saving = useRef(false)
   const lastAutomaticCompletion = useRef(0)
   /* 恢复出来的草稿真正基于的磁盘版本（get 恢复或采纳备份时设置）。
@@ -243,14 +222,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const ghostAtRef = useRef(0)
   const conflictRef = useRef(false)
   const completionEnabledRef = useRef(completionEnabled)
-  const enablePatchRef = useRef(enablePatch)
   docRef.current = doc
   revisionRef.current = revision
   ghostCandidatesRef.current = ghostCandidates
   ghostAtRef.current = ghostAt
   conflictRef.current = conflict
   completionEnabledRef.current = completionEnabled
-  enablePatchRef.current = enablePatch
 
   const isDocumentReady = useCallback(() => {
     const current = docRef.current
@@ -258,9 +235,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return Boolean(viewRef.current && current && current.sessionId === expected.sessionId && current.path === expected.path
       && loadedGenerationRef.current === documentGenerationRef.current)
   }, [])
-  const isGenerating = useCallback(() => Boolean(
-    (fimAbort.current && !fimAbort.current.signal.aborted) || (patchAbort.current && !patchAbort.current.signal.aborted),
-  ), [])
+  const isGenerating = useCallback(() => Boolean(fimAbort.current && !fimAbort.current.signal.aborted), [])
   const documentReady = Boolean(doc && doc.sessionId === sessionId && doc.path === path
     && loadedGenerationRef.current === documentGenerationRef.current)
   const setStatus = useCallback((status: EditorCoreStatus) => onStatusChange?.(status), [onStatusChange])
@@ -298,18 +273,15 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
      text state 交给 scheduleTextFlush 做尾部去抖，避免每次击键全量穿透 React。 */
   const setText = useCallback((next: string, deferState = false) => {
     if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
-    if (loadingFim || patching) report('文稿已变化，已停止此前的建议。')
+    if (loadingFim) report('文稿已变化，已停止此前的建议。')
     fimAbort.current?.abort()
-    patchAbort.current?.abort()
     setLoadingFim(false)
-    setPatching(false)
     textRef.current = next
     revisionRef.current += 1
     if (!deferState) setTextState(next)
     setRevision(revisionRef.current)
     clearGhost()
-    setProposal(null)
-  }, [loadingFim, patching, report, clearGhost])
+  }, [loadingFim, report, clearGhost])
 
   const scheduleTextFlush = useCallback(() => {
     if (textFlushTimer.current != null) globalThis.clearTimeout(textFlushTimer.current)
@@ -329,10 +301,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     cancelPendingDraftSync()
     if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
     fimAbort.current?.abort()
-    patchAbort.current?.abort()
     setLoadingFim(false)
-    setPatching(false)
-    setProposal(null)
     clearGhost()
     setConflict(false)
     setSelection({ start: 0, end: 0 })
@@ -416,7 +385,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       documentGenerationRef.current += 1
       cancelPendingDraftSync()
       fimAbort.current?.abort()
-      patchAbort.current?.abort()
     }
   }, [path, sessionId, cwd, externalRevision, rpc, draft, report, reportError, clearGhost, cancelPendingDraftSync])
 
@@ -549,7 +517,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setConflict(false)
     draftBaseRef.current = null
     setHasSelection(false)
-    setProposal(null)
     clearGhost()
     setError('')
     report('已放弃本地修改。')
@@ -595,8 +562,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!append && !main.empty) { report('请先把光标放到要补全的位置。'); return }
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
     fimAbort.current?.abort()
-    patchAbort.current?.abort()
-    setProposal(null)
     const requestDoc = doc
     const requestRevision = revisionRef.current
     const requestGeneration = documentGenerationRef.current
@@ -653,8 +618,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       focused: view.hasFocus,
       collapsedSelection: selection.start === selection.end,
       prefix: textRef.current.slice(0, at),
-      busy: loadingFim || patching,
-      blocked: conflict || Boolean(ghost) || Boolean(proposal),
+      atEnd: at === textRef.current.length,
+      busy: loadingFim,
+      blocked: conflict || Boolean(ghost),
     })
     if (!ready(cursor)) return
     const timer = globalThis.setTimeout(() => {
@@ -666,12 +632,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       void complete()
     }, fimDelayMs)
     return () => globalThis.clearTimeout(timer)
-  }, [completionEnabled, completionPreference, automaticCompletionEligible, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
+  }, [completionEnabled, completionPreference, automaticCompletionEligible, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
   const { liveTarget, captureTarget, readCommandState, replaceSelection, restoreTarget } = useEditorCommands({
     viewRef, docRef, textRef, revisionRef, documentGenerationRef, paperOffsetRef,
     paperProjection, selection, isDocumentReady, isGenerating,
-    conflictRef, completionEnabledRef, enablePatchRef,
+    conflictRef, completionEnabledRef,
   })
 
   /* 章纲/章末小结等隐藏文件头的统一写入通道：只许改稿纸之外的内容，复用与正文完全相同的
@@ -694,55 +660,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setText(next)
     return save()
   }, [liveTarget, paperProjection, setText, save, report])
-
-  const requestPatch = useCallback(async (instruction?: string, target?: EditorTargetSnapshot) => {
-    if (!doc || !isDocumentReady() || docRef.current !== doc || isGenerating() || viewRef.current?.composing) return
-    if (!completionEnabled) { report('写作补全未启用。'); return }
-    if (!enablePatch) return
-    if (conflict) { report('草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return }
-    const live = liveTarget()
-    if (!live) return
-    if (target && !isEditorTargetCurrent(target, live)) {
-      report('所选内容已变化，过期的改写已取消。')
-      return
-    }
-    const main = viewRef.current!.state.selection.main
-    const range = target ?? { start: main.from + paperOffsetRef.current, end: main.to + paperOffsetRef.current }
-    const requestText = textRef.current
-    const requestGeneration = documentGenerationRef.current
-    const ticket = selectionTicket(doc, requestText, revisionRef.current, range.start, range.end)
-    if (!ticket) { report('请先选择需要改写的文字。'); return }
-    fimAbort.current?.abort()
-    clearGhost()
-    patchAbort.current?.abort()
-    const controller = new AbortController()
-    patchAbort.current = controller
-    setPatching(true)
-    report('正在生成选段修改…')
-    const result = await rpc.call('/manuscript', 'patch.complete', buildPatchPayload({
-      sessionId: ticket.sessionId,
-      path: ticket.path,
-      selectedText: ticket.selectedText,
-      before: requestText.slice(Math.max(0, ticket.start - 4000), ticket.start),
-      after: requestText.slice(ticket.end, ticket.end + 4000),
-      authorPreferences,
-      chapterContext,
-      instruction,
-    }), controller.signal).catch((error: unknown) => ({
-      ok: false,
-      error: { message: error instanceof Error ? error.message : String(error) },
-    })) as RpcResult<{ text?: string }>
-    if (patchAbort.current === controller) {
-      patchAbort.current = null
-      setPatching(false)
-    }
-    if (controller.signal.aborted || !isDocumentReady() || documentGenerationRef.current !== requestGeneration || !isSelectionCurrent(ticket, docRef.current, textRef.current, revisionRef.current)) return
-    if (!result.ok) { reportError(result.error.message); return }
-    const replacement = extractPatchText(result.value).trim()
-    if (!replacement) { report('模型未返回可用改写。'); return }
-    setProposal({ ticket, text: replacement })
-    report('修改建议已就绪。')
-  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, chapterContext, extractPatchText, report, reportError, clearGhost, completionEnabled, enablePatch, conflict, liveTarget])
 
   // Imperative handle via callback ref.
   useEffect(() => {
@@ -767,13 +684,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at)
       },
       clearGhost: () => { clearGhost(); setGhostAt(0) },
-      setProposal: (next) => setProposal(next),
       revealRange: (start, end) => {
         const view = viewRef.current
         if (!view) return
         revealEditorRange(view, paperOffsetRef.current, start, end)
       },
-      requestRewrite: (instruction, target) => { void requestPatch(instruction, target) },
       focus: () => { viewRef.current?.focus() },
       getFocusTarget: () => viewRef.current?.contentDOM ?? null,
       isComposing: () => Boolean(viewRef.current?.composing),
@@ -846,7 +761,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     }
     onHandle(handle)
     return () => onHandle(null)
-  }, [onHandle, save, saveMetadataText, discard, cancelPendingDraftSync, clearGhost, requestPatch, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
+  }, [onHandle, save, saveMetadataText, discard, cancelPendingDraftSync, clearGhost, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
 
   const acceptGhost = useCallback(() => {
     const source = ghostSourceRef.current
@@ -859,33 +774,16 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
   }, [state, ghost, ghostAt, text, paperOffset, setText, clearGhost, report])
 
-  const acceptPatch = useCallback(() => {
-    if (!isDocumentReady() || !proposal || !isSelectionCurrent(proposal.ticket, docRef.current, textRef.current, revisionRef.current)) {
-      setProposal(null)
-      report('所选内容已变化，过期的建议已丢弃。')
-      return
-    }
-    const cursor = proposal.ticket.start + proposal.text.length
-    pendingCursorRef.current = Math.max(0, cursor - paperOffset)
-    setText(applySelectionPatch(textRef.current, proposal.ticket, proposal.text))
-    setProposal(null)
-    report('修改已加入草稿。')
-    globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
-  }, [proposal, doc, text, revision, paperOffset, setText, report])
-
   // Escape: cancel the in-flight suggestion/proposal. Returns whether the
   // keypress was consumed so the CM keymap can fall through when idle.
   const cancelSuggestions = useCallback((): boolean => {
-    if (!(loadingFim || patching || ghost || proposal)) return false
+    if (!(loadingFim || ghost)) return false
     fimAbort.current?.abort()
-    patchAbort.current?.abort()
     setLoadingFim(false)
-    setPatching(false)
     clearGhost()
-    setProposal(null)
     report('已放弃当前建议。')
     return true
-  }, [loadingFim, patching, ghost, proposal, clearGhost, report])
+  }, [loadingFim, ghost, clearGhost, report])
 
   /* ── CodeMirror view lifecycle ───────────────────────────────────── */
 
@@ -896,12 +794,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     flushText: () => {},
     onSelection: (_start: number, _end: number) => {},
     acceptGhost: () => {},
-    acceptPatch: () => {},
     complete: () => {},
     cancelSuggestions: (): boolean => false,
     save: () => {},
     hasGhost: (): boolean => false,
-    hasProposal: (): boolean => false,
     hasCompletionActivity: (): boolean => false,
     onContextMenu: (_event: EditorContextMenuEvent) => {},
     hasContextMenu: (): boolean => false,
@@ -919,13 +815,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       setHasSelection(start !== end)
     },
     acceptGhost,
-    acceptPatch,
     complete: () => { void complete() },
     cancelSuggestions,
     save: () => { void save() },
     hasGhost: () => ghostCandidatesRef.current.length > 0,
-    hasProposal: () => proposal !== null,
-    hasCompletionActivity: () => loadingFim || patching || ghostCandidatesRef.current.length > 0 || proposal !== null,
+    hasCompletionActivity: () => loadingFim || ghostCandidatesRef.current.length > 0,
     onContextMenu: (event) => { onEditorContextMenu?.(event) },
     hasContextMenu: () => Boolean(onEditorContextMenu),
     canEdit: isDocumentReady,
@@ -969,8 +863,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     headerExtras={headerExtras}
     footerExtras={footerExtras}
     showGhostTip={showGhostTip}
-    enablePatch={enablePatch}
-    showProposalDiff={showProposalDiff}
     onReloadDisk={onReloadDisk}
     onSaveConflictCopy={onSaveConflictCopy}
     typography={typography}
@@ -982,38 +874,27 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     wordCount={wordCount}
     state={state}
     loadingFim={loadingFim}
-    patching={patching}
     conflict={conflict}
     error={error}
     note={note}
     ghost={ghost}
     ghostCandidates={ghostCandidates}
     ghostIndex={ghostIndex}
-    proposal={proposal}
     backups={backups}
-    proposalRef={proposalRef}
     containerRef={containerRef}
     viewRef={viewRef}
     save={save}
     discard={discard}
     stopCompletion={stopCompletion}
     complete={complete}
-    requestPatch={requestPatch}
     acceptGhost={acceptGhost}
-    acceptPatch={acceptPatch}
     clearGhost={clearGhost}
     report={report}
     adoptBackup={adoptBackup}
     setGhostIndex={setGhostIndex}
-    setProposal={setProposal}
     paperHeader={paperHeader}
     conflictNotice={conflictNotice}
     hostButton={hostButton}
-    stopPatch={() => {
-      patchAbort.current?.abort()
-      setPatching(false)
-      report('已停止改写。')
-    }}
   />
     {paperHeader && paperHeaderHost ? createPortal(paperHeader, paperHeaderHost) : null}
   </>

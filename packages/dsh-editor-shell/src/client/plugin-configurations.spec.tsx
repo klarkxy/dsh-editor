@@ -121,6 +121,8 @@ describe('official plugin configuration adapter', () => {
     const entry = { id: 'plugins.item:item-a', label: 'Item A', slot: 'plugins.item', namespace: 'item-a' }
     const result = page({ entry, namespaces: ['item-a'], renderSlot, revision: 19, locale: 'en' })
     expect(result.html).toContain('Item A')
+    expect(result.html).toContain('data-testid="plugin-detail-back"')
+    expect(result.html).toContain('返回已安装')
     expect(result.html).toContain('data-dsh-plugin-surface')
     expect(result.ctx.configForms.get).toHaveBeenCalledExactlyOnceWith('item-a')
     const [slot, owner, opts] = renderSlot.mock.calls[0]!
@@ -403,18 +405,49 @@ function countIn(html: string, id: typeof SECTION_IDS[number]): string | undefin
 describe('plugin catalog', () => {
   it('folds runtime and developer components while keeping author controls and search results reachable', () => {
     const completion = { key: 'entry:manuscript-assist', entryId: 'manuscript-assist', title: '补全服务', description: '行内补全',
-      packageName: 'dsh-manuscript', badges: [], enabled: true, action: 'switch' as const }
+      packageName: 'dsh-manuscript', badges: ['required'], action: 'detail' as const }
+    const cards = { key: 'entry:editor-cards', entryId: 'editor-cards', title: '人物卡与世界书', description: '在文件树中定位人物卡与世界书',
+      packageName: 'dsh-editor-cards', badges: ['required'], action: 'detail' as const }
+    const memory = { key: 'entry:editor-memory-panel', entryId: 'editor-memory-panel', title: '记忆维护', description: '查看维护历史',
+      packageName: 'dsh-editor-memory-panel', badges: ['required'], action: 'detail' as const }
+    const overview = { key: 'entry:editor-overview-panel', entryId: 'editor-overview-panel', title: '文档概览', description: '字数分布与写作曲线',
+      packageName: 'dsh-editor-overview-panel', badges: ['required'], action: 'detail' as const }
     const runtime = { key: 'entry:runtime', title: '运行时', description: 'Internal runtime', badges: ['required'], action: 'detail' as const }
     expect(advancedCatalogCard(completion)).toBe(false)
+    expect(advancedCatalogCard(cards)).toBe(false)
+    expect(advancedCatalogCard(memory)).toBe(false)
+    expect(advancedCatalogCard(overview)).toBe(false)
     expect(advancedCatalogCard(runtime)).toBe(true)
-    const html = catalog({ sections: [{ id: 'builtin', items: [completion, runtime] }] })
+    const html = catalog({ sections: [{ id: 'builtin', items: [cards, memory, overview, completion, runtime] }] })
     const advancedAt = html.indexOf('<details class="plugins-catalog-advanced"')
     expect(advancedAt).toBeGreaterThan(-1)
-    expect(html.indexOf('plugins-catalog-toggle-entry:manuscript-assist')).toBeLessThan(advancedAt)
+    for (const id of ['editor-cards', 'editor-memory-panel', 'editor-overview-panel', 'manuscript-assist']) {
+      expect(html.indexOf(`plugins-catalog-row-entry:${id}`)).toBeLessThan(advancedAt)
+      expect(html).not.toContain(`plugins-catalog-toggle-entry:${id}`)
+    }
     expect(html.indexOf('plugins-catalog-row-entry:runtime')).toBeGreaterThan(advancedAt)
     expect(html).not.toContain('<details class="plugins-catalog-advanced" open=""')
     expect(catalog({ sections: [{ id: 'builtin', items: [runtime] }], query: 'runtime' }))
       .toContain('<details class="plugins-catalog-advanced" open=""')
+  })
+
+  it('keeps only writing-relevant official plugins at top level and folds non-writing official plugins', () => {
+    const webSearch = { key: 'entry:plugins.item:web-search', entryId: 'web-search', title: '网页搜索', description: '打开查看配置。', badges: [], action: 'config' as const }
+    const voiceInput = { key: 'bundle:@deepseek-ai/dsh-experimental-voice-input-bundle', packageName: '@deepseek-ai/dsh-experimental-voice-input-bundle', title: '语音输入', description: '本地语音转写', badges: ['experimental'], enabled: true, action: 'switch' as const }
+    const agentTeam = { key: 'bundle:@deepseek-ai/dsh-experimental-agent-team-profile', packageName: '@deepseek-ai/dsh-experimental-agent-team-profile', title: '智能体团队', description: '团队任务看板', badges: ['experimental'], enabled: false, action: 'switch' as const }
+    const subagent = { key: 'entry:plugins.item:subagent', entryId: 'subagent', title: '子智能体', description: '打开查看配置。', badges: [], action: 'config' as const }
+    expect(advancedCatalogCard(webSearch, 'official')).toBe(false)
+    expect(advancedCatalogCard(voiceInput, 'official')).toBe(false)
+    expect(advancedCatalogCard(agentTeam, 'official')).toBe(true)
+    expect(advancedCatalogCard(subagent, 'official')).toBe(true)
+    const html = catalog({ sections: [{ id: 'official', items: [voiceInput, agentTeam, subagent, webSearch] }] })
+    const foldedAt = html.indexOf('<details class="plugins-catalog-advanced"')
+    expect(foldedAt).toBeGreaterThan(-1)
+    expect(html).toContain('其他官方插件 (2)')
+    expect(html.indexOf('plugins-catalog-row-bundle:@deepseek-ai/dsh-experimental-voice-input-bundle')).toBeLessThan(foldedAt)
+    expect(html.indexOf('plugins-catalog-row-entry:plugins.item:web-search')).toBeLessThan(foldedAt)
+    expect(html.indexOf('plugins-catalog-row-bundle:@deepseek-ai/dsh-experimental-agent-team-profile')).toBeGreaterThan(foldedAt)
+    expect(html.indexOf('plugins-catalog-row-entry:plugins.item:subagent')).toBeGreaterThan(foldedAt)
   })
   it('renders the three sections in the fixed order with their real counts', () => {
     const html = catalog()

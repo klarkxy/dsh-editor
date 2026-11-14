@@ -58,7 +58,10 @@ function rpcHandler(host: ManuscriptHost) {
 
 describe('private editor workbench Host RPC', () => {
   it('does not mount a global tool guard', () => {
-    expect(inject).toEqual(['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'])
+    expect(inject).toEqual([
+      'connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer',
+      'sessionQuery', 'agents', 'llm', 'tokenMeter', 'settings', 'editorWritingPreferences',
+    ])
     const { host } = fixture()
     const guard = vi.fn()
     const effectNames: string[] = []

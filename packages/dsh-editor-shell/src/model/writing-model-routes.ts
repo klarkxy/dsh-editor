@@ -12,7 +12,6 @@ const ROUTE_SEP = '\u001f'
 export const WRITING_PURPOSES = [
   { id: 'chat', field: 'chatModel', label: 'models.chatModel' },
   { id: 'manuscript.completion', field: 'completionModel', label: 'models.completionModel' },
-  { id: 'manuscript.rewrite', field: 'rewriteModel', label: 'models.rewriteModel' },
 ] as const
 export type WritingModelField = typeof WRITING_PURPOSES[number]['field']
 

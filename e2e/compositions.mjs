@@ -29,9 +29,9 @@ for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) 
   }
 }
 
-resolveDshInstallation('0.2.1-rc.5')
+resolveDshInstallation('0.2.2-rc.1')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.1-rc.5')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.2-rc.1')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 let browser
@@ -223,8 +223,8 @@ try {
   if (!sameJson(publicNames,[])) throw new Error(item.id+' default public plugin roster mismatch: '+publicNames.join(','));
   if (!Object.values(item.files.nativeDependencies).every(spec=>typeof spec==='string'&&spec.startsWith('link:'))) throw new Error(item.id+' native dependency baseline is not linked to bundled artifacts');
  }
- if(shared.features.includes('cards') || shared.features.includes('memory-panel'))throw new Error('on-demand builtin panels must not be forced on');
- for(const [name,id] of [['dsh-editor-cards','editor-cards'],['dsh-editor-memory-panel','editor-memory-panel']]) { if(!shared.packages.includes(name) || !shared.disabledEntries.includes(id))throw new Error('missing default-off builtin panel '+name) }
+ if(!shared.features.includes('cards') || !shared.features.includes('memory-panel'))throw new Error('core builtin panels must be enabled by default');
+ for(const [name,id] of [['dsh-editor-cards','editor-cards'],['dsh-editor-memory-panel','editor-memory-panel']]) { if(!shared.packages.includes(name) || shared.disabledEntries.includes(id))throw new Error('core builtin panel must stay enabled: '+name) }
  evidence.aliases=aliases.map((item)=>({id:item.id,label:item.label}));
  evidence.capability=shared;
  evidence.checks.push('desktop/basic/smart/full materialize to one capability set except id/label');

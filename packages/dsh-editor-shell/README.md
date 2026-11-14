@@ -11,7 +11,7 @@
 - 历史版本对话框：列出快照与变更清单，确认后回滚（src/client/history-dialog.tsx）。
 - 导入对话框：从另一部作品导入正文，先探测再确认，支持中断后的恢复与清理（src/client/import-dialog.tsx、import-flow.ts）。
 - 固定分栏：把一份文档钉在稿纸旁只读对照，随树与内容版本刷新（src/client/pinned-pane.tsx）。
-- 改写预设栏：选区上方提供内置改写预设与自定义指令入口（src/client/rewrite-presets-bar.tsx）。
+- 选段改写：选区旁的浮层提供内置改写预设与自定义指令（src/client/editor.tsx）。
 - 设置页：通用设置、模型、助手、写作、用量、插件、知乎资料、关于 8 个分类（插件与知乎资料不可用时隐藏，分类名以 src/i18n/messages.zh.ts 为准）。
 - 模型设置的后台刷新保留正在编辑的名称、模型声明与 API key 输入；原设置 revision 已变化时显示冲突并阻止旧草稿写入。对话模型与思考档位以 Host 目录为准，打开选择器不补写模型能力或猜测默认强度。
 - 搭档对话：一部作品一个搭档，没有会话列表与新建按钮。打开作品时按 `.dsh-editor/bot.json` 接回当前段，没有时以作品的文件会话为第一段；空作品显示固定开场，已有内容的作品首次接入时发一次隐藏的作品概况提示。之前的段经 workbench `bot.history` 冷读，只读拼在当前段之上，段间留「对话已整理」标记与回顾。换段（闲置超过缓存有效期、提示词输入变化、上下文超过约 70%、模型收尾、换模型）只在两轮之间、无待审批与待处理提案时进行（src/client/bot-conversation.ts、src/model/bot-conversation.ts）。设计见[搭档对话设计](../../docs/bot-conversation.md)。

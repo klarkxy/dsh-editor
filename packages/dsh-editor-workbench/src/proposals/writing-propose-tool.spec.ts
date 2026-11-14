@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { WRITING_PROPOSE_TOOL_NAME } from 'dsh-manuscript/host-api'
 import { createWritingProposeTool } from '../proposals/writing-propose-tool.ts'
@@ -70,10 +69,6 @@ describe('writing_propose preview-only tool', () => {
     expect(schema).toMatch(/even if empty/)
     expect(schema).toMatch(/oldText ''/)
     expect(schema).not.toMatch(/May also fill an existing file that is still empty/)
-    const source = readFileSync(new URL('./writing-propose-tool.ts', import.meta.url), 'utf8')
-    expect(source).toContain('Create is exclusive and never fills or overwrites an existing file, even if empty')
-    expect(source).toContain("Use edit with oldText \\'\\' to fill an existing empty file.")
-    expect(source).not.toContain('May also fill an existing file that is still empty')
   })
 
   it('requires generation baselines in schema and rejects missing targetVersion on edit', async () => {

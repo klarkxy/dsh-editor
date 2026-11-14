@@ -36,9 +36,9 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
   }
 }
 
-resolveDshInstallation('0.2.1-rc.5')
+resolveDshInstallation('0.2.2-rc.1')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.1-rc.5')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.2-rc.1')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 const failures = []
@@ -629,20 +629,30 @@ try {
   await page.getByRole('button', { name: '打开此目录', exact: true }).click()
   await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 
-  // Remove from recents via the new row's context/menu affordance.
+  // The visible row action removes only the recent entry, after confirmation.
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator(S.homeStage).waitFor({ state: 'visible' })
   const removeRow = page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).first()
-  await removeRow.getByRole('button', { name: '更多操作' }).click()
-  await page.getByRole('menuitem', { name: '从最近移除' }).click()
+  await removeRow.locator(S.homeRemoveRecent).click()
   const removeConfirm = page.getByRole('alertdialog')
   await removeConfirm.waitFor({ state: 'visible', timeout: 10_000 })
+  await page.keyboard.press('Escape')
+  await removeConfirm.waitFor({ state: 'hidden' })
+  if (!(await removeRow.isVisible())) failures.push('cancelling removal hid the recent work')
+  await waitFor(
+    () => removeRow.locator(S.homeRemoveRecent).evaluate((button) => button === document.activeElement),
+    'focus returns to the recent work removal button',
+  )
+  await removeRow.locator(S.homeRemoveRecent).click()
+  await removeConfirm.waitFor({ state: 'visible' })
   await removeConfirm.getByRole('button', { name: '从最近移除', exact: true }).click()
   await page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).waitFor({ state: 'hidden', timeout: 15_000 })
   if (await page.locator(S.homeRow).filter({ hasText: 'core-loop-workspace' }).count()) {
     failures.push('removed work still listed in home recents')
   }
+  const retainedChapter = await readFile(resolve(movedWorkspace, '正文', '001.md'), 'utf8')
+  if (!retainedChapter.includes('核心闭环保存验证')) failures.push('removing the recent entry changed the saved manuscript')
 
   // Reopen via 打开作品 → manual path fallback, proving the entry still lands
   // on a work moved + removed from recents. Then final screenshot.

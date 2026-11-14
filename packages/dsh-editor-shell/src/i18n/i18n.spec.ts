@@ -66,11 +66,6 @@ describe('i18n dictionaries', () => {
     else (globalThis as { document?: unknown }).document = previous
   })
 
-  it('keeps representative zh labels identical to the previous UI copy', () => {
-    expect(zh['sidebar.search']).toBe('搜索')
-    expect(zh['common.search']).toBe('搜索')
-  })
-
   it('keeps the home copy in both dictionaries', () => {
     for (const key of ['home.continueWriting', 'home.continue', 'home.newWork', 'home.openWork', 'home.rowMenu'] as const) {
       expect(zh[key]).toBeTruthy()

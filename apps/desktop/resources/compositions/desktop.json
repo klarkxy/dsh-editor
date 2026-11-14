@@ -4,10 +4,8 @@
   "features": [
     "assistant",
     "completion",
-    "overview-panel"
-  ],
-  "preinstalled": [
-    "dsh-editor-cards",
-    "dsh-editor-memory-panel"
+    "overview-panel",
+    "cards",
+    "memory-panel"
   ]
 }

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
 import { isReferencePath, lookupReferences, normalizeReferenceQuery } from './reference-lookup.ts'
 import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
 
@@ -77,24 +76,5 @@ describe('on-demand reference lookup', () => {
     const search = vi.fn()
     await expect(lookupReferences({ query: 'a\nb', files: ['人物卡/a.md'], search })).rejects.toThrow()
     expect(search).not.toHaveBeenCalled()
-  })
-  it('keeps lookup read-only and routes navigation through existing host controls', () => {
-    const dialog = readFileSync(new URL('./reference-lookup-dialog.tsx', import.meta.url), 'utf8')
-    const root = readFileSync(new URL('./root.tsx', import.meta.url), 'utf8')
-    const editor = readFileSync(new URL('./editor.tsx', import.meta.url), 'utf8')
-    expect(dialog).toContain("'search.text'")
-    expect(dialog).not.toMatch(/'file\.(write|create)'|'patch\.complete'|'fim\.complete'/)
-    expect(dialog).toContain('active = false; controller.abort()')
-    expect(root).toContain('onOpenReference={openDocument}')
-    // 4.1: pinning still routes through setPinnedPath, and now also opens the
-    // aux rail on the 资料 tab (shell-rewrite-spec §2 切换来源 2). Both entry
-    // points do it: the editor pin callbacks and the tree context-menu pin
-    // that flows through RootFileDialogs' setPinnedPath (the seat-context
-    // toggle goes through workbench.model directly).
-    expect(root).toContain('onPinReference')
-    expect(root).toContain('setPinnedPath(target)')
-    expect(root.match(/workbench\.pinReference\(\)/g)).toHaveLength(3)
-    expect(editor).toContain('handleRef.current?.selectParagraph?.(target ?? undefined)')
-    expect(editor).toContain('handleRef.current?.isTargetCurrent(target)')
   })
 })

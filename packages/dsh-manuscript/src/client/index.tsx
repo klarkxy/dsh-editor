@@ -478,7 +478,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             role="alert"
             style={{ padding: '6px 8px', fontSize: 'var(--font-size-1)', display: 'flex', gap: 8, alignItems: 'center' }}>
             <span>
-              AI 补全能力不可用，补全与选段改写已暂停。
+              AI 补全能力不可用，补全已暂停。
             </span>
             <SeatButton type="button" onClick={() => { void loadCapability() }}>
               重试

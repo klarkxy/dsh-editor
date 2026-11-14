@@ -1,5 +1,7 @@
 # DSH 0.2.0 升级与能力审计
 
+历史留档：本轮升级已由后续版本取代，记录仅供追溯；当前审计见 docs/dsh-0.2.2-upgrade.md。
+
 日期：2026-09-29。目标版本 **0.2.0-rc.2**，仍不是无后缀稳定版。上游依据为官方发布 [dsh-v0.2.0-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1) 与 [dsh-v0.2.0-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)，以及对比区间 [dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.2](https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.2)。前一轮升级（0.1.7-alpha.1 → 0.1.7-rc.2）的审计见 docs/dsh-0.1.7-upgrade.md。
 
 ## 升级范围

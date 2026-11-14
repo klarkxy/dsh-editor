@@ -251,8 +251,8 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
     if (isExperimental(entry.packageName)) continue
     if (RETIRED_PLUGIN_PACKAGES.has(entry.packageName)) continue
     const plugin = plugins.find((row) => pluginPatchId(row) === id)
-    const locked = entry.locked || readOnlyReason(plugin)
     const required = CORE_PLUGIN_ENTRY_IDS.has(id) || REQUIRED_CORE_BUNDLES.has(entry.packageName)
+    const locked = required || entry.locked || readOnlyReason(plugin)
     const enabled = !locked && typeof plugin?.enabled === 'boolean' ? plugin.enabled : undefined
     if (FOUNDATION_ENTRY_IDS.has(id) && enabled !== false) continue
     const card: PluginCatalogCard = {
@@ -283,8 +283,8 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
     // No product name means an implementation dependency (runtime plumbing,
     // profile config, shared libraries): it stays out of the author-facing list.
     if (!copy) continue
-    const locked = readOnlyReason(row)
     const required = REQUIRED_CORE_BUNDLES.has(name)
+    const locked = required || readOnlyReason(row)
     const enabled = !locked && typeof row?.enabled === 'boolean' ? row.enabled : undefined
     const card: PluginCatalogCard = {
       key: `bundle:${name}`,

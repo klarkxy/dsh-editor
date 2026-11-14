@@ -2,17 +2,16 @@ import type { Dispatch, MutableRefObject, ReactNode, RefObject, SetStateAction, 
 import { SeatButton } from 'dsh-editor-seats/seat-button'
 import { surfaceTokenVars } from 'dsh-editor-seats/tokens'
 import type { EditorView } from '@codemirror/view'
-import { SelectionDiff } from './selection-diff.tsx'
 import { normalizeTypography, typographyCssVariables } from './typography.ts'
 import type { EditorCoreDraftBackup, EditorCoreProps, EditorCoreSlot } from './editor-contracts.ts'
-import type { EditorDocument, SaveState, SelectionTicket } from './editor-state.ts'
+import type { EditorDocument, SaveState } from './editor-state.ts'
 import { isDirty } from './editor-state.ts'
 
 type EditorChromeProps = Pick<EditorCoreProps,
   'path' | 'paperClassName' | 'paperStyle' | 'compactControls' | 'enableRewriteSelection' |
   'completionEnabled' | 'onRewriteSelection' | 'testIdPrefix' | 'headerExtras' | 'footerExtras' |
   'paperHeader' | 'conflictNotice' | 'hostButton' |
-  'showGhostTip' | 'enablePatch' | 'showProposalDiff' | 'onReloadDisk' | 'onSaveConflictCopy' | 'typography'
+  'showGhostTip' | 'onReloadDisk' | 'onSaveConflictCopy' | 'typography'
 > & {
   slotClassName: NonNullable<EditorCoreProps['slotClassName']>
   slotStyle: NonNullable<EditorCoreProps['slotStyle']>
@@ -24,40 +23,28 @@ type EditorChromeProps = Pick<EditorCoreProps,
   wordCount: number
   state: SaveState
   loadingFim: boolean
-  patching: boolean
   conflict: boolean
   error: string
   note: string
   ghost: string
   ghostCandidates: string[]
   ghostIndex: number
-  proposal: { ticket: SelectionTicket; text: string } | null
   backups: EditorCoreDraftBackup[]
-  proposalRef: RefObject<HTMLDivElement>
   containerRef: RefObject<HTMLDivElement>
   viewRef: MutableRefObject<EditorView | null>
   save(): Promise<boolean>
   discard(): void
   stopCompletion(): void
-  stopPatch(): void
   complete(append?: boolean): Promise<void>
-  requestPatch(): Promise<void>
   acceptGhost(): void
-  acceptPatch(): void
   clearGhost(): void
   report(message: string): void
   adoptBackup(backup: EditorCoreDraftBackup): void
   setGhostIndex: Dispatch<SetStateAction<number>>
-  setProposal: Dispatch<SetStateAction<{ ticket: SelectionTicket; text: string } | null>>
 }
 
 /* editor-core の inline default スタイルはホスト可搬性のため残しつつ、
    見た目リテラルはモジュール定数に集約する（クラス/スロット上書きが常に優先）。 */
-const PROPOSAL_STYLE: CSSProperties = {
-  padding: 12,
-  border: '1px solid var(--s-line-strong)',
-  borderRadius: 'var(--radius-3)',
-}
 const CONFLICT_STYLE: CSSProperties = {
   padding: '6px 8px',
   borderTop: '1px solid var(--s-line-strong)',
@@ -104,21 +91,21 @@ export function EditorChrome({
   path, paperClassName, paperStyle, slotClassName, slotStyle, compactControls,
   enableRewriteSelection, completionEnabled, onRewriteSelection, testIdPrefix,
   headerExtras, footerExtras, paperHeader, conflictNotice, hostButton,
-  showGhostTip, enablePatch, showProposalDiff,
+  showGhostTip,
   onReloadDisk, onSaveConflictCopy, typography, maxGhostCandidates,
-  doc, textRef, selection, hasSelection, wordCount, state, loadingFim, patching,
-  conflict, error, note, ghost, ghostCandidates, ghostIndex, proposal, backups,
-  proposalRef, containerRef, viewRef, save, discard, stopCompletion, complete,
-  requestPatch, acceptGhost, acceptPatch, clearGhost, report, adoptBackup,
-  setGhostIndex, setProposal, stopPatch,
+  doc, textRef, selection, hasSelection, wordCount, state, loadingFim,
+  conflict, error, note, ghost, ghostCandidates, ghostIndex, backups,
+  containerRef, viewRef, save, discard, stopCompletion, complete,
+  acceptGhost, clearGhost, report, adoptBackup,
+  setGhostIndex,
 }: EditorChromeProps): ReactNode {
   if (!path) return null
 
   const cls = (slot: EditorCoreSlot) => slotClassName[slot]
   const sty = (slot: EditorCoreSlot) => slotStyle[slot]
-  const showFooter = Boolean(paperHeader) || Boolean(footerExtras) || loadingFim || patching || ghost || conflict || (!compactControls && (proposal || note))
+  const showFooter = Boolean(paperHeader) || Boolean(footerExtras) || loadingFim || ghost || conflict || (!compactControls && note)
   const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
-  const statusText = loadingFim ? '正在补全…' : patching ? '正在改写…' : describeStatus(state, conflict)
+  const statusText = loadingFim ? '正在补全…' : describeStatus(state, conflict)
   /* 页脚状态行只显示一次：宿主页眉（paperHeader）模式下页脚承载「N 字 + 保存状态」，
      独立宿主沿用页头状态区，两处 testid 不变。 */
   const statusLine = <>
@@ -197,30 +184,6 @@ export function EditorChrome({
         style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.55, ...sty('ghostTip') }}>
         Tab · Esc
       </div> : null}
-      {proposal ? <div
-        ref={proposalRef}
-        className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
-        aria-label="选段修改建议"
-        style={{ ...(cls('proposal') ? undefined : PROPOSAL_STYLE), ...sty('proposal') }}>
-        <strong>
-          选段修改建议
-        </strong>
-        {showProposalDiff ? <SelectionDiff original={proposal.ticket.selectedText} revised={proposal.text} /> : <p>
-          {proposal.text}
-        </p>}
-        <div className="proposal-actions">
-          <SeatButton host={hostButton} variant="primary" onClick={acceptPatch}>
-            应用修改
-          </SeatButton>
-          <SeatButton
-            host={hostButton}
-            variant="danger"
-            className="proposal-dismiss"
-            onClick={() => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() }}>
-            放弃
-          </SeatButton>
-        </div>
-      </div> : null}
       {conflict ? (conflictNotice ?? <div
         data-testid={`${testIdPrefix}-conflict-guard`}
         className={cls('conflict')}
@@ -273,17 +236,6 @@ export function EditorChrome({
           host={hostButton}
           onClick={stopCompletion}>
           停止补全
-        </SeatButton> : null}
-        {patching ? <SeatButton
-          host={hostButton}
-          onClick={stopPatch}>
-          停止改写
-        </SeatButton> : null}
-        {!compactControls && enablePatch && completionEnabled ? <SeatButton
-          host={hostButton}
-          disabled={!doc || conflict || loadingFim || selection.start === selection.end}
-          onClick={() => { void requestPatch() }}>
-          修改选段
         </SeatButton> : null}
         {ghost ? <div
           style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -339,7 +291,7 @@ export function EditorChrome({
           onClick={onSaveConflictCopy}>
           另存冲突副本
         </SeatButton> : null}
-        {loadingFim || patching ? null : footerExtras}
+        {loadingFim ? null : footerExtras}
         {paperHeader ? <div
           className="paper-footer-status"
           style={FOOTER_STATUS_STYLE}>

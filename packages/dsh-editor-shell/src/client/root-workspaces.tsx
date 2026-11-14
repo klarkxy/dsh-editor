@@ -7,12 +7,13 @@ import { removeHomeResumeDoc } from '../model/home-resume.ts'
 import { errorMessage, resumableConversationId, safeRpcCall, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, cleanupFlowWorkspace as cleanupOwnedFlowWorkspace } from './shared.ts'
 import { NewProjectDialog } from './dialogs.tsx'
 import { ActivityDots, Input } from './ui/index.ts'
-import { Button as InternalButton, Flex, Text } from '../ui/index.ts'
+import { Button as InternalButton, Flex, Text, type NoticeTone } from '../ui/index.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.tsx'
 import { t } from '../i18n/index.ts'
 import type { Dispatch, SetStateAction } from 'react'
 import type { WorkspaceListState } from '../dsh-compat.ts'
+import type { HomeNote } from '../app/home/home.tsx'
 
 export async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Promise<string[]> {
   const queue = ['']
@@ -128,7 +129,9 @@ export function useRootWorkspaces({
   setFocusMode: Dispatch<SetStateAction<boolean>>
 }) {
   const current = session?.sessionId
-  const [homeNote, setHomeNote] = useState('')
+  const [homeNote, setHomeNote] = useState<HomeNote | null>(null)
+  const note = (text: string, tone: NoticeTone = 'danger') => setHomeNote(text ? { text, tone } : null)
+  const dismissHomeNote = () => setHomeNote(null)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | null>(null)
@@ -277,7 +280,7 @@ export function useRootWorkspaces({
         path: pending.workspace.path, title: pending.workspace.title, intent: 'open',
         message: t('note.folderAlreadyWork'),
       })
-      setHomeNote('')
+      setHomeNote(null)
       return
     }
     const initialized = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId, newProject: true }))
@@ -291,7 +294,7 @@ export function useRootWorkspaces({
     const pending: PendingWorkspaceOpen = { ticket, workspace, intent: 'open', registrationCreated: false, replaceWorkspaceId, preferredPath }
     pendingWorkspaceOpen.current = null
     setOpeningWorkspace(true)
-    setHomeNote('')
+    setHomeNote(null)
     setWorkspaceOpen({ kind: 'checking', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title })
     try {
       const registered = await ctx.workspaces.create({ path: workspace.path })
@@ -302,7 +305,7 @@ export function useRootWorkspaces({
       ctx.uiWorkspace.clearSession()
       const message = t('note.folderMoved')
       setWorkspaceOpen({ kind: 'needs-relocation', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title, message })
-      setHomeNote(message)
+      note(message)
       setOpeningWorkspace(false)
       return
     }
@@ -314,7 +317,7 @@ export function useRootWorkspaces({
       if (!workspaceOpenGate.isCurrent(ticket)) return
       const message = t('note.folderCheckFailed')
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
-      setHomeNote(message)
+      note(message)
       setOpeningWorkspace(false)
       return
     }
@@ -331,7 +334,7 @@ export function useRootWorkspaces({
       }
       const message = t('error.noTextFiles')
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
-      setHomeNote(message)
+      note(message)
       setOpeningWorkspace(false)
       return
     }
@@ -345,7 +348,7 @@ export function useRootWorkspaces({
       ctx.uiWorkspace.clearSession()
       const message = workspaceOpenFailureMessage(error)
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
-      setHomeNote(message)
+      note(message)
     } finally {
       if (workspaceOpenGate.isCurrent(ticket)) setOpeningWorkspace(false)
     }
@@ -356,7 +359,7 @@ export function useRootWorkspaces({
     let pending: PendingWorkspaceOpen | undefined
     let stage: 'registering' | 'inspecting' | 'connecting' | 'initializing' | 'verifying' = 'registering'
     setOpeningWorkspace(true)
-    setHomeNote('')
+    setHomeNote(null)
     setWorkspaceOpen({ kind: 'checking', path, title: path })
     try {
       const registration = await createFlowWorkspace(ctx, path)
@@ -431,7 +434,7 @@ export function useRootWorkspaces({
       setWorkspaceOpen(replacedWorkspace
         ? { kind: 'needs-relocation', workspaceId: replacedWorkspace.workspaceId, path: replacedWorkspace.path, title: replacedWorkspace.title, message }
         : { kind: 'error', path, title: path, message })
-      setHomeNote(message)
+      note(message)
       setManualWorkspaceMode((replaceWorkspaceId || intent === 'create') ? null : 'existing')
       setManualWorkspacePath((replaceWorkspaceId || intent === 'create') ? '' : path)
       if (replaceWorkspaceId) setRelocatingWorkspaceId(undefined)
@@ -444,7 +447,7 @@ export function useRootWorkspaces({
     if (!pending || workspaceOpen.kind !== 'needs-intent' || pending.workspace.workspaceId !== workspaceOpen.workspaceId) return
     pending.intent = workspaceOpen.intent
     setOpeningWorkspace(true)
-    setHomeNote('')
+    setHomeNote(null)
     setWorkspaceOpen({ kind: 'checking', workspaceId: pending.workspace.workspaceId, path: pending.workspace.path, title: pending.workspace.title })
     try {
       const sessionId = await connectUsableWorkspaceSession(ctx, pending.workspace.workspaceId, pending.sessionId, pending.workspace)
@@ -464,7 +467,7 @@ export function useRootWorkspaces({
         ? t('note.initFailedCleanup', { cleanup: cleanupFailed ? t('note.cleanupRecentFailed') : '' })
         : `${workspaceOpenFailureMessage(error)}${cleanupFailed ? t('note.cleanupRecentFailed') : ''}`
       setWorkspaceOpen({ kind: 'error', path: pending.workspace.path, title: pending.workspace.title, message })
-      setHomeNote(message)
+      note(message)
     } finally {
       if (workspaceOpenGate.isCurrent(pending.ticket)) setOpeningWorkspace(false)
     }
@@ -484,10 +487,10 @@ export function useRootWorkspaces({
     setManualWorkspaceMode(null)
     setManualWorkspacePath('')
     setHomeNote(cleanupFailed
-      ? t('note.cancelledCleanupFailed')
+      ? { text: t('note.cancelledCleanupFailed'), tone: 'warning' }
       : pending.registrationCreated && pending.sessionId
-        ? t('note.cancelledSessionKept')
-        : '')
+        ? { text: t('note.cancelledSessionKept'), tone: 'info' }
+        : null)
   }
   useEffect(() => {
     if (workspaceOpen.kind !== 'idle') return
@@ -505,7 +508,7 @@ export function useRootWorkspaces({
       setRelocatingWorkspaceId(workspace.workspaceId)
       setManualWorkspaceMode('existing')
       setManualWorkspacePath('')
-      setHomeNote(t('note.pickerUnavailableRelocate'))
+      note(t('note.pickerUnavailableRelocate'), 'warning')
       return
     }
     if (!path) return
@@ -528,14 +531,14 @@ export function useRootWorkspaces({
       removeHomeResumeDoc(workspace.workspaceId)
       workspaceOpenGate.begin('home')
       setWorkspaceOpen({ kind: 'idle' })
-      setHomeNote(t('note.removedFromRecent'))
+      note(t('note.removedFromRecent'), 'success')
     } catch {
-      setHomeNote(t('note.removeRecentFailed'))
+      note(t('note.removeRecentFailed'))
     }
   }
   const startWorkspaceFromPicker = async () => {
     if (openingWorkspace) return
-    setHomeNote('')
+    setHomeNote(null)
     setManualWorkspaceMode(null)
     setOpeningWorkspace(true)
     let picked: string | null
@@ -544,7 +547,7 @@ export function useRootWorkspaces({
     } catch {
       setOpeningWorkspace(false)
       setManualWorkspaceMode('existing')
-      setHomeNote(t('note.pickerUnavailablePath'))
+      note(t('note.pickerUnavailablePath'), 'warning')
       if (session) {
         setWorkbenchNote(t('note.pickerUnavailablePath'))
         setWorkspaceMenuOpen(true)
@@ -563,14 +566,14 @@ export function useRootWorkspaces({
       if (!path) {
         const message = t('note.noFolderPicked')
         if (session) setWorkbenchNote(message)
-        else setHomeNote(message)
+        else note(message, 'info')
         return
       }
       await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
     } catch {
       const message = t('note.pickerUnavailablePath')
       if (session) setWorkbenchNote(message)
-      else setHomeNote(message)
+      else note(message, 'warning')
     }
   }
   const submitWorkspacePath = async (event: FormEvent) => {
@@ -579,7 +582,7 @@ export function useRootWorkspaces({
     if (!path) {
       const message = t('note.enterFolderPath')
       if (session) setWorkbenchNote(message)
-      else setHomeNote(message)
+      else note(message, 'warning')
       return
     }
     await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
@@ -588,7 +591,7 @@ export function useRootWorkspaces({
     if (openingWorkspace) return
     setManualWorkspaceMode(null)
     setRelocatingWorkspaceId(undefined)
-    setHomeNote('')
+    setHomeNote(null)
     if (session) setWorkbenchNote('')
   }
   const pathFallbackForm = manualWorkspaceMode ? <form className="path-fallback" onSubmit={submitWorkspacePath}>
@@ -666,7 +669,7 @@ export function useRootWorkspaces({
       if (!(await saveEditorBeforeAction())) return
       setAssistantDraftDirty(false)
     }
-    setHomeNote('')
+    setHomeNote(null)
     setManualWorkspaceMode(null)
     setNewProject({ busy: false, note: '' })
   }
@@ -730,8 +733,8 @@ export function useRootWorkspaces({
       if (!probe.ok || probe.value.state !== 'ready') {
         const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
         closeImportFlow()
-        const note = probe.ok ? probe.value.message ?? t('note.importDirectoryDenied') : t('note.importCheckFailed')
-        setHomeNote(sourceCleaned ? note : t('note.tempEntryNotRemoved', { note }))
+        const message = probe.ok ? probe.value.message ?? t('note.importDirectoryDenied') : t('note.importCheckFailed')
+        note(sourceCleaned ? message : t('note.tempEntryNotRemoved', { note: message }))
         return
       }
       setImportFlow(importReview(sourceSessionId, targetSessionId, targetWorkspaceId, probe.value))
@@ -741,7 +744,7 @@ export function useRootWorkspaces({
         : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
       if (!sourceCleaned) {
         closeImportFlow()
-        setHomeNote(t('note.importStartCleanupFailed'))
+        note(t('note.importStartCleanupFailed'))
         return
       }
       throw error
@@ -759,11 +762,11 @@ export function useRootWorkspaces({
       const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
       if (recovery.ok && recovery.value.state === 'recoverable') {
         setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
-        if (!sourceCleaned) setHomeNote(t('note.importRecoverableCleanupFailed'))
+        if (!sourceCleaned) note(t('note.importRecoverableCleanupFailed'), 'warning')
       } else {
         const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
         closeImportFlow(false)
-        setHomeNote(sourceCleaned && targetCleaned ? t('note.importFailedRetry') : t('note.importFailedCleanup'))
+        note(sourceCleaned && targetCleaned ? t('note.importFailedRetry') : t('note.importFailedCleanup'))
       }
       return
     }
@@ -772,7 +775,7 @@ export function useRootWorkspaces({
     preserveFlowWorkspace(flow.targetWorkspaceId)
     if (!initialized.ok) {
       closeImportFlow(false)
-      setHomeNote(sourceCleaned ? t('note.importDoneInitFailed') : t('note.importDoneInitAndCleanupFailed'))
+      note(sourceCleaned ? t('note.importDoneInitFailed') : t('note.importDoneInitAndCleanupFailed'))
       return
     }
     try {
@@ -785,10 +788,10 @@ export function useRootWorkspaces({
         if (workspace) await openRegisteredWorkspace(workspace, flow.targetSessionId as SessionId)
       }
       closeImportFlow(false)
-      if (!sourceCleaned) setHomeNote(t('note.importDoneSourceRemains'))
+      if (!sourceCleaned) note(t('note.importDoneSourceRemains'), 'warning')
     } catch {
       closeImportFlow(false)
-      setHomeNote(t('note.importDoneUnreadable'))
+      note(t('note.importDoneUnreadable'))
     }
   }
   const cleanupImportFlow = async () => {
@@ -817,7 +820,7 @@ export function useRootWorkspaces({
         setWorkspaceOpen({ kind: 'idle' })
       }
       closeImportFlow()
-      setHomeNote(targetCleaned ? t('note.importCleaned') : t('note.importCleanedCleanupFailed'))
+      note(targetCleaned ? t('note.importCleaned') : t('note.importCleanedCleanupFailed'), targetCleaned ? 'success' : 'warning')
       return
     }
     const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
@@ -830,7 +833,7 @@ export function useRootWorkspaces({
     }
     if (current === flow.targetSessionId) ctx.uiWorkspace.clearSession()
     closeImportFlow()
-    setHomeNote(t('note.importCleanFailed'))
+    note(t('note.importCleanFailed'))
   }
   const cancelImportFlow = async () => {
     const flow = importFlow
@@ -847,7 +850,7 @@ export function useRootWorkspaces({
       setWorkspaceOpen({ kind: 'idle' })
     }
     closeImportFlow()
-    if (!cleaned) setHomeNote(t('note.importCancelledCleanupFailed'))
+    if (!cleaned) note(t('note.importCancelledCleanupFailed'), 'warning')
   }
   const renderImportDialog = () => <ImportDialog
     flow={importFlow}
@@ -868,7 +871,7 @@ export function useRootWorkspaces({
   }
 
   return {
-    homeNote, openingWorkspace, workspaceMenuOpen, setWorkspaceMenuOpen,
+    homeNote, dismissHomeNote, openingWorkspace, workspaceMenuOpen, setWorkspaceMenuOpen,
     manualWorkspaceMode, newProject, pathFallbackInput, pathFallbackForm,
     workspaceMenuTrigger, workspaceMenuYields, removeRecentTarget, setRemoveRecentTarget,
     openRegisteredWorkspace, continuePendingWorkspaceIntent, cancelPendingWorkspaceIntent,

@@ -2,7 +2,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
-import { completePatch, parsePatchRequest } from './rpc/patch.ts'
 import { parseAuthorPreferences, parseChapterContext } from './rpc/author-preferences.ts'
 import { readProjectRules } from './rpc/project-rules.ts'
 import { collectUsageLog, createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
@@ -41,7 +40,7 @@ export async function apply(ctx: Context): Promise<void> {
         signal,
       })
 
-      if (endpoint === 'fim.complete') return completeFim({
+      return completeFim({
         ctx, sessionId: String(body.sessionId),
         prefix: typeof body.prefix === 'string' ? body.prefix : '',
         suffix: typeof body.suffix === 'string' ? body.suffix : '',
@@ -50,7 +49,6 @@ export async function apply(ctx: Context): Promise<void> {
         projectRules: rules.text,
         signal,
       })
-      return completePatch({ ctx, sessionId: String(body.sessionId), request: parsePatchRequest(body), projectRules: rules.text, signal })
     },
   }
   ctx.provide('manuscriptAssist', service)

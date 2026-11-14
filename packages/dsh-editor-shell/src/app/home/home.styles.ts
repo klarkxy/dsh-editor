@@ -106,10 +106,12 @@ defineStyles('dsh.surfaces', 'dsh-home', `
 
 /* ── 目录式最近作品 ───────────────────────────────────── */
 .dsh-home__list { list-style: none; margin: 0; padding: 0; }
-.dsh-home-row { position: relative; border-bottom: 0.5px solid var(--dsh-ui-line); }
+.dsh-home-row {
+  position: relative; display: flex; align-items: flex-start; flex-wrap: wrap;
+  gap: 0 var(--dsh-ui-space-2); border-bottom: 0.5px solid var(--dsh-ui-line);
+}
 .dsh-home-row__main {
-  display: block; width: 100%; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-1);
-  padding-inline-end: var(--dsh-ui-control-md);
+  display: block; flex: 1; width: 100%; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-1);
   border: 0; border-radius: var(--dsh-ui-radius-md);
   background: transparent; color: var(--dsh-ui-text); font: inherit;
   text-align: start; cursor: pointer; min-width: 0;
@@ -138,11 +140,11 @@ defineStyles('dsh.surfaces', 'dsh-home', `
   margin-top: var(--dsh-ui-space-1); font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);
 }
 .dsh-home-row__meta { min-width: 0; color: var(--dsh-ui-muted); }
-.dsh-home-row__manage {
-  position: absolute; inset-inline-end: 0; top: var(--dsh-ui-space-3);
+.dsh-home-row__remove {
+  flex: none; margin-block-start: var(--dsh-ui-space-3);
 }
 .dsh-home-row__menu-anchor { width: 0; height: 0; padding: 0; border: 0; background: transparent; }
-.dsh-home-row__relocation { margin: var(--dsh-ui-space-2) var(--dsh-ui-space-1) var(--dsh-ui-space-3); }
+.dsh-home-row__relocation { flex-basis: 100%; min-width: 0; margin: var(--dsh-ui-space-2) var(--dsh-ui-space-1) var(--dsh-ui-space-3); }
 .dsh-home-row__relocation .dsh-home-row__relocation-actions,
 .dsh-home-row__relocation-actions { display: inline-flex; gap: var(--dsh-ui-space-2); margin-top: var(--dsh-ui-space-2); }
 .dsh-home__empty { margin-top: var(--dsh-ui-space-8); }

@@ -1,5 +1,5 @@
 import { isAuxiliaryAuthorFile } from './auxiliary-files.ts'
-import { compareDocumentPaths } from './model/natural-order.ts'
+import { compareDocumentPaths } from 'dsh-editor-workspace-kit/natural-order'
 
 export function normalizeProjectDirectory(directory: string | null | undefined): string {
   const value = (directory ?? '').replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/+$/, '')

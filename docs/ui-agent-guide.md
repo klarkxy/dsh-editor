@@ -54,9 +54,9 @@
 ```tsx
 import { Button, Input } from '../../ui/index.ts'
 
-<Input value={name} onChange={setName} aria-label={t('chat.conversationName')} />
+<Input value={name} onChange={setName} aria-label={t('common.rename')} />
 <Button variant="primary" disabled={!canSave || saving} onClick={save}>
-  {t('chat.saveName')}
+  {t('common.save')}
 </Button>
 ```
 

@@ -20,7 +20,7 @@ import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
 import { t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'
-import { compareDocumentPaths } from '../model/natural-order.ts'
+import { compareDocumentPaths } from 'dsh-editor-workspace-kit/natural-order'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
 

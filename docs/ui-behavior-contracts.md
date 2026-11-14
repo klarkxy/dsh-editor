@@ -26,7 +26,7 @@
 | C14 | 磁盘冲突提供重新载入与另存冲突副本 | `src/client/editor.tsx` | `e2e/core-loop.mjs`（部分） | 缺少不经界面的冲突处理测试 |
 | C15 | 模型设置写入使用原设置 revision，冲突时阻止旧草稿写入 | `src/client/settings-models-state.ts` | `settings-models-state.spec.ts` | 无 |
 | C16 | 搜索替换逐文件确认，跳过版本或匹配已变化的文件 | `src/search-replace.ts`、`src/client/search-panel.tsx` | `src/search-replace.spec.ts`、`src/model/search-panel.spec.ts` | 无 |
-| C17 | 搭档草稿未发送时，切换作品或会话须确认丢弃 | `src/client/root.tsx` 的 `canLeaveAssistantDraft` | `e2e/layout-invariants.mjs`（partner：取消「新对话」保留草稿） | 无 |
+| C17 | 搭档草稿未发送时，切换作品或会话须确认丢弃 | `src/client/root.tsx` 的 `canLeaveAssistantDraft` | 无（旧「新对话」入口已随会话列表移除，无 e2e 覆盖） | 缺少草稿守卫的自动化测试 |
 
 ## 输入与焦点
 

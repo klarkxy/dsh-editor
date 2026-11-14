@@ -73,10 +73,11 @@
 # interactions. The editor renders the resulting carrier in its own card.
 - id: ui-trajectory
   disabled: true
-# Writing sessions mount the editor's own presets (deployed into
+# Writing sessions mount the editor's preset (deployed into
 # <dshHome>/.agent-presets by the desktop app) instead of the shipped
-# `standard` coding agent. The new default is dsh-editor-writing; the
-# historical dsh-editor preset remains selectable.
+# `standard` coding agent. The only app-owned preset is dsh-editor-writing.
+# Deploy deletes app-owned dsh-editor, dsh-editor-novel, dsh-editor-article,
+# and dsh-editor-technical directories; it does not remove author presets.
 - id: agent-preset-registry
   config:
     default: dsh-editor-writing

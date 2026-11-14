@@ -59,7 +59,7 @@ describe('native writing routes', () => {
   })
   it('renders three labelled native fields without global tiers or runtime settings', () => {
     const html = render(createElement(WritingModelRoutesView, { snapshot: fixture().scope.getSnapshot(), catalog, writable: true, onSave: () => {} }))
-    expect(html.match(/role="combobox"/g)).toHaveLength(3)
+    expect(html.match(/role="combobox"/g)).toHaveLength(2)
     expect(html).toContain('DSH 默认模型')
     expect(html).toContain('当前对话')
     expect(html).not.toContain('data-tier=')
@@ -74,7 +74,7 @@ describe('native writing routes', () => {
   it('disables loading controls and gives a visible unavailable or save error', () => {
     const html = render(createElement(WritingModelRoutesView, { snapshot: { status: 'loading', value: undefined }, catalog, writable: true, onSave: () => {} }))
     const controls = html.match(/<button[^>]*role="combobox"[^>]*>/g) ?? []
-    expect(controls).toHaveLength(3)
+    expect(controls).toHaveLength(2)
     expect(controls.every(control => control.includes('disabled=""'))).toBe(true)
     const failed = render(createElement(WritingModelRoutesView, { snapshot: fixture().scope.getSnapshot(), catalog, writable: true, failure: 'revision conflict', onSave: () => {} }))
     expect(failed).toContain('role="alert"')

@@ -18,7 +18,7 @@ import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 import { OfficialSurfaceProvider, OfficialOverlays, type OfficialRootProps } from './official-surfaces.tsx'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope, SessionFace, SessionId } from '../dsh-compat.ts'
+import type { SettingsScope, SessionFace, SessionId, WorkspaceId } from '../dsh-compat.ts'
 import { normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { documentDirectory, exportDirectoryOf, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
 import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
@@ -100,6 +100,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const workspaceSession = useObservable(ctx.uiWorkspace.workspace)
   const fileSessionId = workspaceOpen.kind === 'ready' ? workspaceSession?.sessionId : undefined
   const fileSession: SessionFace | undefined = workspaceOpen.kind === 'ready' ? workspaceSession : undefined
+  const chatSession = session ?? fileSession
   const fileSessionIdRef = useRef<SessionId | undefined>(fileSessionId)
   fileSessionIdRef.current = fileSessionId
   const openWorkspaceId = workspaceOpen.kind === 'ready' ? workspaceOpen.workspaceId : undefined
@@ -213,7 +214,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       else workbench.exitFocus()
     } })
   const {
-    homeNote, openingWorkspace, workspaceMenuOpen, setWorkspaceMenuOpen,
+    homeNote, dismissHomeNote, openingWorkspace, workspaceMenuOpen, setWorkspaceMenuOpen,
     manualWorkspaceMode, newProject, pathFallbackInput, pathFallbackForm,
     workspaceMenuTrigger, workspaceMenuYields, removeRecentTarget, setRemoveRecentTarget,
     openRegisteredWorkspace, continuePendingWorkspaceIntent, cancelPendingWorkspaceIntent,
@@ -228,6 +229,23 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }, [])
   useTransientSuccessNote(workbenchNote, expireWorkbenchNote)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
+  const [rewriteRequest, setRewriteRequest] = useState<{ id: number; text: string; workspaceId: WorkspaceId }>()
+  const rewriteRequestId = useRef(0)
+  const consumeRewriteRequest = useCallback((id: number) => {
+    setRewriteRequest(current => current?.id === id ? undefined : current)
+  }, [])
+  useEffect(() => { setRewriteRequest(undefined) }, [openWorkspaceId])
+  const requestRewrite = useCallback((input: { path: string; selection: string; instruction: string }) => {
+    const instruction = input.instruction.trim()
+    if (!instruction || !input.selection || focusMode || !assistantEnabled || !chatSession || !openWorkspaceId) return false
+    workbench.focusPartner()
+    setRewriteRequest({
+      id: ++rewriteRequestId.current,
+      workspaceId: openWorkspaceId,
+      text: `请改写下面这段。文件：${input.path}\n改写要求：${instruction}\n请在回复中给出修改稿，不要直接写入文件。\n\n【待改写】\n${input.selection}`,
+    })
+    return true
+  }, [focusMode, assistantEnabled, chatSession, openWorkspaceId, workbench])
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   /* 命令面板的「跟随系统」写宿主 ui-theme 偏好；写完后宿主 echo 经
      hostThemeSync 回到 useTheme,不需要本地再存一份 system 态。 */
@@ -608,7 +626,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onCreateFile={() => onTreeCreateFile('')}
     activePath={path} />
 
-  const chatSession = session ?? fileSession
 
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
@@ -629,6 +646,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onContinueIntent={continuePendingWorkspaceIntent}
           onCancelIntent={cancelPendingWorkspaceIntent}
           homeNote={homeNote}
+          onDismissNote={dismissHomeNote}
           workspaces={workspaces.items}
           onOpenWorkspace={(workspace, preferredPath) => void openRegisteredWorkspace(workspace, undefined, undefined, preferredPath)}
           onRelocate={(workspace) => void relocateWorkspace(workspace)}
@@ -720,7 +738,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 onDraftDirtyChange={setAssistantDraftDirty}
                 onWritten={refreshWrittenPath}
                 onApplied={onAppliedChat}
-                onHide={() => workbench.setAuxOpen(false)} />
+                onHide={() => workbench.setAuxOpen(false)}
+                rewriteRequest={rewriteRequest?.workspaceId === openWorkspaceId ? rewriteRequest : undefined}
+                onRewriteConsumed={consumeRewriteRequest} />
             : <Notice tone="info" title={t('aux.partnerDisabled')} />
     }
     reference={<ReferencePanel
@@ -833,7 +853,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               typewriter={writing.typewriter}
               focusParagraph={writing.focusParagraph}
               typography={typography}
-              onSaved={onEditorSaved} />
+              onSaved={onEditorSaved}
+              completionSessionId={chatSession?.sessionId}
+              onRewrite={requestRewrite} />
             <CenterOverlays
               show={Boolean(fileSession) && !focusMode}
               renderSlot={renderSlot}

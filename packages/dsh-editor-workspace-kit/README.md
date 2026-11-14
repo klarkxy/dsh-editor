@@ -12,9 +12,11 @@ Host 包共用的工作区文件与元数据工具库，没有独立插件入口
 - `metadata-io.ts`：`.dsh-editor` 元数据目录的受约束读写与原子写入（单文件上限 2MB）。
 - `move.ts`：跨平台不覆盖移动——Windows 走最小环境的 PowerShell，其他平台用 rename + link 的分阶段方案。
 - `tree.ts`：文件树过滤规则——`MAX_FILES = 2000` 上限、生成目录识别（build / dist / node_modules 等）、隐藏路径与辅助作者文件（AGENTS.md 等）排除。
+- `natural-order.ts`：中文数字与阿拉伯数字的路径自然序比较（`compareDocumentPaths`）。不进 Node 主入口。
 
 统一出口见 [src/index.ts](src/index.ts)。
 
 ## 子路径导出
 
 - `./frontmatter`：同一 frontmatter 模块的浏览器侧构建（tsdown 以 neutral 平台单独打包，不依赖 Node API），供客户端包复用解析与格式化逻辑。
+- `./natural-order`：同一比较器的浏览器侧构建，供 shell 与面板包复用。shell 自己的 `sortDocumentPaths` / `sortChapterPaths` 仍留在 shell。

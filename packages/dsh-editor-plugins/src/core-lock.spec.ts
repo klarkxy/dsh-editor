@@ -26,6 +26,10 @@ describe('core plugin lock', () => {
     expect(CORE_PLUGIN_ENTRY_IDS.has('editor-novel-kernel')).toBe(true)
     expect(CORE_PLUGIN_ENTRY_IDS.has('editor-workbench')).toBe(true)
     expect(CORE_PLUGIN_ENTRY_IDS.has('manuscript')).toBe(true)
+    expect(CORE_PLUGIN_ENTRY_IDS.has('manuscript-assist')).toBe(true)
+    expect(CORE_PLUGIN_ENTRY_IDS.has('editor-overview-panel')).toBe(true)
+    expect(CORE_PLUGIN_ENTRY_IDS.has('editor-cards')).toBe(true)
+    expect(CORE_PLUGIN_ENTRY_IDS.has('editor-memory-panel')).toBe(true)
   })
 
   it('stamps required editor bundles independently of native manager protection', () => {
@@ -37,11 +41,14 @@ describe('core plugin lock', () => {
     ])
     expect(rows[0]?.readOnlyReason).toBe('management-required')
     expect(rows[1]?.readOnlyReason).toBe('management-required')
-    expect(rows[2]?.readOnlyReason).toBeUndefined()
+    expect(rows[2]?.readOnlyReason).toBe('management-required')
     expect(rows[3]?.readOnlyReason).toBeUndefined()
     expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-editor-workbench')).toBe(true)
     expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-manuscript')).toBe(true)
     expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-editor-profile-config')).toBe(true)
+    expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-editor-cards')).toBe(true)
+    expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-editor-memory-panel')).toBe(true)
+    expect(CORE_PLUGIN_BUNDLE_NAMES.has('dsh-editor-overview-panel')).toBe(true)
     expect(protectCorePluginBundles([{ name: 'dsh-editor-profile-config' }])[0]?.readOnlyReason).toBe('management-required')
   })
 
@@ -54,7 +61,7 @@ describe('core plugin lock', () => {
     }
     const manager = {
       listPlugins: originalList,
-      listBundles: async () => [{ name: 'dsh-editor-shell' }, { name: 'dsh-editor-profile-config' }, { name: 'dsh-editor-cards' }],
+      listBundles: async () => [{ name: 'dsh-editor-shell' }, { name: 'dsh-editor-profile-config' }, { name: 'dsh-editor-cards' }, { name: '@klarkxy/dsh-zhihu' }],
       setPluginEnabled: originalSet,
       setBundleEnabled: async (name: string, enabled: boolean) => {
         calls.push(['bundle', name, enabled])
@@ -92,8 +99,13 @@ describe('core plugin lock', () => {
     })
     const bundles = await manager.listBundles() as Array<{ name: string; readOnlyReason?: string }>
     expect(bundles.find((row) => row.name === 'dsh-editor-profile-config')?.readOnlyReason).toBe('management-required')
-    expect(await manager.setBundleEnabled('dsh-editor-cards', false)).toEqual({ changed: true, application: 'applied' })
-    expect(calls).toEqual([['zhihu', false], ['bundle', 'dsh-editor-cards', false]])
+    expect(bundles.find((row) => row.name === 'dsh-editor-cards')?.readOnlyReason).toBe('management-required')
+    expect(await manager.setBundleEnabled('dsh-editor-cards', false)).toEqual({
+      changed: false, application: 'failed', stage: 'enable', target: 'dsh-editor-cards', enabled: false,
+      error: { code: 'management-required' },
+    })
+    expect(await manager.setBundleEnabled('@klarkxy/dsh-zhihu', false)).toEqual({ changed: true, application: 'applied' })
+    expect(calls).toEqual([['zhihu', false], ['bundle', '@klarkxy/dsh-zhihu', false]])
     dispose()
     expect(manager.listPlugins).toBe(originalList)
     expect(manager.setPluginEnabled).toBe(originalSet)

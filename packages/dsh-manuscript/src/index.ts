@@ -2,7 +2,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { asHost, resolveWorkspaceAccess, withWorkspaceWrite } from './host.ts'
 import { registerHostRpc } from './rpc/channel.ts'
 import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
-import { parsePatchRequest, PatchInputError } from './rpc/patch.ts'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
@@ -39,7 +38,7 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'BAD_QUERY') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
-  if (error instanceof ProposalError || error instanceof WritingProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError || error instanceof AssistUnavailableError) return badRequest(error.message)
+  if (error instanceof ProposalError || error instanceof WritingProposalError || error instanceof DraftInputError || error instanceof UsageInputError || error instanceof AssistUnavailableError) return badRequest(error.message)
   return fail({ code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
 }
 
@@ -138,9 +137,7 @@ export async function dispatch(
       if (receiptId) await receipts!.record(access.workspace.path, targetSessionId, receiptId, proposal, 'applied', result)
       return result
     }
-    if (endpoint === 'fim.complete' || endpoint === 'patch.complete') {
-      // Validate the legacy patch request even when no model is configured.
-      if (endpoint === 'patch.complete') parsePatchRequest(body)
+    if (endpoint === 'fim.complete') {
       const config = access.session.requestHeader?.()?.config
       const provider = typeof config?.provider === 'string' ? config.provider : ''
       const model = typeof config?.model === 'string' ? config.model : ''

@@ -14,12 +14,10 @@ export type PaperViewCallbacks = {
   flushText(): void
   onSelection(start: number, end: number): void
   acceptGhost(): void
-  acceptPatch(): void
   complete(): void
   cancelSuggestions(): boolean
   save(): void
   hasGhost(): boolean
-  hasProposal(): boolean
   hasCompletionActivity(): boolean
   onContextMenu(event: EditorContextMenuEvent): void
   hasContextMenu(): boolean
@@ -156,8 +154,7 @@ export function usePaperView({
               key: 'Mod-Enter',
               run: (v) => {
                 if (isPaperSearchPanelFocused(v) || v.composing) return false
-                if (cb.current.hasProposal()) cb.current.acceptPatch()
-                else cb.current.complete()
+                cb.current.complete()
                 return true
               },
             },
@@ -189,7 +186,7 @@ export function usePaperView({
   }, [])
 
   // Runtime toggle: typewriter / focus-paragraph are Compartment-backed so a
-  // prop change does not rebuild the EditorView (ghost, search, and proposal
+  // prop change does not rebuild the EditorView (ghost and search
   // keymaps stay mounted).
   useEffect(() => {
     const view = viewRef.current

@@ -37,4 +37,4 @@
 
 ## 架构
 
-面板包通过此基础设施统一模式，各自保留业务逻辑、UI 组件和 Cordis 适配器。详见 [架构重构方案](../../docs/refactoring/refactoring-plan.md)。
+面板包通过此基础设施统一模式，各自保留业务逻辑、UI 组件和 Cordis 适配器。包边界决策见 [架构决策](../../docs/architecture.md#包边界)。

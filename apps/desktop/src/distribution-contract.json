@@ -30,6 +30,18 @@
       "requiredCore": true,
       "coreLocked": true
     },
+    "dsh-editor-cards": {
+      "requiredCore": true,
+      "coreLocked": true
+    },
+    "dsh-editor-memory-panel": {
+      "requiredCore": true,
+      "coreLocked": true
+    },
+    "dsh-editor-overview-panel": {
+      "requiredCore": true,
+      "coreLocked": true
+    },
     "@klarkxy/dsh-ai-services": {
       "retired": true
     },
@@ -67,6 +79,26 @@
     },
     "manuscript": {
       "coreLocked": true
+    },
+    "manuscript-assist": {
+      "coreLocked": true,
+      "hostLocked": true,
+      "restore": true
+    },
+    "editor-overview-panel": {
+      "coreLocked": true,
+      "hostLocked": true,
+      "restore": true
+    },
+    "editor-cards": {
+      "coreLocked": true,
+      "hostLocked": true,
+      "restore": true
+    },
+    "editor-memory-panel": {
+      "coreLocked": true,
+      "hostLocked": true,
+      "restore": true
     },
     "editor-novel-kernel": {
       "coreLocked": true,

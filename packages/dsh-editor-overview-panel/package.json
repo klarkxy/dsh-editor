@@ -46,7 +46,8 @@
         "id": "editor-overview-panel",
         "title": "文档概览",
         "description": "字数分布、写作曲线与最近编辑",
-        "feature": "overview-panel"
+        "feature": "overview-panel",
+        "locked": true
       }
     ]
   },

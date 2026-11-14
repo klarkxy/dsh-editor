@@ -18,7 +18,7 @@ import {
 } from '../src/native-profile.js'
 import { PINNED_PNPM_CLI_FLAGS, PINNED_PNPM_VERSION, assertPinnedPnpm, resolveBundledPackageManager, resolveDesktopPnpmPackage } from '../src/package-manager.js'
 
-const optional = 'dsh-editor-cards'
+const optional = 'dsh-acceptance-optional'
 const replacement = 'dsh-acceptance-replacement'
 const removed = '@klarkxy/dsh-web-search-manager'
 const shipped = 'dsh-acceptance-shipped-new'

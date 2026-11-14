@@ -63,7 +63,7 @@ import {
   type ProfileDeployIdentity,
 } from '../src/profile.js'
 
-const optional = 'dsh-editor-cards'
+const optional = 'dsh-acceptance-optional'
 const shipped = 'dsh-acceptance-shipped-new'
 const baselineSpec = (name: string) => `link:./bundled-packages/node_modules/${name}`
 
@@ -259,11 +259,11 @@ async function ownershipFixture() {
   await writeFile(join(template, 'cordis.patch.yml'), '[]\n')
   await mkdir(join(runtime, '@deepseek-ai', 'dsh-tools'), { recursive: true })
   await mkdir(join(runtime, '@deepseek-ai', 'dsh-llm'), { recursive: true })
-  await writeFile(join(runtimeRoot, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.1-rc.5' }))
+  await writeFile(join(runtimeRoot, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.2-rc.1' }))
   const identity: ProfileDeployIdentity = {
     algorithm: PROFILE_DEPLOY_ALGORITHM,
     profileSha256: 'sha-ownership',
-    dsh: '@deepseek-ai/dsh@0.2.1-rc.5',
+    dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
     nodePath: join(home, 'node.exe'),
     cliPath: join(runtimeRoot, 'dsh', 'lib', 'bin.js'),
   }

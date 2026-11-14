@@ -28,6 +28,7 @@
   "devDependencies": {
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
+    "dsh-editor-workspace-kit": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.22.14",

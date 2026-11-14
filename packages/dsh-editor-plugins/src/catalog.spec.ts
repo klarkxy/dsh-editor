@@ -39,6 +39,8 @@ function defaultCatalog(): RuntimeCatalog {
       }])),
       'editor-shell': { title: '编辑器外壳', description: '编辑器主界面。', locked: true, builtin: true, packageName: 'dsh-editor-shell' },
       manuscript: { title: '文稿内核', description: '文稿编辑内核。', locked: true, builtin: true, packageName: 'dsh-manuscript' },
+      'manuscript-assist': { title: '补全服务', description: '正文行内补全', locked: false, builtin: true, packageName: 'dsh-manuscript' },
+      'editor-cards': { title: '人物卡与世界书', description: '在文件树中定位人物卡与世界书', locked: true, builtin: true, packageName: 'dsh-editor-cards' },
       'editor-novel-kernel': { title: '小说内核', description: '小说模式。', locked: true, builtin: true, packageName: 'dsh-editor-novel-kernel', managedBy: 'session' },
       'writing-tools': { title: '写作工具', description: '写作功能条目。', locked: true, builtin: true, packageName: 'dsh-editor-workbench', managedBy: 'feature' },
     },
@@ -49,7 +51,7 @@ function defaultBundles() {
   return [
     ...EXPERIMENTAL_BUNDLES.map((name) => ({ name, enabled: false, installed: true })),
     { name: 'dsh-editor-shell', enabled: true, installed: true, readOnlyReason: 'management-required' },
-    { name: 'dsh-editor-cards', enabled: true, installed: true },
+    { name: 'dsh-editor-cards', enabled: true, installed: true, readOnlyReason: 'management-required' },
     { name: '@klarkxy/dsh-web-search-manager', enabled: true, installed: true },
     { name: 'dsh-editor-plugins', enabled: true, installed: true, readOnlyReason: 'management-required' },
   ]
@@ -61,6 +63,8 @@ const DEFAULT_PLUGINS = [
   { entryId: 'ui-sidebar-documentpreview', patchId: 'ui-sidebar-documentpreview', enabled: false },
   { entryId: 'mcp-resources', patchId: 'mcp-resources', enabled: false },
   { entryId: 'manuscript', patchId: 'manuscript', enabled: true, readOnlyReason: 'management-required' },
+  { entryId: 'manuscript-assist', patchId: 'manuscript-assist', enabled: true },
+  { entryId: 'editor-cards', patchId: 'editor-cards', enabled: true },
 ]
 
 function section(catalog: PluginCatalog, id: PluginCatalog['sections'][number]['id']): PluginCatalogCard[] {
@@ -132,6 +136,12 @@ describe('plugin catalog classification', () => {
     expect(shell?.badges).not.toContain('locked')
     expect(shell?.enabled).toBeUndefined()
     expect(shell?.action).toBe('config')
+    for (const title of ['补全服务', '人物卡与世界书']) {
+      const item = byTitle(catalog, 'builtin', title)[0]
+      expect(item?.badges).toEqual(['required'])
+      expect(item?.enabled).toBeUndefined()
+      expect(item?.action).not.toBe('switch')
+    }
     // A core bundle without a prepared-catalog product name is implementation
     // plumbing and must not masquerade as an author-facing feature card.
     expect(section(catalog, 'builtin').some((card) => card.packageName === 'dsh-editor-plugins')).toBe(false)

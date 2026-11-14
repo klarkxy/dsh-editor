@@ -1,4 +1,4 @@
-import { compareDocumentPaths } from './natural-order.ts'
+import { compareDocumentPaths } from 'dsh-editor-workspace-kit/natural-order'
 
 /* §8 导出预检的选择模型：按目录分组的纯函数，供 export-dialog 渲染与
    单元测试复用。路径均为工作区相对路径（'正文/第一章.md'）。 */

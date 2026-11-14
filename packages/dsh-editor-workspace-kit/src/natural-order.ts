@@ -2,6 +2,8 @@
  * 自然排序（shell-rewrite-spec §3）：按路径逐段比较；段内识别中文数字
  * （〇一二三四五六七八九十百千万两，含「第N章」「第N卷」写法）与阿拉伯数字，
  * 按数值比较；数值相同或无法识别为数字的部分退回原排序器。
+ * 纯函数，无 Node API。经包导出 `./natural-order` 给 shell 与面板复用；
+ * 不进本包的 Node 主入口。
  */
 
 const FALLBACK = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })

@@ -18,4 +18,5 @@ defineStyles('dsh.components', 'dsh-notice', `
 .dsh-notice__body { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .dsh-notice__title { font-weight: var(--dsh-ui-weight-medium); }
 .dsh-notice__action { flex: none; }
+.dsh-notice__dismiss { flex: none; margin: calc(-1 * var(--dsh-ui-space-1)) calc(-1 * var(--dsh-ui-space-1)) calc(-1 * var(--dsh-ui-space-1)) 0; }
 `)

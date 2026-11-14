@@ -52,10 +52,10 @@ describe('direct writing model calls', () => {
     const stream = vi.fn((options: GenerateOptions) => text('下一句'))
     const ctx = host({
       stream,
-      prefs: { rewriteModel: { provider: 'edit', model: 'large', reasoningEffort: 'high' } },
+      prefs: { completionModel: { provider: 'edit', model: 'large', reasoningEffort: 'high' } },
     })
     await expect(runWritingAi({
-      ctx, purpose: 'manuscript.rewrite', sessionId: 'session-1', system: '系统', text: '用户', signal: new AbortController().signal, maxChars: 20,
+      ctx, purpose: 'manuscript.completion', sessionId: 'session-1', system: '系统', text: '用户', signal: new AbortController().signal, maxChars: 20,
     })).resolves.toBe('下一句')
     const options = stream.mock.calls[0]?.[0]
     expect(options).toMatchObject({
@@ -167,7 +167,7 @@ describe('direct writing model calls', () => {
       yield { type: 'tool-call-delta', text: '{"a":1}' }
     })())
     await expect(runWritingAi({
-      ctx: host({ stream }), purpose: 'manuscript.rewrite', sessionId: 'tool', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      ctx: host({ stream }), purpose: 'manuscript.completion', sessionId: 'tool', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
     })).rejects.toThrow('辅助调用不使用工具。')
   })
 
@@ -227,35 +227,6 @@ describe('direct writing model calls', () => {
     expect(stream.mock.calls[1]?.[0].signal?.aborted).toBe(false)
   })
 
-  it('does not suppress a different purpose in the same session', async () => {
-    let release!: () => void
-    const stream = vi.fn((options: GenerateOptions) => (async function* () {
-      yield { type: 'text-delta', text: options.model }
-      if (options.model === 'completion-model') {
-        await new Promise<void>((resolve) => {
-          release = resolve
-          options.signal?.addEventListener('abort', () => resolve(), { once: true })
-        })
-      }
-    })())
-    const ctx = host({
-      stream,
-      prefs: {
-        completionModel: { provider: 'p', model: 'completion-model' },
-        rewriteModel: { provider: 'p', model: 'rewrite-model' },
-      },
-    })
-    const completion = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'mix', system: 's', text: 't', signal: new AbortController().signal, maxChars: 40 })
-    await vi.waitFor(() => { if (!release) throw new Error('completion has not blocked') })
-    const rewrite = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'mix', system: 's', text: 't', signal: new AbortController().signal, maxChars: 40 })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(stream).toHaveBeenCalledTimes(1)
-    expect(stream.mock.calls[0]?.[0].signal?.aborted).toBe(false)
-    release()
-    await expect(completion).resolves.toBe('completion-model')
-    await expect(rewrite).resolves.toBe('rewrite-model')
-  })
-
   it('drops the result and aborts the producer when the feature scope is disposed', async () => {
     const scope = new AbortController()
     let release!: () => void
@@ -267,7 +238,7 @@ describe('direct writing model calls', () => {
       })
     })())
     const ctx = host({ stream, scope: { active: true, signal: scope.signal } })
-    const pending = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'dispose', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
+    const pending = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'dispose', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!release) throw new Error('rewrite has not blocked') })
     scope.abort()
     await expect(pending).resolves.toBe('')
@@ -465,7 +436,7 @@ describe('direct writing model calls', () => {
     const first = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'hold', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!releaseFirst) throw new Error('holder has not started') })
     let secondDone = false
-    const second = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'queued', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
+    const second = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'queued', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
       .then((value) => { secondDone = true; return value })
     const parallel = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'other-provider', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await expect(parallel).resolves.toBe('other-provider')
@@ -502,7 +473,7 @@ describe('direct writing model calls', () => {
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
     const cancelled = new AbortController()
-    const queued = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'cancel-wait', system: 's', text: 't', signal: cancelled.signal, maxChars: 20 })
+    const queued = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'cancel-wait', system: 's', text: 't', signal: cancelled.signal, maxChars: 20 })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(held.stream).toHaveBeenCalledTimes(1)
     cancelled.abort()
@@ -522,7 +493,7 @@ describe('direct writing model calls', () => {
     })
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
-    const queued = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'dispose-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
+    const queued = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'dispose-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(held.stream).toHaveBeenCalledTimes(1)
     scope.abort()
@@ -541,7 +512,7 @@ describe('direct writing model calls', () => {
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
     const queued = runWritingAi({
-      ctx, purpose: 'manuscript.rewrite', sessionId: 'timeout-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      ctx, purpose: 'manuscript.completion', sessionId: 'timeout-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
       timeoutMs: 5,
     })
     expect(await settles(queued)).toBe(true)

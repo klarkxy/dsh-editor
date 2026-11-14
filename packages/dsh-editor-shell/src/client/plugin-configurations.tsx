@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react'
-import { Box, Button, Heading, Notice } from '../ui/index.ts'
+import { Box, Button, ChevronLeftIcon, Heading, Notice } from '../ui/index.ts'
 import { getLocale, subscribeLocale, t } from '../i18n/index.ts'
 import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import type { SettingsScopeBinder } from './shared.ts'
@@ -156,7 +156,13 @@ export function ConfigurationOutlet(props: PluginConfigurationPageProps) {
 }
 
 export function PluginConfigurationPage(props: PluginConfigurationPageProps) {
-  return <Box className="plugin-configuration-page" data-testid="plugin-configuration-page">
+  return <Box className="dsh-settings-section plugin-configuration-page" data-testid="plugin-configuration-page">
+    <div className="plugin-subpage-bar">
+      <Button type="button" variant="secondary" size="sm" data-testid="plugin-detail-back"
+        className="plugin-subpage-back" onClick={props.onClose} icon={<ChevronLeftIcon size="sm" />}>
+        {t('plugins.detailBack')}
+      </Button>
+    </div>
     <Heading as="h2" size="4" className="plugin-configuration-title">{props.entry.label}</Heading>
     <Box data-dsh-plugin-surface="">
       <ConfigurationBoundary identity={`${props.entry.id}:${props.version}`}>

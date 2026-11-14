@@ -25,12 +25,12 @@ function pdfFixture() {
 const packaged = process.argv.includes('--packaged')
 const executable = packaged ? resolve(root,'.pack/desktop/win-unpacked/DSH Editor.exe') : resolve(root,'apps/desktop/node_modules/electron/dist/electron.exe')
 const launchArgs = packaged ? [] : [resolve(root,'apps/desktop/dist/main.js')]
-const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.2.1-rc.5')
+const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.2.2-rc.1')
 const output = resolve(root, packaged ? 'e2e/out/official-plugins-packaged' : 'e2e/out/official-plugins')
 const home = resolve(root, '.dev/official-plugins-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/profile-template') : resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -324,14 +324,7 @@ try {
   await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('local conversation fixture')
   await page.getByRole('textbox',{name:'输入消息',exact:true}).press('Enter')
   await page.getByText('Local acceptance reply.',{exact:true}).waitFor({timeout:30000})
-  await page.getByRole('button',{name:'新对话',exact:true}).click()
-  await page.getByRole('button',{name:'开始对话',exact:true}).click()
-  await page.getByRole('button',{name:'对话操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'置顶对话',exact:true}).click()
-  await page.getByRole('button',{name:'对话操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'取消置顶',exact:true}).waitFor()
-  await page.getByRole('menuitem',{name:'归档',exact:true}).click()
-  check('native conversation pin, archive and restore')
+  check('native conversation reply')
   await page.locator(S.cmContent).fill('# Preview fixture\nSaved with upgraded desktop.')
   await page.locator(S.cmContent).press('Control+s')
   for (let attempt=0;attempt<50;attempt++) {

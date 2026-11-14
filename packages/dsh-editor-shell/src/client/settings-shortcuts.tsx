@@ -1,6 +1,6 @@
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { useEffect, useState } from 'react'
-import { Card, Kbd, Text } from '../ui/index.ts'
+import { Kbd, Text } from '../ui/index.ts'
 import { SettingsGroup } from './settings-layout.tsx'
 import { useLocale } from '../i18n/index.ts'
 import { runtimeShortcutHint, runtimeShortcutPlatform } from '../palette-shortcut.ts'
@@ -10,9 +10,9 @@ type Row = [keys: string, zh: string, en: string]
 const groups = (platform: string): { title: [string, string]; rows: Row[] }[] => [
   { title: ['稿纸与补全', 'Manuscript and completion'], rows: [
     ['Mod+S', '保存文稿', 'Save manuscript'],
-    ['Mod+Enter', '手动补全；有改写预览时接受改写', 'Request completion; accept an open rewrite preview'],
+    ['Mod+Enter', '手动补全', 'Request completion'],
     ['Tab', '接受光标处的补全建议', 'Accept the inline suggestion'],
-    ['Esc', '取消补全 / 改写生成或建议', 'Cancel completion / rewrite generation or suggestions'],
+    ['Esc', '取消补全或建议', 'Cancel completion or suggestions'],
     ['Shift+F10 / Menu', '稿纸或文件树：打开右键菜单', 'Manuscript or file tree: open context menu'],
     ['Mod+Z', '撤销', 'Undo'],
     [platform === 'darwin' ? 'Mod+Shift+Z' : platform === 'linux' ? 'Ctrl+Y / Ctrl+Shift+Z' : 'Ctrl+Y', '重做', 'Redo'],
@@ -108,10 +108,10 @@ export function ShortcutsSettings({ commands, renderSlot }: { commands?: ShellCo
     {all.map(group => <SettingsGroup key={group.title[0]} title={group.title[language]}>
       {renderRows(group.rows)}
     </SettingsGroup>)}
-    <Card className="settings-block"><details>
+    <div className="settings-block"><details>
       <summary>{locale === 'en' ? 'More editing and navigation shortcuts' : '更多编辑与光标快捷键'}</summary>
       {renderRows(advanced)}
-    </details></Card>
+    </details></div>
     <Text as="p" size="2" color="gray">{locale === 'en'
       ? 'Some keys may be reserved by your browser or OS. Use the command palette or menus if a shortcut is intercepted.'
       : '部分组合键可能被浏览器或系统占用；遇到冲突时可从命令面板或菜单执行。'}</Text>

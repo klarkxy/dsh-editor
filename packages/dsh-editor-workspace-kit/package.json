@@ -21,6 +21,11 @@
       "import": "./lib/frontmatter.js",
       "default": "./lib/frontmatter.js"
     },
+    "./natural-order": {
+      "types": "./lib/natural-order.d.ts",
+      "import": "./lib/natural-order.js",
+      "default": "./lib/natural-order.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

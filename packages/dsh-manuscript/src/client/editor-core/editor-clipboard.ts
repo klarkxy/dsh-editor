@@ -25,7 +25,6 @@ export type EditorCommandState = {
   conflict: boolean
   busy: boolean
   completionEnabled: boolean
-  enablePatch: boolean
   hasVisibleSelection: boolean
   collapsed: boolean
   dirty: boolean
@@ -134,7 +133,6 @@ export function editorCommandState(input: {
   conflict: boolean
   busy: boolean
   completionEnabled: boolean
-  enablePatch: boolean
   hasVisibleSelection: boolean
   collapsed: boolean
   dirty: boolean
@@ -149,7 +147,6 @@ export function editorCommandState(input: {
     conflict: input.conflict,
     busy: input.busy,
     completionEnabled: input.completionEnabled,
-    enablePatch: input.enablePatch,
     hasVisibleSelection: input.hasVisibleSelection,
     collapsed: input.collapsed,
     dirty: input.dirty,
@@ -163,7 +160,7 @@ export function editorCommandState(input: {
     canFind: loaded,
     canReplace: loaded,
     canComplete: loaded && input.completionEnabled && input.collapsed && !input.conflict && !input.busy,
-    canRewrite: loaded && input.completionEnabled && input.enablePatch && input.hasVisibleSelection && !input.conflict && !input.busy,
+    canRewrite: loaded && input.hasVisibleSelection && !input.conflict && !input.busy,
   }
 }
 

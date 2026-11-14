@@ -16,7 +16,7 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'writing-models-' + runId)
 const output = resolve(root, 'e2e/out/writing-models', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1')
 const featureIds = []
 const optionalIds = ['current-title', 'mood', 'recap', 'zhihu', 'zhihu-tools']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
@@ -173,6 +173,15 @@ try {
   page = await context.newPage(); page.setDefaultTimeout(20000)
   const requests=[]
   page.on('request',req=>{if(req.method()==='POST'){try{requests.push(req.postDataJSON())}catch{}}})
+  page.on('response',async response=>{
+    try {
+      const request=response.request().postDataJSON()
+      if(request?.method?.startsWith('bot.')) {
+        report.botReplies ??= []
+        report.botReplies.push({method:request.method,result:await response.json()})
+      }
+    } catch {}
+  })
   page.on('pageerror',error=>report.errors.push(error.message))
   await page.goto(url); await page.locator(S.shell).waitFor({timeout:60000})
   for(let n=0;n<5;n++){const next=page.getByRole('button',{name:'继续',exact:true});if(!await next.isVisible())break;await next.click()}
@@ -193,7 +202,8 @@ try {
   const findBundle=name=>bundles.find(row=>row.name===name || row.name.endsWith('/'+name) || row.name.endsWith(name));
   for(const id of [...retired,...optionalIds])assert.equal(find(id),undefined,'retired plugin '+id);
   for(const id of featureIds)assert.equal(find(id)?.enabled ?? findBundle(id)?.enabled,true,id);
-  for(const id of ['editor-cards','editor-memory-panel','mcp-resources'])assert.equal(find(id)?.enabled ?? findBundle(id)?.enabled ?? findBundle('dsh-'+id)?.enabled,false,id);
+  for(const id of ['editor-cards','editor-memory-panel'])assert.equal(find(id)?.enabled ?? findBundle(id)?.enabled ?? findBundle('dsh-'+id)?.enabled,true,id);
+  for(const id of ['mcp-resources'])assert.equal(find(id)?.enabled ?? findBundle(id)?.enabled ?? findBundle('dsh-'+id)?.enabled,false,id);
   assert.equal(report.calls.length,0,'opening host should not infer');
   if(process.env.RETIREMENT_LEGACY_FIXTURE==='1'){
     const legacy=JSON.parse(await readFile(resolve(home,'storages/dsh_editor_ai_services.json'),'utf8'));assert.ok(legacy.tables.policy.current.imports.includes('editor-native-writing-v1'));assert.deepEqual(legacy.tables.receipts.current,{items:[]});assert.match(await readFile(patch,'utf8'),/writingModelsImported:\s*true/);await readFile(resolve(home,'cordis.patch.yml.before-plugin-retirement'),'utf8');await readFile(resolve(home,'cordis.patch.yml.before-preinstall-trim'),'utf8');const pluginState=JSON.parse(await readFile(resolve(home,'dsh-plugins.json'),'utf8'));assert.equal(pluginState.overrides.zhihu,undefined);
@@ -226,7 +236,8 @@ try {
   const effort=dialog.getByRole('combobox',{name:'补全模型 · 思考强度',exact:true});
   await effort.click();await page.getByRole('option',{name:'关',exact:true}).click();await effort.filter({hasText:'关'}).waitFor();
   await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionStrength);
-  for(const name of ['对话模型','补全模型','改写模型'])assert.equal(await dialog.getByRole('combobox',{name,exact:true}).count(),1);
+  for(const name of ['对话模型','补全模型'])assert.equal(await dialog.getByRole('combobox',{name,exact:true}).count(),1);
+  assert.equal(await dialog.getByRole('combobox',{name:'改写模型',exact:true}).count(),0);
   const chatSelection=dialog.getByRole('combobox',{name:'对话模型',exact:true});
   await chatSelection.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await chatSelection.filter({hasText:'New'}).waitFor();
   await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.chatModelSelect);
@@ -242,30 +253,50 @@ try {
   const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();
   const composer=page.getByRole('textbox',{name:'输入消息'});await composer.fill('请简短回复已收到。');await composer.press('Enter');await waitForCall('chat');
   assert.equal(report.calls.find(row=>row.kind==='chat').model,'fixture-new');
-  await page.getByRole('button',{name:'发送',exact:true}).waitFor();
+  await page.getByRole('button',{name:'发送',exact:true}).waitFor();await page.locator(S.chatHistoryIdle).waitFor();
   report.checks.push('a fresh conversation applies saved chatModel through native selection and sends actual chat inference');
   const before=await editor.innerText();
-  const fim=await rpc('/manuscript','fim.complete',payload);const rewrite=await rpc('/manuscript','patch.complete',payload);
-  assert.equal(fim.text,'雨'.repeat(240));assert.equal(rewrite.text,'她将旧信收进抽屉，轻轻合上。');assert.equal(await editor.innerText(),before);
-  assert.equal(report.calls.find(row=>row.kind==='completion').model,'fixture-new');assert.equal(report.calls.find(row=>row.kind==='rewrite').model,'fixture-legacy');
+  const fim=await rpc('/manuscript','fim.complete',payload);
+  assert.equal(fim.text,'雨'.repeat(240));assert.equal(await editor.innerText(),before);
+  assert.equal(report.calls.find(row=>row.kind==='completion').model,'fixture-new');
+  const rewriteResult=await requestResult('/manuscript','patch.complete',payload);assert.equal(rewriteResult.ok,false);
+  const rewriteAt=report.calls.length;
+  report.rewriteSelection=await page.locator(S.paperEditor).evaluate(el=>{
+    const view=el.__cmView
+    view.focus();view.dispatch({selection:{anchor:0,head:view.state.doc.length}})
+    return {from:view.state.selection.main.from,to:view.state.selection.main.to}
+  });
+  assert.ok(report.rewriteSelection.to>report.rewriteSelection.from);
+  await page.keyboard.press('Shift+F10');await page.getByTestId('editor-menu-rewrite').click();
+  await page.getByRole('textbox',{name:'输入改写要求'}).fill('缩短');await page.getByRole('button',{name:'改写',exact:true}).click();
+  await waitForCall('chat',rewriteAt);assert.equal(await editor.innerText(),before);
+  const rewriteCall=report.calls.slice(rewriteAt).find(row=>row.kind==='chat');
+  assert.match(rewriteCall.input,/改写要求：缩短/);assert.match(rewriteCall.input,/她把旧信放回抽屉/);
+  await page.locator(S.chatHistoryIdle).waitFor();
   // This adapter maps native off to no wire reasoning parameter.
   assert.equal(report.calls.find(row=>row.kind==='completion').effort,undefined);
   assert.match(await readFile(patch,'utf8'), /reasoningEffort:\s*off/);
-  const usage=await rpc('/manuscript','usage.summary',{days:1});assert.ok(usage.days.some(day=>day.byModel['local-test/fixture-legacy']?.outputTokens>0));assert.ok(usage.log.some(row=>row.model==='local-test/fixture-legacy'));
-  report.checks.push('saved models and explicit reasoning off drive real native completion/rewrite, retain usage and do not modify author text');
+  const usage=await rpc('/manuscript','usage.summary',{days:1});assert.ok(usage.days.some(day=>day.byModel['local-test/fixture-new']?.outputTokens>0));assert.ok(usage.log.some(row=>row.model==='local-test/fixture-new'));
+  report.checks.push('saved models drive completion; rewrite uses current chat, removes its legacy RPC, and does not modify author text');
   const assist=find('manuscript-assist');
   assert.ok(assist, 'manuscript-assist present')
-  assert.equal((await native('setPluginEnabled',{id:assist.entryId,enabled:false})).changed,true);
-  const disabled=await requestResult('/manuscript','fim.complete',payload);assert.equal(disabled.ok,false);
-  assert.equal((await native('setPluginEnabled',{id:assist.entryId,enabled:true})).changed,true);
+  const protectedAssist=await native('setPluginEnabled',{id:assist.entryId,enabled:false});
+  assert.equal(protectedAssist.changed,false);
+  assert.ok((await native('listPlugins')).find(row=>row.entryId===assist.entryId)?.enabled);
   assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));
-  report.checks.push('writing assist disabled/enabled without a model-center service and author text retained');
+  report.checks.push('required writing assist refuses disabling and remains usable without changing author text');
   dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();
-  for(const name of ['补全模型','改写模型']){const picker=dialog.getByRole('combobox',{name,exact:true});await picker.click();await page.getByRole('option',{name:'跟随当前对话',exact:true}).click();await picker.filter({hasText:'跟随当前对话'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.ariaLabel(name));}
+  for(const name of ['补全模型']){const picker=dialog.getByRole('combobox',{name,exact:true});await picker.click();await page.getByRole('option',{name:'跟随当前对话',exact:true}).click();await picker.filter({hasText:'跟随当前对话'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.ariaLabel(name));}
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   const liveModel=page.locator(S.chatRail).getByRole('combobox',{name:'选择模型',exact:true});await liveModel.click();await page.getByRole('option',{name:'Local acceptance · Legacy',exact:true}).click();await liveModel.filter({hasText:'Legacy'}).waitFor();
-  const fallbackAt=report.calls.length;assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));assert.equal((await rpc('/manuscript','patch.complete',payload)).text,'她将旧信收进抽屉，轻轻合上。');
-  assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='completion').model,'fixture-legacy');assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='rewrite').model,'fixture-legacy');assert.equal(await editor.innerText(),before);
+  const fallbackAt=report.calls.length;
+  await editor.click();await page.keyboard.press('Control+End');await page.keyboard.press('Control+Enter');await page.locator(S.cmGhost).waitFor();
+  assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='completion').model,'fixture-legacy');
+  await page.keyboard.press('Escape');await page.locator(S.cmGhost).waitFor({state:'detached'});
+  assert.equal(await editor.innerText(),before);
+  await composer.fill('换模型后只回复已收到。');await composer.press('Enter');
+  await waitForCall('chat',fallbackAt);await page.locator(S.chatHistoryIdle).waitFor();
+  assert.equal(report.calls.filter(row=>row.kind==='chat' && row.input.endsWith(rewriteCall.input.slice(rewriteCall.input.lastIndexOf('请改写下面这段。')))).length,1,'a model rollover must not resend the consumed rewrite');
   report.checks.push('follow-current routes use the live pending session choice before another chat turn commits it, without writing author text');
   dialog=await openSettings();await dialog.locator(S.settingsNavSection('models')).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   await page.screenshot({path:resolve(output,'02-writing.png'),fullPage:true});
@@ -450,6 +481,7 @@ try {
     assert.equal((await declaredTools()).some(row=>row.id==='zhihu-tools'),false);
     report.checks.push('Zhihu reinstalls live after removal and restart, keeps author patch/manuscript/storage data, and removes cleanly again');
   }
+  for(const reply of report.botReplies ?? [])assert.equal(reply.result.result?.ok,true,reply.method+': '+JSON.stringify(reply.result));
   assert.equal(report.errors.length,0,report.errors.join('\n'));report.ok=true;
 } catch(error) {
   report.failure=String(error);process.exitCode=1

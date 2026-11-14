@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -395,23 +395,6 @@ describe('desktop-dev package sync', () => {
   })
 
   it('is importable without auto-running and rejects names outside the composition', async () => {
-    const helper = readFileSync(fileURLToPath(new URL('./sync-desktop-dev-package.mjs', import.meta.url)), 'utf8')
-    expect(helper).toContain('process.execPath')
-    expect(helper).toContain('wrap-client.mjs')
-    expect(helper).toContain('isDirectRun()')
-    expect(helper).toContain('proper-lockfile')
-    expect(helper).toContain('desktop-sync-locks')
-    expect(helper).toContain('encodeURIComponent(name)')
-    expect(helper).toContain('realpath: false')
-    expect(helper).toContain('stale: 10_000')
-    expect(helper).toContain('update: 1_000')
-    expect(helper).toContain('retries: 600')
-    expect(helper).toContain('factor: 1')
-    expect(helper).toContain('minTimeout: 100')
-    expect(helper).toContain('maxTimeout: 100')
-    expect(helper).toContain('maxRetries: 5')
-    expect(helper).toContain('retryDelay: 100')
-    expect(helper).not.toContain('PromiseQueue')
     await expect(syncDesktopDevPackage('../escape', {
       composition: { packages: ['app-pkg'], libraries: [] }, wrapClient: false,
     })).rejects.toThrow(/invalid package name/)

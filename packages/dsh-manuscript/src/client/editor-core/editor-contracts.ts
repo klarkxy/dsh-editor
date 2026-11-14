@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { ShellToolSeatContext } from 'dsh-editor-seats'
 import type { EditorCommandState, EditorContextMenuEvent, EditorTargetSnapshot } from './editor-clipboard.ts'
-import type { EditorDocument, SelectionTicket } from './editor-state.ts'
+import type { EditorDocument } from './editor-state.ts'
 import type { CompletionPreference } from './completion-preference.ts'
 import type { TypographyInput } from './typography.ts'
 
@@ -30,7 +30,6 @@ export type EditorCoreHandle = {
   getSelection(): { start: number; end: number }
   setGhost(candidates: string[], index: number, at: number): void
   clearGhost(): void
-  setProposal(proposal: { ticket: SelectionTicket; text: string } | null): void
   /**
    * Reveal and select an absolute character range in the open document.
    * `start` / `end` are offsets in the full file text (including any
@@ -45,12 +44,6 @@ export type EditorCoreHandle = {
    * conflict resolution must call this before deleting the owned draft.
    */
   cancelPendingDraftSync(): void
-  /**
-   * Request a selection rewrite. When `instruction` is omitted the Host uses
-   * the default patch prompt; the built-in footer button keeps that path.
-   * An optional snapshot pins the original range across a custom-dialog gap.
-   */
-  requestRewrite(instruction?: string, target?: EditorTargetSnapshot): void
   focus(): void
   getFocusTarget(): HTMLElement | null
   isComposing(): boolean
@@ -140,8 +133,7 @@ export type EditorCoreProps = {
   automaticCompletionEligible?: boolean
   /**
    * Optional completion capability gate (default true for compatibility).
-   * When false, no FIM or selection-rewrite RPC is ever issued — the manual
-   * 补全/修改选段 buttons and the automatic FIM trigger are all disabled.
+   * When false, manual completion and the automatic FIM trigger are disabled.
    */
   completionEnabled?: boolean
   authorPreferences?: string
@@ -150,13 +142,7 @@ export type EditorCoreProps = {
   maxGhostCandidates?: number
   showGhostTip?: boolean
   buildFimPayload?(input: FimPayloadInput): Record<string, unknown>
-  buildPatchPayload?(input: PatchPayloadInput): Record<string, unknown>
   extractFimText?(value: unknown): string
-  extractPatchText?(value: unknown): string
-
-  enablePatch?: boolean
-  showProposalDiff?: boolean
-
   enableRewriteSelection?: boolean
   onRewriteSelection?(selection: string, path: string): void | Promise<void>
 
@@ -237,15 +223,4 @@ export type FimPayloadInput = {
   suffix: string
   authorPreferences?: string
   chapterContext?: string
-}
-
-export type PatchPayloadInput = {
-  sessionId: string
-  path: string
-  selectedText: string
-  before: string
-  after: string
-  authorPreferences?: string
-  chapterContext?: string
-  instruction?: string
 }

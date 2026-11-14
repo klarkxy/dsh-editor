@@ -29,7 +29,6 @@ const DEFAULT_MAX_CHARS = 240
 
 const PURPOSE_PREF = {
   'manuscript.completion': 'completionModel',
-  'manuscript.rewrite': 'rewriteModel',
 } as const
 
 /**
@@ -175,7 +174,6 @@ export type WritingPurpose = {
 
 export const WRITING_PURPOSES: WritingPurpose[] = [
   { id: 'manuscript.completion', label: '正文补全' },
-  { id: 'manuscript.rewrite', label: '选区改写' },
 ]
 
 type PreparedWritingCall = Pick<PreparedLlmCall, 'config' | 'stream'>
@@ -375,7 +373,7 @@ function hostFace(ctx: WritingContext): {
 }
 
 function purposeSaved(ctx: WritingContext, purpose: string): FeatureModelRoute | undefined {
-  const field = purpose === 'manuscript.completion' || purpose === 'manuscript.rewrite' ? PURPOSE_PREF[purpose] : undefined
+  const field = purpose === 'manuscript.completion' ? PURPOSE_PREF[purpose] : undefined
   if (!field) return undefined
   const snapshot = (ctx.get?.('editorWritingPreferences', true) as { read?: () => unknown } | undefined)?.read?.()
   if (snapshot == null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined

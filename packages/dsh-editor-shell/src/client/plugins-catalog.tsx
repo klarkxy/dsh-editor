@@ -173,12 +173,14 @@ function CatalogSection(props: {
 }) {
   const { section } = props
   const items = section.items
-  const ordinary = section.id === 'user' ? items : items.filter(card => !advancedCatalogCard(card))
-  const advanced = section.id === 'user' ? [] : items.filter(advancedCatalogCard)
+  const ordinary = section.id === 'user' ? items : items.filter(card => !advancedCatalogCard(card, section.id))
+  const advanced = section.id === 'user' ? [] : items.filter(card => advancedCatalogCard(card, section.id))
   const count = items.length
   const empty = props.query.trim()
     ? t('plugins.catalogNoMatch')
     : section.id === 'user' ? t('plugins.catalogUserEmpty') : t('plugins.catalogEmpty')
+  const foldedTitle = section.id === 'official' ? t('plugins.catalogOfficialFolded') : t('plugins.catalogAdvanced')
+  const foldedHint = section.id === 'official' ? t('plugins.catalogOfficialFoldedHint') : t('plugins.catalogAdvancedHint')
   return <section className="plugins-catalog-section" ref={props.sectionRef}
     data-testid={`plugins-catalog-${section.id}`}>
     <Flex className="plugins-catalog-head" align="baseline" justify="between" gap="3">
@@ -193,8 +195,8 @@ function CatalogSection(props: {
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
       : null}
     {advanced.length ? <details className="plugins-catalog-advanced" open={props.query.trim() ? true : undefined}>
-      <summary><ChevronRightIcon size="sm" />{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
-      <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogAdvancedHint')}</Text>
+      <summary><ChevronRightIcon size="sm" />{foldedTitle} ({advanced.length})</summary>
+      <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{foldedHint}</Text>
       <ul className="plugins-catalog-rows">{advanced.map(card => <CatalogRow key={card.key} card={card}
         kind={section.id === 'official' || section.id === 'builtin' || section.id === 'user' ? section.id : 'user'}
         pending={props.pending === card.key} installing={props.installing} highlighted={false}

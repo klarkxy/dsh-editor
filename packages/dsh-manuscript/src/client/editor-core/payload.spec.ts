@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultFimPayload, defaultPatchPayload } from './editor.tsx'
+import { defaultFimPayload } from './editor.tsx'
 import { REWRITE_PRESETS } from './rewrite-presets.ts'
 
 describe('default FIM/patch payloads', () => {
@@ -29,37 +29,6 @@ describe('default FIM/patch payloads', () => {
       chapterContext: '节拍：雨夜',
     })
 
-    expect(defaultPatchPayload({
-      sessionId: 's',
-      path: '正文/01.md',
-      selectedText: '旧句',
-      before: '前',
-      after: '后',
-    })).toEqual({
-      sessionId: 's',
-      path: '正文/01.md',
-      selectedText: '旧句',
-      before: '前',
-      after: '后',
-    })
-
-    expect(defaultPatchPayload({
-      sessionId: 's',
-      path: '正文/01.md',
-      selectedText: '旧句',
-      before: '前',
-      after: '后',
-      chapterContext: '上一章：已逃',
-      instruction: '缩短对白',
-    })).toEqual({
-      sessionId: 's',
-      path: '正文/01.md',
-      selectedText: '旧句',
-      before: '前',
-      after: '后',
-      chapterContext: '上一章：已逃',
-      instruction: '缩短对白',
-    })
   })
 })
 

@@ -17,6 +17,7 @@ describe('automatic completion preference', () => {
       requestedRevision: 1,
       focused: true,
       collapsedSelection: true,
+      atEnd: true,
       prefix: '雨声沿着长街渐渐逼近。',
       busy: false,
       blocked: false,
@@ -26,6 +27,7 @@ describe('automatic completion preference', () => {
     expect(automaticCompletionReady({ ...ready, manuscript: false })).toBe(false)
     expect(automaticCompletionReady({ ...ready, requestedRevision: 2 })).toBe(false)
     expect(automaticCompletionReady({ ...ready, collapsedSelection: false })).toBe(false)
+    expect(automaticCompletionReady({ ...ready, atEnd: false })).toBe(false)
     expect(automaticCompletionReady({ ...ready, prefix: '太短' })).toBe(false)
     expect(automaticCompletionReady({ ...ready, busy: true })).toBe(false)
     expect(automaticCompletionReady({ ...ready, blocked: true })).toBe(false)

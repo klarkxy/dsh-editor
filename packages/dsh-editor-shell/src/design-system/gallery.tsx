@@ -190,6 +190,7 @@ export function GallerySectionFeedback() {
       <Notice tone="success">操作已完成。</Notice>
       <Notice tone="warning" title="警告">需要注意的状态，role=&quot;alert&quot;。</Notice>
       <Notice tone="danger" action={<Button variant="secondary" size="sm">重试</Button>}>操作失败。</Notice>
+      <Notice tone="success" onDismiss={() => {}} dismissLabel="关闭">可手动关闭的提示。</Notice>
       <EmptyState
         title="暂无作品"
         body="新建一部作品开始写作。"

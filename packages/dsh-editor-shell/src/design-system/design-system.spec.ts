@@ -41,7 +41,7 @@ describe('原稿 web design contracts', () => {
     // the class can never outlive its own animation, and reduced motion ends it.
     expect(shellStyles).toMatch(/\.plugins-catalog-row\.is-new[^{]*\{[^}]*animation: plugins-catalog-installed calc\(var\(--dsh-ui-duration-slow\) \* 4\)/)
     expect(shellStyles).toMatch(/@keyframes plugins-catalog-installed\s*\{\s*from, 30% \{/)
-    expect(shellStyles).toMatch(/@keyframes plugins-catalog-installed\s*\{[\s\S]*?var\(--dsh-ui-accent-soft\)[\s\S]*?var\(--dsh-ui-raised\)/)
+    expect(shellStyles).toMatch(/@keyframes plugins-catalog-installed\s*\{[\s\S]*?var\(--dsh-ui-accent-soft\)[\s\S]*?transparent/)
     // 配置 and 详情 are one control: readable text, no resting fill, hover fill.
     expect(shellStyles).toMatch(/\.plugins-catalog-action[^{]*\{[^}]*background: transparent;[^}]*color: var\(--dsh-ui-text\)/)
     expect(shellStyles).toMatch(/\.plugins-catalog-action:hover[^{]*\{[^}]*background: var\(--dsh-ui-hover\)/)

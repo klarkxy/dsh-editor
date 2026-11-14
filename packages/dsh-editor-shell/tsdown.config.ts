@@ -64,6 +64,7 @@ export default defineConfig([
         '@deepseek-ai/dsh-util-workspace-path',
         'dsh-editor-seats',
         'dsh-editor-workbench/contracts',
+        'dsh-editor-workspace-kit/natural-order',
         'dsh-editor-novel-kernel/contracts',
         'dsh-manuscript/client/editor-core',
         // cmdk + @radix-ui/react-dialog 没有自己的 CSS,tsdown 默认会把

@@ -3,7 +3,7 @@ import { compareDocumentPaths } from './natural-order.ts'
 
 const ORIGINAL = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 
-/* shell-rewrite-spec §3 指定的排序用例（与 shell model/natural-order.spec.ts 同例）。 */
+/* shell-rewrite-spec §3 指定的排序用例。shell 只保留 sortDocumentPaths / sortChapterPaths。 */
 describe('compareDocumentPaths', () => {
   it('第二章 排在 第一章 之后', () => {
     expect(compareDocumentPaths('正文/第一章.md', '正文/第二章.md')).toBeLessThan(0)

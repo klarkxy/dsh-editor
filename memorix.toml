@@ -1,0 +1,3 @@
+# 发布打包输出可重新生成，不作为 CodeGraph 源码索引。
+[codegraph]
+exclude_patterns = [".pack/**"]

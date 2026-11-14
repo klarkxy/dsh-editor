@@ -1,6 +1,6 @@
-import { createElement, type ReactNode } from 'react'
+import { createElement, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { collectStyles } from '../design-system/layers.ts'
 import {
   Badge,
@@ -141,6 +141,25 @@ describe('Notice', () => {
     expect(out).toContain('提示')
     expect(out).toContain('正文')
     expect(out).toContain('知道了')
+  })
+
+  it('renders a labelled dismiss button only when onDismiss is set', () => {
+    expect(html(createElement(Notice, { tone: 'info' }, 'x'))).not.toContain('dsh-notice__dismiss')
+    const out = html(createElement(Notice, { tone: 'success', onDismiss: () => {}, dismissLabel: '关闭' }, 'x'))
+    expect(out).toContain('dsh-notice__dismiss')
+    expect(out).toContain('aria-label="关闭"')
+  })
+
+  it('dismiss button calls onDismiss once', () => {
+    const dismiss = vi.fn()
+    const tree = Notice({ tone: 'info', onDismiss: dismiss, children: 'x' })
+    const button = (tree.props.children as ReactNode[]).find(
+      (child): child is ReactElement<{ onClick(): void }> =>
+        isValidElement(child) && (child.props as { className?: string }).className === 'dsh-notice__dismiss',
+    )
+    expect(button).toBeTruthy()
+    button!.props.onClick()
+    expect(dismiss).toHaveBeenCalledTimes(1)
   })
 })
 

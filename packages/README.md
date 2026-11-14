@@ -27,7 +27,7 @@
 
 | 官方包或能力 | Editor 中的用途 |
 | --- | --- |
-| DSH 0.2.1-rc.5 原生会话 | 搭档对话的各段会话、消息与审批；Editor 只在作品元数据记录段指针 |
+| DSH 0.2.2-rc.1 原生会话 | 搭档对话的各段会话、消息与审批；Editor 只在作品元数据记录段指针 |
 | `@deepseek-ai/dsh-client-ui-shortcuts` | 「设置 → 快捷键」搜索、录制和重置；桌面修改持久化 |
 | `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` | 文件栏图片、PDF、Office 文档和表格预览 |
 | `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源，默认关闭 |

@@ -1,7 +1,7 @@
 // Unified completion preference helpers. Behaviour matches the shell's
 // previous stand-alone module: the only valid stored value is 'pause' and
 // automatic FIM is gated on a fresh focused edit on a manuscript path with a
-// non-trivial prefix and no in-flight suggestion.
+// non-trivial prefix, an insertion point at the end, and no in-flight suggestion.
 
 export type CompletionPreference = 'manual' | 'pause'
 
@@ -23,6 +23,7 @@ export function automaticCompletionReady(input: {
   focused: boolean
   collapsedSelection: boolean
   prefix: string
+  atEnd: boolean
   busy: boolean
   blocked: boolean
 }): boolean {
@@ -31,6 +32,7 @@ export function automaticCompletionReady(input: {
     && input.userEditRevision > input.requestedRevision
     && input.focused
     && input.collapsedSelection
+    && input.atEnd
     && input.prefix.trim().length >= 8
     && !input.busy
     && !input.blocked

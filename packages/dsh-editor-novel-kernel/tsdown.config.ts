@@ -11,6 +11,6 @@ export default defineConfig({
   sourcemap: true,
   hash: false,
   suppressWarnings: [/module level directive/],
-  deps: { neverBundle: ['dsh-manuscript', 'dsh-editor-workbench'] },
+  deps: { neverBundle: ['dsh-editor-workbench'] },
   outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
 })

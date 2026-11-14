@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DraftSyncQueue, type EditorDraft } from './drafts.ts'
+import { DraftSyncQueue } from './drafts.ts'
 
 describe('editor draft protocol shape', () => {
-  it('carries only workspace-relative document state for the Host RPC', () => {
-    const draft: EditorDraft = { path: '正文/01.md', text: '本地草稿', baseText: '原文', baseVersion: 'v1' }
-    expect(draft).toEqual({ path: '正文/01.md', text: '本地草稿', baseText: '原文', baseVersion: 'v1' })
-  })
-
   it('serializes a delayed put before save deletion', async () => {
     const calls: string[] = []
     let releasePut!: () => void

@@ -30,41 +30,13 @@ describe('desktop dev prepare', () => {
     expect(profile.dsh.profile.patchReload).toBe('startup')
   })
 
-  it('copies projected app packages into the template and keeps the DSH runtime free of them', () => {
-    const prepare = readFileSync(resolve(root, 'scripts/prepare-desktop-dev.mjs'), 'utf8')
-    expect(prepare).toContain('projectProfileArtifacts')
-    expect(prepare).toContain('removeAppPackagesFromRuntime')
-    expect(prepare).not.toContain("await symlink(source, destination, 'junction')")
-    const compositions = readFileSync(resolve(root, 'scripts/desktop-compositions.mjs'), 'utf8')
-    expect(compositions).toContain('copyNativePackageArtifact')
-    expect(compositions).toContain('bundled-packages/node_modules')
-    expect(compositions).toContain("'runtime-links', 'node_modules'")
-    expect(compositions).toContain('nativeDependencies')
-    expect(compositions).toContain('link:./bundled-packages/node_modules/')
-    expect(compositions).toContain('link:./profile-config')
-    const runtime = readFileSync(resolve(root, 'scripts/prepare-desktop-runtime.mjs'), 'utf8')
-    expect(runtime).toContain('projectProfileArtifacts')
-    expect(runtime).toContain('removeAppPackagesFromRuntime')
-    expect(runtime).toContain("await rename(resolve(dshOutput, 'node_modules'), resolve(dshOutput, 'vendor-dependencies'))")
-    expect(runtime).toContain("await rename(resolve(profileOutput, 'node_modules'), resolve(profileOutput, 'vendor-dependencies'))")
-    expect(runtime).toContain("await rename(resolve(profileOutput, 'bundled-packages', 'node_modules'), resolve(profileOutput, 'bundled-packages', 'vendor-dependencies'))")
-    const afterPack = readFileSync(resolve(root, 'scripts/after-pack-desktop.cjs'), 'utf8')
-    expect(afterPack).toContain("profile-template', 'bundled-packages', 'vendor-dependencies'")
+  it('keeps the DSH runtime package copy filter on built artifacts only', () => {
     const source = resolve(root, 'node_modules/@deepseek-ai/dsh')
     const filter = packageCopyFilter(source, { omitMaps: true })
     expect(filter(source)).toBe(true)
     expect(filter(resolve(source, 'lib/client.js'))).toBe(true)
     expect(filter(resolve(source, 'lib/client.js.map'))).toBe(false)
     expect(filter(resolve(source, 'src/client.tsx'))).toBe(false)
-    const dev = readFileSync(resolve(root, 'scripts/dev.mjs'), 'utf8')
-    expect(dev).toContain('reusing existing package builds')
-    expect(dev).toContain('DSH_DEV_FORCE_BUILD')
-    expect(dev).toContain('killLeftoverDevProcesses')
-    expect(dev).toContain('waitForFirstCompile')
-    expect(dev).toContain('DSH_DESKTOP_USER_DATA_DIR')
-    expect(dev).toContain('FIRST_COMPILE_MS')
-    expect(dev).toContain('sync-desktop-dev-package.mjs')
-    expect(dev).toContain('workspacePackageDir(name)')
   })
 })
 
@@ -133,11 +105,11 @@ describe('plugin manifests and composition resolver', () => {
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]
     const packages = [...core, 'dsh-editor-novel-kernel', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'overview-panel'],
+      features: ['assistant', 'completion', 'overview-panel', 'cards', 'memory-panel'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       runtimeDependencies: ['@klarkxy/dsh-plugin-kit', 'react'],
-      disabledEntries: ['editor-cards', 'editor-memory-panel'],
+      disabledEntries: [],
       extraInserts: [],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist' },
       bundles: [...BASE_BUNDLES, ...packages],
@@ -154,12 +126,12 @@ describe('plugin manifests and composition resolver', () => {
     for (let index = 1; index < stripped.length; index += 1) {
       expect(stripped[index]).toEqual(stripped[0])
     }
-    expect(capability.features).not.toContain('cards')
-    expect(capability.features).not.toContain('memory-panel')
+    expect(capability.features).toContain('cards')
+    expect(capability.features).toContain('memory-panel')
     expect(capability.packages).toContain('dsh-editor-novel-kernel')
     expect(capability.packages).toContain('dsh-editor-cards')
     expect(capability.packages).toContain('dsh-editor-memory-panel')
-    expect(capability.disabledEntries).toEqual(['editor-cards', 'editor-memory-panel'])
+    expect(capability.disabledEntries).toEqual([])
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-workbench-tools')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-novel-kernel')
   })
@@ -234,7 +206,10 @@ describe('plugin manifests and composition resolver', () => {
   it('marks local public and private functionality while retaining external ownership', () => {
     const catalogue = catalogFromManifests(loadPluginManifests(root))
     expect(catalogue.manuscript.builtin).toBe(true)
-    expect(catalogue['editor-cards']).toMatchObject({ builtin: true, locked: false })
+    expect(catalogue['manuscript-assist']).toMatchObject({ builtin: true, locked: true })
+    expect(catalogue['editor-overview-panel']).toMatchObject({ builtin: true, locked: true })
+    expect(catalogue['editor-cards']).toMatchObject({ builtin: true, locked: true })
+    expect(catalogue['editor-memory-panel']).toMatchObject({ builtin: true, locked: true })
     expect(catalogue['editor-novel-kernel']).toMatchObject({ builtin: true, locked: true, managedBy: 'session' })
     expect(catalogue['model-center']).toBeUndefined()
     expect(catalogue['ai-services']).toBeUndefined()

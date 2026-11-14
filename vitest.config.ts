@@ -33,6 +33,7 @@ export default defineConfig({
       'dsh-editor-workbench/tools': `${root}packages/dsh-editor-workbench/src/tools/tools.ts`,
       'dsh-editor-workbench': `${root}packages/dsh-editor-workbench/src/index.ts`,
       'dsh-editor-workspace-kit/frontmatter': `${root}packages/dsh-editor-workspace-kit/src/frontmatter.ts`,
+      'dsh-editor-workspace-kit/natural-order': `${root}packages/dsh-editor-workspace-kit/src/natural-order.ts`,
       'dsh-editor-workspace-kit': `${root}packages/dsh-editor-workspace-kit/src/index.ts`,
       'dsh-editor-seats/tokens': `${root}packages/dsh-editor-seats/src/tokens.ts`,
       'dsh-editor-seats/seat-button': `${root}packages/dsh-editor-seats/src/seat-button.tsx`,

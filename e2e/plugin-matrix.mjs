@@ -14,6 +14,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
 import { loadPluginManifests, publicPackages } from '../scripts/plugin-manifest.mjs'
 import { S } from './helpers/selectors.mjs'
 
@@ -70,13 +71,12 @@ function manifestFor(name) {
 function stageTarball(name) {
   if (name === '@klarkxy/dsh-zhihu') {
     // On-demand public plugin: test its published artifact without adding it to the distribution.
-    const npm = process.env.npm_execpath
-    if (!npm) throw new Error('run the matrix through pnpm')
-    const result = spawnSync(process.execPath, [npm, 'exec', 'npm', 'pack', name + '@0.1.10', '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120000 })
-    if (result.status !== 0) throw new Error('optional Zhihu fixture download failed: ' + result.stderr)
+    const pm = resolveBundledPackageManager(process.execPath)
+    const result = spawnSync(pm.command, [...pm.args, 'exec', 'npm', 'pack', name + '@0.1.10', '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, env: { ...process.env, ...pm.env }, encoding: 'utf8', windowsHide: true, timeout: 120000 })
+    if (result.status !== 0) throw new Error(`optional Zhihu fixture download failed (${result.status}, ${result.signal}, ${result.error?.message ?? ''}): ${result.stdout}\n${result.stderr}`)
     const archive = path.join(staging, 'klarkxy-dsh-zhihu-0.1.10.tgz')
-    const contents = spawnSync('tar', ['--force-local', '-xOf', archive.replaceAll('\\', '/'), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
-    if (contents.status !== 0) throw new Error('cannot read optional fixture manifest')
+    const contents = spawnSync('tar', ['-xOf', path.basename(archive), 'package/package.json'], { cwd: staging, encoding: 'utf8', windowsHide: true })
+    if (contents.status !== 0) throw new Error('cannot read optional fixture manifest: ' + contents.stderr)
     const pkg = JSON.parse(contents.stdout)
     if (pkg.name !== name || pkg.version !== '0.1.10') throw new Error('optional fixture identity mismatch')
     publicPluginPackages.push(name)
@@ -108,7 +108,7 @@ function runDsh(args, options = {}) {
 }
 
 function transition(kind, name, spec) {
-  const args = ['plugin', '--profile', profile, kind, spec || name]
+  const args = ['plugin', '--profile', profile, kind, spec || name, '--store-dir', path.join(runRoot, 'store')]
   const result = runDsh(args)
   report.transitions.push({ kind, name, ok: true, stderr: String(result.stderr || '').trim().split(/\r?\n/).slice(-4) })
 }
@@ -320,113 +320,6 @@ async function probeSampleColorCompositing(page) {
   same(nearFg.fg, [245, 245, 245], 'probe 96% white foreground over black', nearFg)
 }
 
-function assertThemeSample(sample, label, expectDark) {
-  if (!sample?.fg || !sample?.bg) throw new Error(`${label}: missing computed colors ${JSON.stringify(sample)}`)
-  const ratio = contrastRatio(sample.fg, sample.bg)
-  if (ratio < 3) throw new Error(`${label}: contrast ${ratio.toFixed(2)} < 3 (${sample.color} on ${sample.background})`)
-  const textIsLight = sample.fg[0] + sample.fg[1] + sample.fg[2] > 360
-  if (expectDark && !textIsLight) throw new Error(`${label}: expected light text on ordinary DSH dark, got ${sample.color}`)
-  if (!expectDark && textIsLight) throw new Error(`${label}: expected dark text on ordinary DSH light, got ${sample.color}`)
-}
-
-async function waitHostDarkAttr(page, expectDark, label) {
-  // Installed ui-theme default is `system`; ThemePresenter writes body[data-ds-dark-theme].
-  try {
-    await page.waitForFunction(
-      (dark) => document.body.hasAttribute('data-ds-dark-theme') === dark,
-      expectDark,
-      { timeout: 8_000 },
-    )
-  } catch {
-    const actual = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
-    throw new Error(`${label}: expected body[data-ds-dark-theme]=${expectDark}, got ${actual}`)
-  }
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-}
-
-function assertServerResponseEnvelope(value) {
-  // Installed dsh-client-connection parseConnectionResponse: type/rpcId/result only.
-  const isRecord = (item) => typeof item === 'object' && item !== null && !Array.isArray(item)
-  if (!isRecord(value) || value.type !== 'server-response' || typeof value.rpcId !== 'string') {
-    throw new TypeError('connection: invalid server-response envelope')
-  }
-  const result = value.result
-  if (!isRecord(result)) throw new TypeError('connection: invalid server-response result')
-  if (result.ok === true) return
-  if (result.ok !== false || !isRecord(result.error)) throw new TypeError('connection: invalid server-response result')
-  const error = result.error
-  if (typeof error.code !== 'string' || typeof error.message !== 'string' || !isRecord(error.details)) {
-    throw new TypeError('connection: invalid server-response failure')
-  }
-}
-
-async function fulfillRpc(route, result) {
-  let rpcId = 'matrix'
-  try {
-    const posted = route.request().postDataJSON()
-    if (posted && typeof posted.rpcId === 'string') rpcId = posted.rpcId
-  } catch {
-    // Synthetic browser stub; do not fetch the live plugin route.
-  }
-  const body = { type: 'server-response', rpcId, result }
-  assertServerResponseEnvelope(body)
-  await route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify(body),
-  })
-}
-
-async function assertStandaloneThemes(page, name, samples, afterTheme) {
-  const check = async (theme, expectDark) => {
-    const darkAttr = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
-    if (darkAttr !== expectDark) throw new Error(`${name} ${theme}: body[data-ds-dark-theme]=${darkAttr}`)
-    for (const item of samples) {
-      assertThemeSample(await sampleColors(item.locator), `${name} ${theme} ${item.label}`, expectDark)
-    }
-    if (afterTheme) await afterTheme(theme, expectDark)
-  }
-  // emulateMedia is the OS scheme. Default preference is system, not an explicit user light write.
-  await page.emulateMedia({ colorScheme: 'light' })
-  await waitHostDarkAttr(page, false, `${name} system+prefers-light`)
-  await check('system+prefers-light', false)
-  await page.screenshot({ path: path.join(out, `${name}-light.png`) })
-  await page.emulateMedia({ colorScheme: 'dark' })
-  await waitHostDarkAttr(page, true, `${name} system+prefers-dark`)
-  await check('system+prefers-dark', true)
-  await page.screenshot({ path: path.join(out, `${name}-dark.png`) })
-  await page.emulateMedia({ colorScheme: null })
-  const state = report.states.find((item) => item.name === name)
-  if (state) {
-    state.ordinaryTheme = {
-      method: 'host ui-theme default system; ThemePresenter body[data-ds-dark-theme] after prefers-color-scheme settle',
-      defaultPreference: 'system',
-      explicitUserLight: false,
-      light: true,
-      dark: true,
-    }
-  }
-}
-
-function boxInsideViewport(box, viewport, label) {
-  if (!viewport) throw new Error(`${label}: missing viewport`)
-  if (!box || box.width <= 0 || box.height <= 0) {
-    throw new Error(`${label}: missing box ${JSON.stringify(box)}`)
-  }
-  const top = box.top ?? box.y
-  const left = box.left ?? box.x
-  const bottom = box.bottom ?? box.y + box.height
-  const right = box.right ?? box.x + box.width
-  const cx = left + box.width / 2
-  const cy = top + box.height / 2
-  if (cx < 0 || cy < 0 || cx > viewport.width || cy > viewport.height) {
-    throw new Error(`${label}: click point (${cx.toFixed(1)}, ${cy.toFixed(1)}) outside ${viewport.width}x${viewport.height}; box=${JSON.stringify(box)}`)
-  }
-  if (top < -1 || left < -1 || bottom > viewport.height + 1 || right > viewport.width + 1) {
-    throw new Error(`${label}: box ${JSON.stringify(box)} outside ${viewport.width}x${viewport.height}`)
-  }
-}
-
 function parseCssColor(value) {
   if (!value || value === 'transparent') return { r: 0, g: 0, b: 0, a: 0, raw: value }
   const text = String(value)
@@ -453,155 +346,6 @@ function parseCssColor(value) {
   return { raw: value }
 }
 
-function assertOpaquePaint(color, label, minAlpha = 0.95) {
-  const parsed = parseCssColor(color)
-  if (parsed.r == null || parsed.a == null) throw new Error(`${label}: unparsable color ${color}`)
-  if (parsed.a < minAlpha) throw new Error(`${label}: expected opaque paint, got ${color}`)
-  return parsed
-}
-
-async function readOverlayChrome(page, selectors) {
-  return page.evaluate((selectors) => {
-    const styleOf = (el) => {
-      if (!el) return null
-      const style = getComputedStyle(el)
-      return {
-        color: style.color,
-        backgroundColor: style.backgroundColor,
-        fontFamily: style.fontFamily,
-        fontSize: style.fontSize,
-        paddingTop: style.paddingTop,
-        paddingRight: style.paddingRight,
-        paddingBottom: style.paddingBottom,
-        paddingLeft: style.paddingLeft,
-        borderTopWidth: style.borderTopWidth,
-        borderTopStyle: style.borderTopStyle,
-        borderTopColor: style.borderTopColor,
-        boxShadow: style.boxShadow,
-      }
-    }
-    return {
-      panel: styleOf(document.querySelector(selectors.panel)),
-      header: styleOf(document.querySelector(selectors.header)),
-      button: styleOf(document.querySelector(selectors.button)),
-      input: styleOf(document.querySelector(selectors.input)),
-    }
-  }, selectors)
-}
-
-function assertStandaloneOverlayChrome(chrome, label, expectDark) {
-  if (!chrome?.panel || !chrome.header || !chrome.button || !chrome.input) {
-    throw new Error(`${label}: missing chrome nodes ${JSON.stringify(chrome)}`)
-  }
-  const panelBg = assertOpaquePaint(chrome.panel.backgroundColor, `${label} panel background`)
-  const buttonBg = assertOpaquePaint(chrome.button.backgroundColor, `${label} button background`)
-  const panelFg = parseCssColor(chrome.panel.color)
-  if (panelFg.r == null) throw new Error(`${label} panel color: ${chrome.panel.color}`)
-  const panelSum = panelBg.r + panelBg.g + panelBg.b
-  const buttonSum = buttonBg.r + buttonBg.g + buttonBg.b
-  if (expectDark && panelSum > 180) {
-    throw new Error(`${label}: expected dark panel fill, got ${chrome.panel.backgroundColor}`)
-  }
-  if (!expectDark && panelSum < 600) {
-    throw new Error(`${label}: expected light panel fill, got ${chrome.panel.backgroundColor}`)
-  }
-  if (Math.abs(panelSum - buttonSum) < 40) {
-    throw new Error(`${label}: button fill ${chrome.button.backgroundColor} collapsed onto panel ${chrome.panel.backgroundColor}`)
-  }
-  const ratio = contrastRatio([panelFg.r, panelFg.g, panelFg.b], [panelBg.r, panelBg.g, panelBg.b])
-  if (ratio < 3) {
-    throw new Error(`${label}: panel text contrast ${ratio.toFixed(2)} on its own background (${chrome.panel.color} / ${chrome.panel.backgroundColor})`)
-  }
-  const font = String(chrome.panel.fontFamily || '')
-  if (/times/i.test(font)) throw new Error(`${label}: panel still using Times (${font})`)
-  if (!/Noto Sans SC|PingFang SC|Microsoft YaHei|system-ui|sans-serif/i.test(font)) {
-    throw new Error(`${label}: panel font ${font}`)
-  }
-  const padTop = Number.parseFloat(chrome.header.paddingTop)
-  const padInline = Number.parseFloat(chrome.header.paddingLeft)
-  if (!(padTop >= 8) || !(padInline >= 12)) {
-    throw new Error(`${label}: header padding ${chrome.header.paddingTop} ${chrome.header.paddingLeft}`)
-  }
-  const border = Number.parseFloat(chrome.panel.borderTopWidth)
-  const shadow = String(chrome.panel.boxShadow || 'none')
-  // Floating panels need a visible edge: either a hairline border or the elevated shadow.
-  if (!((border >= 1 && chrome.panel.borderTopStyle !== 'none') || (shadow !== 'none' && shadow !== ''))) {
-    throw new Error(`${label}: panel edge missing (border ${chrome.panel.borderTopWidth} ${chrome.panel.borderTopStyle}, shadow ${shadow})`)
-  }
-  const inputBg = parseCssColor(chrome.input.backgroundColor)
-  if (inputBg.a == null || inputBg.a === 0) {
-    throw new Error(`${label}: input background not painted ${chrome.input.backgroundColor}`)
-  }
-  return chrome
-}
-
-async function readZhihuPlacement(page) {
-  return page.evaluate((sel) => {
-    const rect = (el) => {
-      if (!el) return null
-      const box = el.getBoundingClientRect()
-      return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
-    }
-    const dock = document.querySelector(sel.dock)
-    const style = dock ? getComputedStyle(dock) : null
-    const panel = document.querySelector(sel.panel)
-    const panelStyle = panel ? getComputedStyle(panel) : null
-    return {
-      space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
-      dockVars: dock ? {
-        position: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-position').trim(),
-        right: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-right').trim(),
-        bottom: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-bottom').trim(),
-      } : null,
-      dock: style ? { position: style.position, right: style.right, bottom: style.bottom, top: style.top, left: style.left } : null,
-      panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
-      boxes: {
-        dock: rect(dock),
-        toggle: rect(document.querySelector(sel.open)),
-        panel: rect(panel),
-        search: rect(document.querySelector(sel.search)),
-      },
-    }
-  }, { dock: S.zhihuDock, panel: S.zhihuPanel, open: S.zhihuOpen, search: S.zhihuSearch })
-}
-
-async function assertZhihuStandalonePlacement(page, label) {
-  const viewport = page.viewportSize()
-  if (!viewport) throw new Error(`${label}: missing viewport`)
-  await page.locator(S.zhihuPanel).waitFor({ state: 'visible' })
-  await page.locator(S.zhihuSearch).waitFor({ state: 'visible' })
-  const placement = await readZhihuPlacement(page)
-  if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .zhihu-dock`)
-  if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
-    throw new Error(`${label}: host --dsh-ext-* unexpectedly set ${JSON.stringify(placement.dockVars)}`)
-  }
-  if (placement.dock.position !== 'absolute') {
-    throw new Error(`${label}: expected dock position absolute, got ${placement.dock.position}`)
-  }
-  if (placement.dock.right === 'auto' || placement.dock.bottom === 'auto') {
-    throw new Error(`${label}: dock right/bottom collapsed to auto (space-4=${JSON.stringify(placement.space4)}); ${JSON.stringify(placement.dock)}`)
-  }
-  const rightPx = Number.parseFloat(placement.dock.right)
-  const bottomPx = Number.parseFloat(placement.dock.bottom)
-  if (!Number.isFinite(rightPx) || rightPx < 0 || !Number.isFinite(bottomPx) || bottomPx < 16) {
-    throw new Error(`${label}: dock right/bottom not a stacked length ${JSON.stringify(placement.dock)}`)
-  }
-  boxInsideViewport(placement.boxes.panel, viewport, `${label} zhihu-panel`)
-  boxInsideViewport(placement.boxes.search, viewport, `${label} zhihu-search`)
-  boxInsideViewport(placement.boxes.toggle, viewport, `${label} zhihu-open`)
-  const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
-  const chrome = assertStandaloneOverlayChrome(
-    await readOverlayChrome(page, {
-      panel: S.zhihuPanel,
-      header: '.zhihu-panel-header',
-      button: S.zhihuSearch,
-      input: '[data-testid="zhihu-query"]',
-    }),
-    label,
-    expectDark,
-  )
-  return { viewport, ...placement, chrome, expectDark }
-}
 
 async function probeWeb(browser, name, expectedPlugins, index) {
   const workspace = path.join(out, 'workspaces', name)
@@ -643,6 +387,11 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       await configureLater.click()
       await page.waitForTimeout(500)
     }
+    const welcome = page.getByRole('dialog', { name: '开始使用', exact: true })
+    if (await welcome.isVisible()) {
+      await welcome.getByRole('button', { name: '关闭', exact: true }).click()
+      await welcome.waitFor({ state: 'hidden' })
+    }
     const overlay = page.locator(S.manuscriptOverlay)
     const expectsManuscript = expectedPlugins.includes('dsh-manuscript')
     if (expectsManuscript) {
@@ -669,46 +418,10 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       const usage=await callZhihu('usage.summary',{days:1});
       if(!usage.ok||usage.value.days[0]?.calls!==1||usage.value.days[0]?.failures!==1)throw new Error('Zhihu usage lost or double-counted after restart/reinstall: '+JSON.stringify(usage));
       report.states.find(item=>item.name===name).zhihuUsageRetained=true;
-
-      await page.locator(S.zhihuOpen).click();
-      await page.locator(S.zhihuPanel).waitFor();
-      if (name === '12-zhihu-only') {
-        await page.route('**/zhihu/search', (route) => fulfillRpc(route, {
-          ok: true,
-          value: { items: [{ title: '合成资料', type: '回答', url: 'https://www.zhihu.com/x', summary: '合成摘要', votes: 0, comments: 0, author: '测试', editTime: '' }] },
-        }))
-        try {
-          const panel = page.locator(S.zhihuPanel)
-          const placements = {}
-          placements['1280x800'] = await assertZhihuStandalonePlacement(page, `${name} 1280x800`)
-          await panel.locator(S.zhihuQuery).fill('合成查询')
-          boxInsideViewport(await panel.locator(S.zhihuSearch).boundingBox(), page.viewportSize(), `${name} zhihu-search before click`)
-          await panel.locator(S.zhihuSearch).click()
-          await panel.locator(S.zhihuResults).waitFor()
-          await assertStandaloneThemes(page, name, [
-            { label: 'result-title', locator: panel.locator(S.zhihuResultTitle).first() },
-            { label: 'input', locator: panel.locator(S.zhihuQuery) },
-            { label: 'results-summary', locator: panel.locator(S.zhihuResultsSummary).first() },
-          ], async (theme) => {
-            placements[theme] = await assertZhihuStandalonePlacement(page, `${name} ${theme}`)
-          })
-          await page.setViewportSize({ width: 900, height: 640 })
-          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-          placements['900x640'] = await assertZhihuStandalonePlacement(page, `${name} 900x640`)
-          await panel.locator(S.zhihuQuery).fill('合成查询')
-          await panel.locator(S.zhihuSearch).click()
-          await panel.locator(S.zhihuResults).waitFor()
-          await page.setViewportSize({ width: 1280, height: 800 })
-          const state = report.states.find((item) => item.name === name)
-          if (state) state.standaloneDock = placements
-        } finally {
-          await page.unroute('**/zhihu/search')
-        }
-      }
-      await page.locator(S.zhihuPanel).press('Escape');
-      await page.locator(S.zhihuOpen).waitFor();
-      if (await page.locator(S.zhihuOpen).count() !== 1) throw new Error('duplicate zhihu contribution');
-    } else if (await page.locator(S.zhihuOpen).count()) throw new Error('zhihu entry survived removal');
+    }
+    // Published @klarkxy/dsh-zhihu is RPC-only: the dock UI (zhihu-open/panel)
+    // was retired upstream, so the launcher must never appear in any state.
+    if (await page.locator(S.zhihuOpen).count()) throw new Error('retired zhihu dock launcher appeared');
     if (pageErrors.length) throw new Error(`${name}: browser errors: ${pageErrors.join(' | ')}`)
     await page.screenshot({ path: path.join(out, `${name}.png`) })
     report.states.find((item) => item.name === name).web = {
@@ -760,7 +473,6 @@ try {
   const states = [
     ['add','@klarkxy/dsh-zhihu',zhihuTarball,'07-zhihu-only',['@klarkxy/dsh-zhihu']],
     ['remove','@klarkxy/dsh-zhihu',null,'08-empty',[]],
-    ['add','@klarkxy/dsh-zhihu',zhihuTarball,'12-zhihu-only',['@klarkxy/dsh-zhihu']],
   ];
   // Data outside package installation must survive both removal directions and restarts.
   const retained=path.join(dshHome,'storages','plugin-matrix-retained.txt');
@@ -770,6 +482,7 @@ try {
     inspectState(name,expected);await probeWeb(browser,name,expected,report.states.length);
     if(fs.readFileSync(retained,'utf8')!=='retained across package changes')throw new Error('persistent data lost');
   }
+  transition('add','@klarkxy/dsh-zhihu','file:'+zhihuTarball);
   transition('add','dsh-manuscript','file:'+manuscriptTarball);
   const all=['@klarkxy/dsh-zhihu','dsh-manuscript'];
   inspectState('13-all-public',all);await probeWeb(browser,'13-all-public',all,13);

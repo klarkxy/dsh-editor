@@ -45,7 +45,7 @@
         "title": "人物卡与世界书",
         "description": "在文件树中定位人物卡与世界书",
         "feature": "cards",
-        "defaultEnabled": false
+        "locked": true
       }
     ]
   },

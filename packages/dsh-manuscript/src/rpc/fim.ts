@@ -43,7 +43,7 @@ async function streamCompletion(input: {
     purpose: 'manuscript.completion',
     sessionId: input.sessionId,
     system: fimSystem(input),
-    text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
+    text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
     signal: input.signal,
     maxChars: 240,
     provider: input.provider,

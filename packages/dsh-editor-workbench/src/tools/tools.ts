@@ -6,7 +6,7 @@ import { createWritingProposeTool } from '../proposals/writing-propose-tool.ts'
 import { createConversationReadTool, createConversationSearchTool, createConversationWrapUpTool } from '../bot/recall.ts'
 import { createBotToolDeps } from '../bot/deps.ts'
 export const name = 'dsh-editor-workbench-tools'
-export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools', 'editorWritingPreferences'] as const
+export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools', 'editorWritingPreferences', 'sessionQuery', 'settings'] as const
 
 /** Host coding tools writing presets must not inherit. Unknown names are skipped. */
 const DENIED_INHERITED_TOOLS = ['write', 'edit', 'pwsh', 'bash', 'shell', 'str_replace', 'NotebookEdit'] as const
@@ -23,7 +23,7 @@ export function restrictInheritedHostTools(tools: { restrict(filter: { deny: str
   }
 }
 
-/** Generic writing tools only. novel_* mounts via installNovelWorkbenchTools from novel-kernel. */
+/** Generic writing tools only. novel_knowledge and novel_memory_update mount via novel-kernel. */
 export function apply(ctx: Context): void {
   const host = asHost(ctx) as ManuscriptHostWithTools
 

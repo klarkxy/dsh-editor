@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cx } from './shared.ts'
 import { CheckIcon, CrossIcon, InfoIcon, WarningIcon } from './icons.tsx'
+import { IconButton } from './icon-button.tsx'
 import './notice.styles.ts'
 
 export type NoticeTone = 'info' | 'success' | 'warning' | 'danger'
@@ -12,12 +13,14 @@ const ICONS: Record<NoticeTone, ReactNode> = {
   danger: <CrossIcon />,
 }
 
-/** danger / warning 用 role="alert"，其余 role="status"；图标与文字同时呈现。 */
+/** danger / warning 用 role="alert"，其余 role="status"；图标与文字同时呈现。onDismiss 时尾部渲染关闭按钮。 */
 export function Notice(props: {
   tone?: NoticeTone
   title?: ReactNode
   action?: ReactNode
   children?: ReactNode
+  onDismiss?(): void
+  dismissLabel?: string
   className?: string
   /* 默认 danger/warning → alert、其余 → status；个别沿用旧语义的调用点可覆盖。 */
   role?: 'alert' | 'status' | 'note'
@@ -39,6 +42,7 @@ export function Notice(props: {
         {props.children ? <span className="dsh-notice__text">{props.children}</span> : null}
       </span>
       {props.action ? <span className="dsh-notice__action">{props.action}</span> : null}
+      {props.onDismiss ? <IconButton className="dsh-notice__dismiss" variant="ghost" size="sm" label={props.dismissLabel ?? 'Close'} onClick={props.onDismiss}><CrossIcon size="sm" /></IconButton> : null}
     </div>
   )
 }

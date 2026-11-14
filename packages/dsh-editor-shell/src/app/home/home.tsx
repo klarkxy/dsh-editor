@@ -9,7 +9,7 @@ import {
   recentWorkRowMeta,
   type HomeResumeDoc,
 } from '../../model/home-resume.ts'
-import { AppBrandMark, DotsIcon } from '../../client/icons.tsx'
+import { AppBrandMark } from '../../client/icons.tsx'
 import { CommandPaletteTrigger } from '../../client/command-palette.tsx'
 import { PluginsTrigger, SettingsTrigger } from '../../client/settings.tsx'
 import type { SettingsTab } from '../../model/settings.ts'
@@ -20,13 +20,13 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
-  IconButton,
   Menu,
   MenuContent,
   MenuItem,
   MenuSeparator,
   MenuTrigger,
   Notice,
+  type NoticeTone,
 } from '../../ui/index.ts'
 import './home.styles.ts'
 
@@ -125,17 +125,16 @@ function RecentRow(props: {
           {meta.map((item, index) => <span key={index} className="dsh-home-row__meta">{item}</span>)}
         </span> : null}
       </button>
-      <IconButton
-        className="dsh-home-row__manage"
-        label={t('home.rowMenu')}
+      <Button
+        className="dsh-home-row__remove"
+        data-testid="dsh-home-remove-recent"
+        variant="ghost"
         size="sm"
+        title={t('home.removeRecent')}
         disabled={props.disabled}
-        onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          setMenuAt({ x: rect.left, y: rect.bottom })
-        }}>
-        <DotsIcon size={14} />
-      </IconButton>
+        onClick={props.onRemove}>
+        {t('home.removeRecentShort')}
+      </Button>
       {menuAt ? <RecentRowMenu
         x={menuAt.x}
         y={menuAt.y}
@@ -159,6 +158,8 @@ function RecentRow(props: {
   )
 }
 
+export type HomeNote = { text: string; tone: NoticeTone }
+
 export function HomeScreen(props: {
   workspaceOpen: WorkspaceOpenState
   extensionsDock?: ReactNode
@@ -169,7 +170,8 @@ export function HomeScreen(props: {
   pathFallbackForm: ReactNode
   onContinueIntent(): void
   onCancelIntent(): void
-  homeNote: string
+  homeNote: HomeNote | null
+  onDismissNote(): void
   workspaces: readonly WorkspaceView[]
   onOpenWorkspace(workspace: WorkspaceView, preferredPath?: string): void
   onRelocate(workspace: WorkspaceView): void
@@ -261,7 +263,7 @@ export function HomeScreen(props: {
             </span>
           </Notice> : null}
           {workspaceOpen.kind === 'error' ? <code className="dsh-home__error-path">{workspaceOpen.path}</code> : null}
-          {props.homeNote ? <Notice tone="danger">{props.homeNote}</Notice> : null}
+          {props.homeNote ? <Notice tone={props.homeNote.tone} onDismiss={props.onDismissNote} dismissLabel={t('common.close')}>{props.homeNote.text}</Notice> : null}
           <section className="home-recent" aria-label={t('home.recent')}>
             {props.workspaces.length ? <ul className="dsh-home__list">
               {props.workspaces.map((workspace) => {
@@ -273,7 +275,7 @@ export function HomeScreen(props: {
                     resume={resumeMap[workspace.workspaceId]}
                     needsRelocation={needsRelocation}
                     relocationMessage={needsRelocation && workspaceOpen.kind === 'needs-relocation' ? workspaceOpen.message : undefined}
-                    disabled={props.openingWorkspace}
+                    disabled={busy}
                     onOpen={() => void props.onOpenWorkspace(workspace, resumeMap[workspace.workspaceId]?.path)}
                     onRelocate={() => props.onRelocate(workspace)}
                     onRemove={() => props.onRequestRemoveRecent(workspace)} />
@@ -296,6 +298,7 @@ export function HomeScreen(props: {
       {props.dialogs}
       <ConfirmDialog
         open={Boolean(props.removeRecentTarget)}
+        onOpenChange={(open) => { if (!open) props.onCancelRemoveRecent() }}
         title={t('home.removeRecent')}
         message={t('home.removeRecentBody', { title: props.removeRecentTarget?.title || props.removeRecentTarget?.path || '' })}
         confirmLabel={t('home.removeRecent')}

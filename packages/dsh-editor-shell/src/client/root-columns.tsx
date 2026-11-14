@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Box, ChevronRightIcon, EmptyState, ListRow, ToolIcon } from '../ui/index.ts'
-import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
+import type { SessionFace, SessionId, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle, EditorCoreStatus } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellCommandRegistry, ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
@@ -112,6 +112,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
   completionPreference: CompletionPreference
   completionDelayMs?: number
   completionEnabled: boolean
+  completionSessionId?: SessionId
   typewriter?: boolean
   focusParagraph?: boolean
   typography?: {
@@ -125,6 +126,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
   }
   onSaved(): void
   reveal: RevealRequest | null
+  onRewrite?(input: { path: string; selection: string; instruction: string }): boolean
 }) {
   const { ctx, fileSession, path, files } = props
   /* 空态/改写弹窗等文案走 t()：自行订阅语言，memo 跳过时也能随语言切换刷新（同 Chat）。 */
@@ -152,10 +154,12 @@ export const EditorColumn = memo(function EditorColumn(props: {
         completionDelayMs={props.completionDelayMs}
         /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
         completionEnabled={props.completionEnabled}
+        completionSessionId={props.completionSessionId}
         typewriter={props.typewriter}
         focusParagraph={props.focusParagraph}
         typography={props.typography}
-        onSaved={props.onSaved} />
+        onSaved={props.onSaved}
+        onRewrite={props.onRewrite} />
     </ShellErrorBoundary>
   );
 })
@@ -174,6 +178,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
   onWritten?(path: string): void
   onApplied(path: string): void
   onHide?(): void
+  rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }
+  onRewriteConsumed?(id: number): void
 }) {
   const { ctx, chatSession } = props
   return (
@@ -191,7 +197,9 @@ export const ChatColumn = memo(function ChatColumn(props: {
         onDraftDirtyChange={props.onDraftDirtyChange}
         onWritten={props.onWritten}
         onApplied={props.onApplied}
-        onHide={props.onHide} />
+        onHide={props.onHide}
+        rewriteRequest={props.rewriteRequest}
+        onRewriteConsumed={props.onRewriteConsumed} />
     </ShellErrorBoundary>
   );
 })

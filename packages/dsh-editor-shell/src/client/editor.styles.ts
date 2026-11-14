@@ -40,7 +40,6 @@ defineStyles('dsh.surfaces', 'dsh-editor', `
 /* 选段改写浮层（§4）：预设一行 + 指令一行 + 操作行。 */
 .dsh-popover .rewrite-popover { display: flex; flex-direction: column; gap: var(--dsh-ui-space-2, 8px); min-width: 300px; }
 .dsh-popover .rewrite-presets { display: flex; gap: 6px; flex-wrap: wrap; }
-.dsh-popover .rewrite-presets-custom .dsh-textarea { resize: vertical; }
 .radix-themes .rewrite-instruction { width: 100%; min-height: 88px; }
 .dsh-popover .rewrite-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
 

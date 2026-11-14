@@ -12,7 +12,7 @@ const output = resolve(root, '.artifacts/plugin-page', stage)
 const home = resolve(root, '.dev', 'plugin-page-' + stage + '-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -311,7 +311,7 @@ try {
       }
     }
     report.checks.push('sidebar document tool buttons removed; overview panel opens via Ctrl+Shift+O in both themes')
-    report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
+    report.panelScope = 'Desktop composition enables and locks editor-cards, editor-memory-panel, editor-overview-panel, and manuscript-assist as built-in writing features.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     // 4.1: the composer lives in the aux rail's partner tab and may be adopted
     // into a hidden pane host here; skip clearing when it is not interactable.

@@ -77,7 +77,6 @@ describe('command disable rules', () => {
     conflict: false,
     busy: false,
     completionEnabled: true,
-    enablePatch: true,
     hasVisibleSelection: true,
     collapsed: false,
     dirty: true,
@@ -102,7 +101,7 @@ describe('command disable rules', () => {
     expect(editorCommandState({ ...base, hasVisibleSelection: false }).canRewrite).toBe(false)
     expect(editorCommandState({ ...base, hasVisibleSelection: false }).canCut).toBe(false)
     expect(editorCommandState({ ...base, completionEnabled: false }).canComplete).toBe(false)
-    expect(editorCommandState({ ...base, completionEnabled: false }).canRewrite).toBe(false)
+    expect(editorCommandState({ ...base, completionEnabled: false }).canRewrite).toBe(true)
     expect(editorCommandState({ ...base, busy: true }).canRewrite).toBe(false)
     expect(editorCommandState({ ...base, loaded: false }).canPaste).toBe(false)
   })

@@ -296,13 +296,11 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel'])
-      expect(item.features).not.toContain('cards')
-      expect(item.features).not.toContain('memory-panel')
+      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'cards', 'memory-panel'])
       expect(item.packages).toContain('dsh-editor-cards')
-      expect(item.disabledEntries).toContain('editor-cards')
+      expect(item.disabledEntries).not.toContain('editor-cards')
       expect(item.packages).toContain('dsh-editor-memory-panel')
-      expect(item.disabledEntries).toContain('editor-memory-panel')
+      expect(item.disabledEntries).not.toContain('editor-memory-panel')
       expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-workbench-tools')
       expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-novel-kernel')
     }
@@ -320,8 +318,8 @@ describe('profile deployment', () => {
     // The editor's own plugin pages replace the official UI; Host management stays available.
     expect(patch).toMatch(/- id: ui-plugin-manager\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: plugin-manager\r?\n  disabled: true/)
-    expect(patch).toMatch(/- id: editor-cards\r?\n  disabled: true/)
-    expect(patch).toMatch(/- id: editor-memory-panel\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: editor-cards\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: editor-memory-panel\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
@@ -566,7 +564,7 @@ function deployIdentity(partial: Partial<ProfileDeployIdentity> = {}): ProfileDe
   return {
     algorithm: PROFILE_DEPLOY_ALGORITHM,
     profileSha256: 'sha-template',
-    dsh: '@deepseek-ai/dsh@0.2.1-rc.5',
+    dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
     nodePath: 'C:/runtime/node.exe',
     cliPath: 'C:/runtime/dsh/lib/bin.js',
     ...partial,
@@ -599,16 +597,16 @@ describe('optional public plugin distribution upgrade', () => {
   it('removes obsolete preinstall switches with backups but preserves independently installed plugins and data', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-preinstall-trim-'))
     try {
-      const state = { schema: 1, overrides: { 'current-title': true, mood: false, recap: false, zhihu: true, 'zhihu-tools': true, 'editor-cards': false }, installed: [{ name: '@klarkxy/dsh-zhihu', version: '0.1.10', spec: 'npm:@klarkxy/dsh-zhihu@0.1.10' }], presets: { 'dsh-editor-novel': false } }
+      const state = { schema: 1, overrides: { 'current-title': true, mood: false, recap: false, zhihu: true, 'zhihu-tools': true, 'editor-cards': false, 'author-extra': false }, installed: [{ name: '@klarkxy/dsh-zhihu', version: '0.1.10', spec: 'npm:@klarkxy/dsh-zhihu@0.1.10' }], presets: { 'dsh-editor-novel': false } }
       const original = JSON.stringify(state)
-      const patch = '# managed-by: dsh-editor-plugins\n- id: current-title\n  disabled: false\n- id: editor-cards\n  disabled: true\n- id: mood\n  disabled: true\n- id: recap\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n'
+      const patch = '# managed-by: dsh-editor-plugins\n- id: author-extra\n  disabled: true\n- id: current-title\n  disabled: false\n- id: editor-cards\n  disabled: true\n- id: mood\n  disabled: true\n- id: recap\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n'
       await writeFile(join(home, 'dsh-plugins.json'), original)
       await writeFile(join(home, 'cordis.patch.yml'), patch)
       await mkdir(join(home, 'storages'))
       await writeFile(join(home, 'storages', 'dsh_editor_mood.json'), 'historical requirements')
       await sanitizeHostLockedPluginOverrides(home, ['@klarkxy/dsh-web-search-manager'])
-      expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toEqual({ ...state, overrides: { zhihu: true, 'zhihu-tools': true, 'editor-cards': false } })
-      expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe('# managed-by: dsh-editor-plugins\n- id: editor-cards\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n')
+      expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toEqual({ ...state, overrides: { zhihu: true, 'zhihu-tools': true, 'author-extra': false } })
+      expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe('# managed-by: dsh-editor-plugins\n- id: author-extra\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n')
       expect(await readFile(join(home, 'dsh-plugins.json.before-preinstall-trim'), 'utf8')).toBe(original)
       expect(await readFile(join(home, 'cordis.patch.yml.before-preinstall-trim'), 'utf8')).toBe(patch)
       expect(await readFile(join(home, 'storages', 'dsh_editor_mood.json'), 'utf8')).toBe('historical requirements')

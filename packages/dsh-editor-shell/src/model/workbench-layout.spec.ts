@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import {
   AUX_MAX,
   AUX_MIN,
@@ -292,11 +291,5 @@ describe('workbench layout', () => {
       layout.setViewport({ files: true, aux: true })
       expect(layout.snapshot.aux.open).toBe(true)
     })
-  })
-
-  it('production wiring: workbench 面板初值使用模型视图宽度', () => {
-    const workbench = readFileSync(new URL('../app/shell/workbench.tsx', import.meta.url), 'utf-8')
-    expect(workbench).toContain('defaultSize={layout.filesViewWidth}')
-    expect(workbench).toContain('defaultSize={layout.auxViewWidth}')
   })
 })

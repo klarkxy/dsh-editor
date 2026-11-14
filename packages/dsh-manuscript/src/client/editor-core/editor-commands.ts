@@ -23,14 +23,13 @@ type EditorCommandOptions = {
   isGenerating(): boolean
   conflictRef: MutableRefObject<boolean>
   completionEnabledRef: MutableRefObject<boolean>
-  enablePatchRef: MutableRefObject<boolean>
 }
 
 /** Commands always inspect the live view/buffer and pin asynchronous targets. */
 export function useEditorCommands({
   viewRef, docRef, textRef, revisionRef, documentGenerationRef, paperOffsetRef,
   paperProjection, selection, isDocumentReady, isGenerating,
-  conflictRef, completionEnabledRef, enablePatchRef,
+  conflictRef, completionEnabledRef,
 }: EditorCommandOptions) {
   const liveTarget = useCallback((): EditorTargetLive | null => {
     const current = docRef.current
@@ -74,7 +73,6 @@ export function useEditorCommands({
       conflict: conflictRef.current,
       busy: isGenerating(),
       completionEnabled: completionEnabledRef.current,
-      enablePatch: enablePatchRef.current,
       hasVisibleSelection: Boolean(visible),
       collapsed: start === end,
       dirty: isDirty(current, textRef.current),

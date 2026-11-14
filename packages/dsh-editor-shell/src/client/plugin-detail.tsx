@@ -2,7 +2,7 @@
 import { Component, Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   Badge, Button as ThemeButton, ConfirmDialog, Disclosure, EmptyState, Flex, Notice, SwitchControl, Text,
-  Card, ChevronLeftIcon,
+  ChevronLeftIcon,
 } from '../ui/index.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
@@ -45,6 +45,12 @@ function metaTextOf(value: unknown, locale: string): string {
   return ''
 }
 
+function readOnlyReasonText(reason: string | undefined): string {
+  if (!reason) return ''
+  if (reason === 'management-required') return t('plugins.readOnlyCore')
+  return reason
+}
+
 export function PluginDetailPage(props: {
   packageName: string
   ctx: ShellContext
@@ -75,6 +81,8 @@ export function PluginDetailPage(props: {
   const installSpec = bundle ? installSpecOf(bundle) : null
   const title = card?.title || metaTextOf(bundle?.meta?.title, locale) || name
   const description = card?.description || metaTextOf(bundle?.meta?.description, locale) || bundle?.description || ''
+  const lockedByCard = Boolean(card && (card.badges.includes('required') || card.badges.includes('locked')))
+  const readOnlyLabel = readOnlyReasonText(bundle?.readOnlyReason) || (lockedByCard ? t('plugins.readOnlyCore') : '')
   const subject = {
     kind: 'bundle' as const,
     pkg: {
@@ -169,10 +177,11 @@ export function PluginDetailPage(props: {
     .filter(item => item.packageVersion.startsWith(`${name}@`))
 
   return <div className="dsh-settings-section" data-testid={`plugin-detail-seat-${name}`}>
-    <div className="dsh-settings-section__head">
-      <ThemeButton variant="ghost" size="sm" data-testid="plugin-detail-back" onClick={props.onBack}
+    <div className="plugin-subpage-bar">
+      <ThemeButton type="button" variant="secondary" size="sm" data-testid="plugin-detail-back"
+        className="plugin-subpage-back" onClick={props.onBack}
         icon={<ChevronLeftIcon size="sm" />}>
-        {t('settings.pluginsInstalled')}
+        {t('plugins.detailBack')}
       </ThemeButton>
     </div>
     {props.notice ? <Notice tone="success" title={props.notice} /> : null}
@@ -189,8 +198,8 @@ export function PluginDetailPage(props: {
         {description ? <Text as="p" size="1" color="gray">{description}</Text> : null}
       </div>
       <div className="plugin-detail-head-action">
-        {bundle?.readOnlyReason
-          ? <Text size="1" color="gray">{bundle.readOnlyReason}</Text>
+        {readOnlyLabel
+          ? <Text size="1" color="gray">{readOnlyLabel}</Text>
           : bundle && installSpec
             ? <ThemeButton variant="primary" size="sm" data-testid="plugin-detail-install"
               onClick={() => props.onInstall(installSpec)}>{t('plugins.detailInstall')}</ThemeButton>
@@ -198,7 +207,7 @@ export function PluginDetailPage(props: {
               ? <SwitchControl checked={bundle.enabled} disabled={pending}
                 aria-label={title} data-testid="plugin-detail-toggle"
                 onCheckedChange={(enabled) => void runToggle(enabled)} />
-              : card && card.enabled !== undefined && !card.badges.includes('locked') && card.action === 'switch'
+              : card && card.enabled !== undefined && !lockedByCard && card.action === 'switch'
                 ? <SwitchControl checked={card.enabled} disabled={pending}
                   aria-label={title} data-testid="plugin-detail-toggle"
                   onCheckedChange={(enabled) => props.onToggleCard?.(card, enabled)} />
@@ -249,7 +258,7 @@ export function PluginDetailPage(props: {
         : <Text size="1" color="gray" className="plugin-detail-empty">{t('plugins.detailNoConfig')}</Text>}
     </SettingsGroup>
 
-    {bundle ? <Card className="settings-block plugin-detail-components">
+    {bundle ? <div className="settings-block plugin-detail-components">
       <Disclosure summary={t('plugins.detailComponentsCount', { count: bundle.rows.length })} defaultOpen={Boolean(bundle.error)}>
         <ul className="plugin-detail-rows">
           {bundle.rows.map(row => <li key={row.rowId} className="plugin-detail-row">
@@ -259,7 +268,7 @@ export function PluginDetailPage(props: {
           {!bundle.rows.length ? <li className="plugin-detail-row">{name}</li> : null}
         </ul>
       </Disclosure>
-    </Card> : null}
+    </div> : null}
 
     {bundle ? <SettingsGroup title={t('plugins.detailInfo')}>
       <SettingRow title={t('plugins.detailName')}><Text size="1">{name}</Text></SettingRow>
@@ -274,12 +283,12 @@ export function PluginDetailPage(props: {
     </SettingsGroup> : null}
 
     {bundle ? <SettingsGroup title={t('plugins.detailRemove')}>
-      {bundle.installed && bundle.removable && !bundle.readOnlyReason
+      {bundle.installed && bundle.removable && !bundle.readOnlyReason && !lockedByCard
         ? <SettingRow title={t('plugins.detailUninstall')} description={t('plugins.uninstallHint')}>
           <ThemeButton variant="danger" size="sm" data-testid={`plugin-detail-uninstall-${name}`}
             onClick={() => setRemoveConfirm(true)}>{t('plugins.detailUninstall')}</ThemeButton>
         </SettingRow>
-        : <SettingRow title={t('plugins.detailUninstall')} description={bundle.readOnlyReason ?? ''}>
+        : <SettingRow title={t('plugins.detailUninstall')} description={readOnlyLabel}>
           <span />
         </SettingRow>}
     </SettingsGroup> : null}

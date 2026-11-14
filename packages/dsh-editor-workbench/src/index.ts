@@ -15,7 +15,10 @@ import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/in
 import { installBotRuntime } from './bot/rpc-index.ts'
 
 export const name = 'dsh-editor-workbench'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
+export const inject = [
+  'connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer',
+  'sessionQuery', 'agents', 'llm', 'tokenMeter', 'settings', 'editorWritingPreferences',
+] as const
 
 type Payload = Record<string, unknown>
 
@@ -127,4 +130,4 @@ export function apply(ctx: Context): void {
 }
 
 export { createAuthorObserveTool } from './tools/observe-tool.ts'
-export { installNovelWorkbenchTools, installNovelMemoryTool } from './tools/novel-tools.ts'
+export { installNovelMemoryTool } from './tools/novel-tools.ts'

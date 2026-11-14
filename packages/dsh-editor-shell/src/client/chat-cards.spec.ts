@@ -18,7 +18,6 @@ import {
   turnProcessLabel,
 } from '../model/chat-cards.ts'
 import { ActivityDots } from './ui/index.ts'
-import { collectStyles } from '../design-system/layers.ts'
 import './chat.styles.ts'
 import './base.styles.ts'
 import type { ChatRow } from '../adapter.ts'

@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
-import { Card, Flex, Text } from '../ui/index.ts'
+import { Flex, Text } from '../ui/index.ts'
 
-/** 设置分区组：标题在卡片外，卡片承载行项；标题用 settings-group__title 统一样式。 */
+/** 设置分区组：平铺标题 + hairline 分隔行块，不额外套卡片外框。 */
 export function SettingsGroup(props: { title: string; children: ReactNode; className?: string; id?: string; ariaLabel?: string }) {
   return (
     <section className={props.className ? `settings-group ${props.className}` : 'settings-group'} aria-label={props.ariaLabel}>
       <h3 className="settings-group__title" id={props.id}>{props.title}</h3>
-      <Card className="settings-block">{props.children}</Card>
+      <div className="settings-block">{props.children}</div>
     </section>
   )
 }

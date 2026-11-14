@@ -7,6 +7,7 @@ import { resolve, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright'
 import { S } from './helpers/selectors.mjs'
+import { resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
 
 const root = resolve(import.meta.dirname, '..')
 const stamp = String(Date.now())
@@ -16,7 +17,7 @@ assert.ok(relative(resolve(root, '.dev'), home) && !relative(resolve(root, '.dev
 const output = resolve(root, 'e2e/out/ai-standalone', stamp)
 const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
-const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.1-rc.5/lib/bin.js')
+const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
 const ids = ['web-search-manager']
 const fixtureVersions = { 'web-search-manager': '0.1.11' }
@@ -98,7 +99,7 @@ async function boot(label) {
   page.setDefaultTimeout(20000)
   page.on('pageerror', error => report.errors.push(error.message))
   await page.goto(url, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: '设置', exact: true }).waitFor()
+  await page.getByRole('button', { name: '插件', exact: true }).waitFor()
   await page.getByRole('button', { name: '继续', exact: true }).waitFor({ timeout: 5000 }).catch(() => {})
   for (let i = 0; i < 5; i++) {
     const next = page.getByRole('button', { name: '继续', exact: true })
@@ -107,6 +108,8 @@ async function boot(label) {
   }
   const later = page.getByRole('button', { name: '稍后配置', exact: true })
   if (await later.isVisible()) await later.click()
+  const welcome = page.getByRole('dialog', { name: '开始使用', exact: true })
+  if (await welcome.isVisible()) await welcome.getByRole('button', { name: '关闭', exact: true }).click()
   await page.screenshot({ path: resolve(output, label + '.png'), fullPage: true })
 }
 async function settings() {
@@ -121,16 +124,18 @@ try {
       // On-demand public plugin: acceptance installs its published npm artifact,
       // not a distribution pin, mirroring the plugin-matrix optional fixtures.
       const spec = '@klarkxy/dsh-' + id + '@' + fixtureVersions[id]
-      const npm = process.env.npm_execpath
-      assert.ok(npm, 'run the standalone acceptance through pnpm')
-      const packed = spawnSync(process.execPath, [npm, 'exec', 'npm', 'pack', spec, '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120000 })
+      const pm = resolveBundledPackageManager(process.execPath)
+      const packed = spawnSync(pm.command, [...pm.args, 'exec', 'npm', 'pack', spec, '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, env: { ...process.env, ...pm.env }, encoding: 'utf8', windowsHide: true, timeout: 120000 })
       assert.equal(packed.status, 0, 'optional fixture download failed: ' + packed.stderr)
-      const archiveName = JSON.parse(packed.stdout)[0].filename
+      const archiveName = 'klarkxy-dsh-' + id + '-' + fixtureVersions[id] + '.tgz'
       const staged = resolve(staging, archiveName)
-      const contents = spawnSync('tar', ['--force-local', '-xOf', staged.replaceAll('\\', '/'), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
+      const contents = spawnSync('tar', ['-xOf', archiveName, 'package/package.json'], { cwd: staging, encoding: 'utf8', windowsHide: true })
       assert.equal(contents.status, 0, 'cannot read optional fixture manifest')
-      fixtureManifests.set('@klarkxy/dsh-' + id, JSON.parse(contents.stdout))
-      command(['plugin', '--profile', 'web', 'add', 'file:' + staged.replaceAll('\\', '/')])
+      const manifest = JSON.parse(contents.stdout)
+      assert.equal(manifest.name, '@klarkxy/dsh-' + id)
+      assert.equal(manifest.version, fixtureVersions[id])
+      fixtureManifests.set(manifest.name, manifest)
+      command(['plugin', '--profile', 'web', 'add', 'file:' + staged.replaceAll('\\', '/'), '--store-dir', resolve(home, 'pnpm-store')])
       {
         // Resolve this acceptance candidate from its exact archive.
         const localManifest = resolve(home, 'profiles/web/package.json')

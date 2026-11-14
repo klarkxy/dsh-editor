@@ -72,15 +72,14 @@ describe('display-only Chinese selection diff', () => {
     }
   })
 
-  it('renders semantic, escaped markers without feeding the diff back into writes', () => {
+  it('keeps escaped diff rendering separate from proposal application', () => {
     const display = readFileSync(new URL('./selection-diff.tsx', import.meta.url), 'utf8')
-    const editor = readFileSync(new URL('./editor.tsx', import.meta.url), 'utf8')
     const chrome = readFileSync(new URL('./editor-chrome.tsx', import.meta.url), 'utf8')
+    const proposal = readFileSync(new URL('../../../../dsh-editor-shell/src/model/proposal-diff.ts', import.meta.url), 'utf8')
     expect(display).toContain('<del')
     expect(display).toContain('<ins')
     expect(display).not.toContain('dangerouslySetInnerHTML')
-    expect(chrome).toContain('<SelectionDiff original={proposal.ticket.selectedText} revised={proposal.text}')
-    expect(editor).toContain('setText(applySelectionPatch(textRef.current, proposal.ticket, proposal.text))')
-    expect(editor).toContain('!isSelectionCurrent(proposal.ticket, docRef.current, textRef.current, revisionRef.current)')
+    expect(chrome).not.toContain('SelectionDiff')
+    expect(proposal).toContain('proposalDiff')
   })
 })

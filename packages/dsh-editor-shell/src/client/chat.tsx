@@ -101,7 +101,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide, rewriteRequest, onRewriteConsumed }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void; rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }; onRewriteConsumed?(id: number): void }) {
   const locale = useLocale()
   /* 搭档页头并入辅助栏页签行右端动作位；非栏内挂载（overlay/隐藏）退回内联页头。 */
   const actionsHost = useAuxRailActionsHost()
@@ -268,6 +268,27 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     [locale],
   )
   useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
+  const stagedRewrite = useRef<{ text: string; sessionId: SessionId }>()
+  useEffect(() => {
+    const staged = stagedRewrite.current
+    if (staged && staged.sessionId !== session.sessionId) {
+      stagedRewrite.current = undefined
+      return
+    }
+    if (hidden || !connected || !nativeInputReady || voiceActive || bot.rolling || snapshot.running || snapshot.removed || outgoing?.state === 'sending' || outgoing?.state === 'accepted') return
+    if (staged) {
+      if (!draft) return
+      // Wait for the native input to echo the draft before submitting it.
+      // If the author edits it first, keep their text for manual submission.
+      stagedRewrite.current = undefined
+      if (draft === staged.text) composerRef.current?.form?.requestSubmit()
+      return
+    }
+    if (!rewriteRequest || rewriteRequest.workspaceId !== workspaceId || draft.trim()) return
+    stagedRewrite.current = { text: rewriteRequest.text, sessionId: session.sessionId }
+    fillComposerDraft(rewriteRequest.text)
+    onRewriteConsumed?.(rewriteRequest.id)
+  }, [rewriteRequest, workspaceId, session.sessionId, onRewriteConsumed, hidden, connected, nativeInputReady, voiceActive, bot.rolling, draft, snapshot.running, snapshot.removed, outgoing?.state])
   useEffect(() => { if (bot.rollingFailed) setNote(t('chat.botRolloverFailed')) }, [bot.rollingFailed])
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
     .some((row) => row.role === 'user' && row.text.trim() === outgoing.text))

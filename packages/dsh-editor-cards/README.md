@@ -1,6 +1,6 @@
 # dsh-editor-cards
 
-桌面可选的人物卡与世界书文件导航命令。默认关闭，在「设置 → 插件 → 人物卡与世界书」开启。
+桌面内置的人物卡与世界书文件导航命令，随桌面发行组合默认启用且不可停用或卸载。
 
 人物卡一人一份，世界书一词条一份，保存在作品的 `人物卡/`、`世界书/` Markdown 中。通过文件树创建、打开和编辑，使用稿纸保存；也可右键「钉在旁边」对照阅读。
 
@@ -15,7 +15,7 @@
 
 世界书的 `triggers`、`enabled`、`priority` 控制项目上下文组装时的自动注入：`enabled: false` 的卡片跳过；用户请求、当前文档路径与已保存正文命中任一 trigger 才纳入；多条命中按 `priority` 从高到低排序，超出单条与总量上限时截断。组装逻辑见 [工作台 context 模块](../dsh-editor-workbench/src/contracts/context.ts)。
 
-字段定义与兼容读取由 [workspace-kit frontmatter 模块](../dsh-editor-workspace-kit/src/frontmatter.ts) 维护。现有卡片文件与元数据保持原有格式，启停本包只影响导航命令。
+字段定义与兼容读取由 [workspace-kit frontmatter 模块](../dsh-editor-workspace-kit/src/frontmatter.ts) 维护。现有卡片文件与元数据保持原有格式，本包仅承载目录导航命令。
 
 ## 权限边界
 

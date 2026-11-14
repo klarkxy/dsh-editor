@@ -58,15 +58,19 @@ ${surfaceTokenAliases}
   gap: var(--space-2);
   min-width: 0;
 }
-.dsh-plugins-search input {
+.dsh-plugins-search > :not(button) {
+  flex: 1;
+  min-width: 0;
+}
+.dsh-plugins-search > input {
   flex: 1;
   min-width: 0;
   min-height: var(--s-control);
   padding: 0 var(--space-3);
-  border: 0;
+  border: 0.5px solid var(--s-line-strong);
   border-radius: var(--s-radius-md);
   background: var(--s-bg);
-  box-shadow: var(--s-elevate-soft);
+  box-shadow: none;
   color: var(--s-text);
   font: inherit;
 }
@@ -74,7 +78,7 @@ ${surfaceTokenAliases}
   flex: 1;
   min-width: 0;
 }
-.dsh-plugins-search input:focus-visible,
+.dsh-plugins-search > input:focus-visible,
 .dsh-plugins button:focus-visible,
 .dsh-plugins a:focus-visible {
   outline: 2px solid var(--s-accent);
@@ -112,7 +116,11 @@ ${surfaceTokenAliases}
 }
 .dsh-plugins-ghost:hover:not(:disabled) { background: var(--s-hover); }
 .dsh-plugins-groups { display: grid; gap: var(--space-5); }
-.dsh-plugins-group { display: grid; gap: var(--space-2); }
+.dsh-plugins-group { display: grid; gap: var(--space-3); }
+.dsh-plugins-group > .dsh-plugins-group {
+  gap: 0;
+  border-top: 0.5px solid var(--s-line);
+}
 .dsh-plugins-group h3 {
   margin: 0;
   font: var(--dsh-ui-weight-strong, 600) var(--font-size-3)/1.5 var(--s-font);
@@ -123,16 +131,17 @@ ${surfaceTokenAliases}
   font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--s-font);
   color: var(--s-muted);
 }
-/* Raised rows match the shell's plugins-catalog rows. */
+/* Flat hairline rows match the shell's plugins-catalog rows. */
 .dsh-plugins-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3);
-  border: 0.5px solid var(--s-line-strong);
-  border-radius: var(--s-radius-xl);
-  background: var(--s-raised);
+  padding: var(--space-3) var(--space-2);
+  border: 0;
+  border-bottom: 0.5px solid var(--s-line);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 .dsh-plugins-card:hover { background: var(--s-hover); }
@@ -282,14 +291,16 @@ ${surfaceTokenAliases}
 .dsh-plugins-inspect {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 0.5px solid var(--s-line-strong);
-  border-radius: var(--s-radius-xl);
-  background: var(--s-raised);
+  padding: var(--space-3) 0;
+  border: 0;
+  border-top: 0.5px solid var(--s-line);
+  border-bottom: 0.5px solid var(--s-line);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
-.dsh-plugins-inspect-blocked { border: 1px solid var(--s-danger); }
-.dsh-plugins-inspect-warn { border: 1px solid var(--s-warning); }
+.dsh-plugins-inspect-blocked { border-inline-start: 2px solid var(--s-danger); padding-inline-start: var(--space-3); }
+.dsh-plugins-inspect-warn { border-inline-start: 2px solid var(--s-warning); padding-inline-start: var(--space-3); }
 .dsh-plugins-inspect-verdict { margin: 0; font: var(--font-weight-medium) var(--font-size-2)/1.5 var(--s-font); }
 .dsh-plugins-findings { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 .dsh-plugins-finding { font-size: var(--font-size-1); line-height: 1.5; }

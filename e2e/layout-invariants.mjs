@@ -38,9 +38,9 @@ for (const target of [projectsRoot, home, output]) {
   }
 }
 
-resolveDshInstallation('0.2.1-rc.5')
+resolveDshInstallation('0.2.2-rc.1')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.1-rc.5')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.2-rc.1')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 const failures = []
@@ -824,7 +824,7 @@ try {
   }
   note('rightbar', `map.png preview mounted in 资料 tab, no alerts, contained=${JSON.stringify(contain.panel)}`)
 
-  // ---- §5 partner rail: suggestion fill/focus/no-send + C17 draft guard ----
+  // ---- §5 partner rail: suggestion fill/focus/no-send ----
   // The aux rail is open on 资料 after the preview probe; switch to 搭档.
   await page.getByRole('tab', { name: '搭档', exact: true }).click()
   await page.locator(S.chatRail).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
@@ -1126,16 +1126,24 @@ try {
     note(`settings/${vp.width}`, `scrollWidth=${so.scrollWidth} innerWidth=${so.innerWidth}`)
   }
 
-  // ---- Settings cards carry inner padding: every visible card's first and
-  // last in-flow child sits >=12px inside both side borders (review fix). ----
+  // ---- Settings blocks stay flat and flush with the section column; any
+  // visibly bordered/filled surface (such as the manuscript paper preview)
+  // carries >=12px inner padding inside its side borders. ----
   const cardPaddingCheck = async (label) => {
     const bad = await page.evaluate(() => {
       const out = []
+      const activeSection = document.querySelector('.dsh-settings-section:not([hidden])')
+      const sectionTitle = activeSection?.querySelector('.dsh-settings-section__title')
+      const titleLeft = sectionTitle ? sectionTitle.getBoundingClientRect().left : null
       const cards = [...document.querySelectorAll('.dsh-settings-section:not([hidden]) .settings-block')]
         .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
       for (const card of cards) {
         const kids = [...card.children].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
         if (!kids.length) continue
+        const cs = getComputedStyle(card)
+        const hasBox = parseFloat(cs.borderLeftWidth || '0') > 0
+          || parseFloat(cs.borderRightWidth || '0') > 0
+          || (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent')
         const cr = card.getBoundingClientRect()
         const first = kids[0].getBoundingClientRect()
         const last = kids[kids.length - 1].getBoundingClientRect()
@@ -1143,10 +1151,22 @@ try {
           first.left - cr.left, cr.right - first.right,
           last.left - cr.left, cr.right - last.right,
         ]
-        if (Math.min(...gaps) < 11.5) out.push({ cls: card.className.slice(0, 80), gaps: gaps.map((g) => +g.toFixed(1)) })
+        if (hasBox) {
+          if (Math.min(...gaps) < 11.5) out.push({ cls: card.className.slice(0, 80), gaps: gaps.map((g) => +g.toFixed(1)) })
+        } else {
+          if (parseFloat(cs.borderTopLeftRadius || '0') > 0) {
+            out.push({ cls: card.className.slice(0, 80), radius: cs.borderTopLeftRadius })
+          }
+          if (titleLeft !== null && Math.abs(cr.left - titleLeft) > 2) {
+            out.push({ cls: card.className.slice(0, 80), alignDelta: +(cr.left - titleLeft).toFixed(1) })
+          }
+          if (Math.min(...gaps) < -1) {
+            out.push({ cls: card.className.slice(0, 80), overflowGaps: gaps.map((g) => +g.toFixed(1)) })
+          }
+        }
         // 第一列内容左缘对齐：落在内容边缘（±2px）的链接/ghost 型控件，其
         // 首个文字必须同样落在内容边缘上（ghost 内边距把文字挤右是缺陷）。
-        const contentLeft = cr.left + parseFloat(getComputedStyle(card).paddingLeft || '0')
+        const contentLeft = cr.left + parseFloat(cs.paddingLeft || '0')
         const textLeft = (el) => {
           const range = document.createRange()
           let best = null
@@ -1169,6 +1189,16 @@ try {
             out.push({ cls: `${card.className.slice(0, 40)} > ${el.className.slice(0, 40)}`, firstColumnText: +(tl - contentLeft).toFixed(1) })
           }
         }
+      }
+      for (const box of document.querySelectorAll('.dsh-settings-section:not([hidden]) .dsh-settings-preview__paper')) {
+        const br = box.getBoundingClientRect()
+        if (br.width <= 0 || br.height <= 0) continue
+        const kids = [...box.children].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
+        if (!kids.length) continue
+        const first = kids[0].getBoundingClientRect()
+        const last = kids[kids.length - 1].getBoundingClientRect()
+        const gaps = [first.left - br.left, br.right - first.right, last.left - br.left, br.right - last.right]
+        if (Math.min(...gaps) < 11.5) out.push({ cls: 'dsh-settings-preview__paper', gaps: gaps.map((g) => +g.toFixed(1)) })
       }
       return out
     })

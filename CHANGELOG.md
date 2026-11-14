@@ -4,6 +4,36 @@
 
 ## 未发布
 
+## 0.5.0 - 2026-11-14
+
+### 升级说明
+
+- 每部作品改用一个连续的写作搭档，作品元数据新增 `.dsh-editor/bot.json`。旧版按模式绑定的会话不迁移、不展示；升级前请备份整个作品目录（包含隐藏目录）及 DSH_HOME。
+- `patch.complete` 与编辑器内直接应用改写建议的旧接口移除。选段改写发送到当前作品的搭档对话，修改稿保留在回复中，不自动替换正文。
+- `dsh-editor-novel-kernel` 不再接受 `legacy` / `full` 配置；自定义组合须删除该配置或改为 `mode: knowledge-only`。发行自有配置随升级更新。
+- 捆绑运行时为 DSH `0.2.2-rc.1`。上游子代理会话格式升级后不支持旧运行时读取；回退应用时请恢复升级前备份。
+
+### 发布审查修复
+
+- 补齐工作台对会话查询、运行状态、模型和计量服务的依赖声明，修复真实宿主中对话整理、历史读取与换模型失败。
+- 行内补全的「跟随当前对话」随搭档换段继续使用新会话的模型；文稿保存与草稿仍绑定原文件会话。
+- 选段改写按作品隔离，填入原生输入框后确认消费；换作品或自动换段不再重发已经处理的请求，作者已有输入保留。
+- 插件矩阵与独立安装验收统一使用随包 pnpm，不再依赖只有通过 pnpm 脚本启动时才存在的环境变量。
+
+### 发布前清理（转入维护态）
+
+- `dsh-editor-novel-kernel` 只保留 `knowledge-only`（挂载 `novel_knowledge` 与 `novel_memory_update`）：`legacy` / `full` 模式及其提议、草稿、索引写入工具删除，配置为这两种模式时插件报错并拒绝加载，不再静默挂载旧工具面；未挂载的 `novel_overview` 工具与 `installNovelWorkbenchTools` 一并删除。V1 提议标记解析与章节 frontmatter 兼容保留。
+- 删除已搁置的每日写作目标（不再渲染的设置与状态管线）、无引用的改写预设条与重导出文件，以及 135 个无调用的界面文案键（含已移除的会话管理文案）。中文自然排序合并到 `dsh-editor-workspace-kit/natural-order`，外壳与面板基座共用。
+- 测试清理：删除同义反复、跨包重复与只匹配源码文本的断言，以及未接入任何运行器的 `dsh-manuscript/test/editor-lifecycle.mjs`；`official-plugins.mjs` 去掉已移除会话列表的步骤，`plugin-matrix.mjs` 去掉已退役的知乎停靠面板契约。发布流水线移除三个不存在的 e2e 脚本调用，并新增断言：工作流引用的每个 `e2e/*.mjs` 必须存在。
+- 仓库清理：删除重构过程文档（`docs/refactoring/`、`REFACTORING_*`、`phase1-*`、`phase2-*` 等）、根目录重构基线与一次性迁移脚本 `scripts/refactor/`；仍有效的包边界决策并入 [架构决策](docs/architecture.md#包边界)。`docs/README.md` 按「现行文档 / 历史留档」重排。独立 tarball 验证工作流去掉已删除包的触发路径并改名。
+
+### DSH 0.2.2-rc.1
+
+- 捆绑 DSH 运行时升级为 0.2.2-rc.1；上游网页搜索默认改走 DeepSeek Search API（直连接口计费与 `ori_question` 上报取代模型请求），编辑器沿用上游默认，无需配置迁移。
+- 依赖钉住：`dsh-subagent-in-process-driver` / `dsh-invariants` / `dsh-web-search-exa` 随上游退出依赖图移除；新增 cordis 4.1.0 与 schemastery 3.19.0 单实例钉住；zod 4.4.3 不变。
+- 补丁：`dsh-web-frontend` 与 `voice-input` 两份制品补丁移植到新哈希资产与新 `lib/client.js`，意图不变；上游 `dsh-base` / `dsh-web-app` 新增 `tool-executor-native`、`tool-executor-ptc`、`ui-context-menu`、`ui-file-actions`、`ui-file-drag`、`deliverable-file-references`、`message-quotes` 行，均为能力与停靠服务行，保留上游默认（`contextMenus`/`fileDrag` 被已启用的官方停靠条目依赖）。完整核对见 docs/dsh-0.2.2-upgrade.md。
+- 注意：上游 subagent catalog 写入 payload v3，升级后创建过子代理的会话无法再用旧版运行时打开（单向）。
+
 ### 一部作品一个搭档
 
 - 写作模式合并为一个标准写作搭档 preset：小说、文章与技术文档的写法改为同一 preset 下的 `novel-writing` / `article-writing` / `technical-writing` skills，小说知识与 `novel_memory_update` 常驻；`dsh-editor-writing-presets` 包、小说创作 preset、隐藏的旧版 `dsh-editor` preset、插件页「写作模式」开关与 `presets.list` / `presets.setEnabled` RPC 移除，已部署的应用自有旧 preset 目录在部署时按 owner marker 清理。旧版按模式绑定的会话不迁移、不展示。

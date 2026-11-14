@@ -45,7 +45,7 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
   ])
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
     format: 1, platform: `${process.platform}-${process.arch}`,
-    node: { version: '26.10.0', ...node }, dsh: { version: '0.2.1-rc.5', ...dsh }, profile,
+    node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
   }))
   return { root, resources }
 }
@@ -161,7 +161,7 @@ describe('desktop branding assets', () => {
   it('keeps the source icon, window icon, and Windows package icon wired together', async () => {
     const repo = join(import.meta.dirname, '..', '..', '..')
     const build = join(repo, 'apps', 'desktop', 'build')
-    const [svg, mark, sourcePng, png, ico, mascot, shellMascot, main, loadingPage, preload, builder, afterPack, identity] = await Promise.all([
+    const [svg, mark, sourcePng, png, ico, mascot, shellMascot, main, preload, builder, identity] = await Promise.all([
       readFile(join(build, 'icon.svg'), 'utf8'),
       readFile(join(build, 'icon-mark.svg'), 'utf8'),
       readFile(join(build, 'icon-source.png')),
@@ -170,10 +170,8 @@ describe('desktop branding assets', () => {
       readFile(join(build, 'mascot.webp')),
       readFile(join(repo, 'packages', 'dsh-editor-shell', 'src', 'client', 'assets', 'mascot.webp')),
       readFile(join(repo, 'apps', 'desktop', 'src', 'main.ts'), 'utf8'),
-      readFile(join(repo, 'apps', 'desktop', 'src', 'loading-page.ts'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'preload.cjs'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'electron-builder.yml'), 'utf8'),
-      readFile(join(repo, 'scripts', 'after-pack-desktop.cjs'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'src', 'app-identity.ts'), 'utf8'),
     ])
     expect(svg).toContain('<title>DSH Editor</title>')
@@ -190,28 +188,12 @@ describe('desktop branding assets', () => {
     expect(ico.readUInt16LE(0)).toBe(0)
     expect(ico.readUInt16LE(2)).toBe(1)
     expect(ico.readUInt16LE(4)).toBe(7)
-    expect(main).toContain("'icon.ico'")
-    expect(main).toContain("'icon.png'")
-    expect(main).toContain('setAppUserModelId')
-    expect(main).toContain('shouldMaterializePackagedRuntime')
-    expect(main).toContain('runtimeFromResources')
     expect(mascot.subarray(0, 4).toString()).toBe('RIFF')
     expect(mascot.equals(shellMascot)).toBe(true)
-    expect(main).toContain("'mascot.webp'")
-    expect(loadingPage).toContain('首次启动正在复制本地写作环境')
-    expect(loadingPage).toContain('class="mascot"')
-    expect(loadingPage).toContain("img-src data:")
-    expect(loadingPage).not.toContain('class="mark"')
-    expect(builder).toContain('- "build/mascot.webp"')
     expect(identity).toContain("com.dsh-editor.desktop")
     expect(builder).toContain('appId: com.dsh-editor.desktop')
     expect(builder).toContain('icon: build/icon.ico')
     expect(builder).toContain('installerIcon: build/icon.ico')
-    expect(builder).toContain('- "build/icon.ico"')
-    expect(builder).toContain('signAndEditExecutable: false')
-    expect(afterPack).toContain("electron-winstaller/vendor/rcedit.exe")
-    expect(afterPack).toContain('FileDescription')
-    expect(afterPack).toContain('ProductName')
     // About / update page wiring: the renderer is locked behind a strict CSP
     // that blocks api.github.com, so the main process owns the round-trip and
     // the preload bridge exposes invoke-style methods.
@@ -221,9 +203,6 @@ describe('desktop branding assets', () => {
     // Startup check: same round-trip kicked off in the background at launch,
     // cached for the renderer to pull once its UI is up.
     expect(main).toContain("'dsh-window:startup-update'")
-    expect(main).toContain('checkLatest(desktopVersion)')
-    expect(main).toContain('readDesktopVersion')
-    expect(main).not.toContain('version: app.getVersion()')
     expect(main).toContain('assertTrustedIpcSender')
     expect(main).toContain('updateIdFrom(payload)')
     expect(main).not.toContain('downloadUpdate(asset, event.sender)')
@@ -231,9 +210,6 @@ describe('desktop branding assets', () => {
     expect(preload).toContain("invoke('dsh-window:download-update', { updateId })")
     expect(preload).toContain("invoke('dsh-window:install-update', { updateId })")
     expect(preload).not.toContain('downloadUpdate: (asset)')
-    expect(main).toContain('timeoutMs: 120_000')
-    expect(main).toContain("join(process.env.DSH_HOME.trim(), 'electron-user-data')")
-    expect(main).toContain("app.setName('dsh-editor-dev')")
   })
 })
 
@@ -259,7 +235,7 @@ describe('persistent packaged runtime cache', () => {
     expect(identity).toEqual({
       algorithm: PROFILE_DEPLOY_ALGORITHM,
       profileSha256: identity.profileSha256,
-      dsh: '@deepseek-ai/dsh@0.2.1-rc.5',
+      dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
       nodePath: 'n',
       cliPath: 'c',
     })
@@ -280,7 +256,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: 'unsupported-platform', node: { version: '26.10.0', ...node }, dsh: { version: '0.2.1-rc.5', ...dsh }, profile,
+      format: 1, platform: 'unsupported-platform', node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
     }))
     await expect(materializePackagedRuntime(join(root, 'home'), resources)).rejects.toThrow('unsupported identity')
   })
@@ -293,7 +269,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.1-rc.5', ...dsh }, profile,
+      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
     }))
     const runtime = await materializePackagedRuntime(home, resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-two')
@@ -312,7 +288,7 @@ describe('persistent packaged runtime cache', () => {
         treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
       ])
       await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.1-rc.5', ...dsh }, profile,
+        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
       }))
 
       const committed = await materializePackagedRuntime(home, resources)

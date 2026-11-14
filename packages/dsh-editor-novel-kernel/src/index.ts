@@ -1,130 +1,55 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { installNovelWorkbenchTools, installNovelMemoryTool } from 'dsh-editor-workbench'
-import { asHost } from 'dsh-manuscript/host-api'
+import { installNovelMemoryTool } from 'dsh-editor-workbench'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
-import { createIndexWriteTool, type IndexWriter } from './index-write-tool.ts'
-import { NOVEL_INDEX_PATH, SCRATCH_DIRECTORY, SCRATCH_MAX_FILES } from './contracts.ts'
-import {
-  assertSameWorkspaceRoot,
-  resolveInternalWorkspaceAccess,
-  withInternalWorkspaceWrite,
-} from './internal-workspace-access.ts'
-import { createProposalTool, editorToolGuard, EDITOR_PROMPT, MEMORY_MAINTENANCE_PROMPT } from './proposal-tool.ts'
-import { collectScratchFiles, createScratchListTool, createScratchReadTool, createScratchWriteTool, ScratchError, type ScratchStore } from './scratch-tool.ts'
 
 export const name = 'dsh-editor-novel-kernel'
-export const inject = ['tools', 'systemPrompt', 'fs', 'sandboxPolicy', 'sessions', 'workspaceRegistry'] as const
+/** `novel_memory_update` resolves the live session workspace. Knowledge cards are bundled files. */
+export const inject = ['tools', 'fs', 'sandboxPolicy', 'sessions', 'workspaceRegistry'] as const
 
-/** Historical full surface. Mode is required; `full` remains a legacy alias of `legacy`. */
-export const NOVEL_KERNEL_LEGACY_MODE = 'legacy'
-/** Read-only surface: `novel_knowledge` only. The writing preset mounts this mode explicitly. */
+/** The only surface. Shipped presets and stored configs may still set this key. */
 export const NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE = 'knowledge-only'
 
-export type NovelKernelMode = typeof NOVEL_KERNEL_LEGACY_MODE | typeof NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
+const REMOVED_MODES = new Set(['legacy', 'full'])
 
 export type NovelKernelConfig = {
-  mode?: NovelKernelMode | 'full'
+  /** Accepted when it is `knowledge-only` or omitted. `legacy` and `full` are rejected. Other keys are ignored. */
+  mode?: string
 }
 
-function parseNovelKernelMode(mode: unknown): NovelKernelMode {
-  if (mode === NOVEL_KERNEL_LEGACY_MODE || mode === 'full') return NOVEL_KERNEL_LEGACY_MODE
-  if (mode === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) return NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
-  throw new Error(`dsh-editor-novel-kernel rejected unknown mode: ${String(mode)}`)
+function removedMode(mode: string): Error {
+  return new Error(`dsh-editor-novel-kernel mode '${mode}' was removed; only '${NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE}' remains`)
 }
 
-const REQUIRED_MODE_MESSAGE = "dsh-editor-novel-kernel requires an explicit mode: 'legacy' | 'knowledge-only'"
-
-/** Mode is required: omitted config is rejected. Unknown values fail closed. */
-export function resolveNovelKernelMode(config: unknown): NovelKernelMode {
-  if (config === undefined || config === null) throw new Error(REQUIRED_MODE_MESSAGE)
-  if (typeof config === 'string') return parseNovelKernelMode(config)
+/**
+ * There is no mode switch. Omitted config and `mode: knowledge-only`
+ * (object or string) load the knowledge surface. Other object keys are ignored.
+ * Removed mode names fail closed instead of mounting a surface that no longer exists.
+ */
+export function resolveNovelKernelMode(config: unknown): typeof NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE {
+  if (config === undefined || config === null) return NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
+  if (typeof config === 'string') {
+    if (config === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) return NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
+    if (REMOVED_MODES.has(config)) throw removedMode(config)
+    throw new Error(`dsh-editor-novel-kernel rejected unknown mode: ${config}`)
+  }
   if (typeof config === 'object' && !Array.isArray(config)) {
+    if (!Object.prototype.hasOwnProperty.call(config, 'mode')) return NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
     const mode = (config as NovelKernelConfig).mode
-    if (mode === undefined) throw new Error(REQUIRED_MODE_MESSAGE)
-    return parseNovelKernelMode(mode)
+    if (mode === undefined || mode === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) return NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE
+    if (typeof mode === 'string' && REMOVED_MODES.has(mode)) throw removedMode(mode)
+    throw new Error(`dsh-editor-novel-kernel rejected unknown mode: ${String(mode)}`)
   }
-  throw new Error('dsh-editor-novel-kernel config must be an object or mode string')
+  throw new Error('dsh-editor-novel-kernel config must be an object or the knowledge-only mode string')
 }
 
-type KernelHost = ReturnType<typeof asHost> & {
-  tools: {
-    register: (tool: unknown) => unknown
-    guard: (guard: (exec: { name: string; arguments: Readonly<Record<string, unknown>> }) => string | undefined) => () => void
-  }
-  systemPrompt: { section: (section: { name: string; order: number; text: string }) => unknown }
+type KernelHost = Context & {
+  tools: { register: (tool: unknown) => unknown }
 }
 
-/** 索引直写：live session 解析出的 root 上写固定路径；父目录由 fs 后端负责创建。 */
-function makeIndexWriter(ctx: Context): IndexWriter {
-  return async ({ text, signal, sessionId }) => {
-    await withInternalWorkspaceWrite(ctx, sessionId, signal, async (access) => {
-      const host = asHost(ctx)
-      const target = await host.fs.resolve(NOVEL_INDEX_PATH, { cwd: access.workspace.path, signal })
-      signal.throwIfAborted()
-      await host.fs.writeText(target, text, undefined, signal, access.policy)
-    })
-  }
-}
-
-/**
- * scratch store 适配：所有读写限定在 SCRATCH_DIRECTORY 下，写入带会话沙箱策略。
- * 每次写入顺带重写 scratch/.gitignore（内容 `*`），让作者自管的 git 工作区
- * 不跟踪草稿目录；产品自身快照按隐藏目录排除，无需额外处理。
- * 文件数检查、.gitignore 与目标写入同属一次写队列操作。
- */
-function makeScratchStore(ctx: Context): ScratchStore {
-  const host = asHost(ctx)
-  const full = (relative: string) => relative ? `${SCRATCH_DIRECTORY}/${relative}` : SCRATCH_DIRECTORY
-  const listFiles = async (cwd: string, signal: AbortSignal) => collectScratchFiles(async (relative) => {
-    const target = await host.fs.resolve(full(relative), { cwd, signal })
-    return await host.fs.listDir(target, signal)
-  })
-  return {
-    async read({ path, signal, sessionId }) {
-      const access = await resolveInternalWorkspaceAccess(ctx, sessionId, signal)
-      const target = await host.fs.resolve(full(path), { cwd: access.workspace.path, signal })
-      return await host.fs.readText(target, signal)
-    },
-    async write({ path, text, signal, sessionId }) {
-      await withInternalWorkspaceWrite(ctx, sessionId, signal, async (access) => {
-        const files = await listFiles(access.workspace.path, signal)
-        if (!files.includes(path) && files.length >= SCRATCH_MAX_FILES) {
-          throw new ScratchError('LIMIT', `临时工作区最多 ${SCRATCH_MAX_FILES} 个文件，请覆盖现有文件或先清理`)
-        }
-        const confirmed = await resolveInternalWorkspaceAccess(ctx, sessionId, signal)
-        assertSameWorkspaceRoot(access, confirmed, sessionId)
-        signal.throwIfAborted()
-        const ignore = await host.fs.resolve(`${SCRATCH_DIRECTORY}/.gitignore`, { cwd: confirmed.workspace.path, signal })
-        await host.fs.writeText(ignore, '*\n', undefined, signal, confirmed.policy)
-        signal.throwIfAborted()
-        const target = await host.fs.resolve(full(path), { cwd: confirmed.workspace.path, signal })
-        await host.fs.writeText(target, text, undefined, signal, confirmed.policy)
-      })
-    },
-    async list({ signal, sessionId }) {
-      const access = await resolveInternalWorkspaceAccess(ctx, sessionId, signal)
-      return await listFiles(access.workspace.path, signal)
-    },
-  }
-}
-
-/**
- * Registers novel tools for this composition.
- * knowledge-only: `novel_knowledge` + `novel_memory_update` (persona + Skill own workflow).
- * legacy (`full` alias): full historical surface, guard, and prompt sections.
- */
+/** Registers `novel_knowledge` and `novel_memory_update`. */
 export function apply(ctx: Context, config?: unknown): void {
-  const mode = resolveNovelKernelMode(config)
+  resolveNovelKernelMode(config)
   const host = ctx as KernelHost
   host.tools.register(createNovelKnowledgeTool())
-  if (mode === NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE) { installNovelMemoryTool(ctx); return }
-  host.tools.register(createProposalTool())
-  host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(ctx) }))
-  const scratch = makeScratchStore(ctx)
-  host.tools.register(createScratchWriteTool({ store: scratch }))
-  host.tools.register(createScratchReadTool({ store: scratch }))
-  host.tools.register(createScratchListTool({ store: scratch }))
-  installNovelWorkbenchTools(ctx)
-  ctx.effect(() => host.tools.guard(editorToolGuard))
-  host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT + MEMORY_MAINTENANCE_PROMPT })
+  installNovelMemoryTool(ctx)
 }

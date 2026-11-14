@@ -8,9 +8,10 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
-import type { SessionFace } from '../dsh-compat.ts'
+import type { SessionFace, SessionId } from '../dsh-compat.ts'
 import {
   EditorCore,
+  defaultFimPayload,
   editorCommandState,
   REWRITE_PRESETS,
   type EditorCommandState,
@@ -20,6 +21,7 @@ import {
   type EditorCoreStatus,
   type EditorTargetSnapshot,
   type CompletionPreference,
+  type FimPayloadInput,
 } from 'dsh-manuscript/client/editor-core'
 import { DraftSyncQueue } from '../drafts.ts'
 import { PaperStage } from './components.tsx'
@@ -80,8 +82,9 @@ export function Editor(props: {
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
   completionDelayMs?: number
-  /* 可选补全能力开关：false 时停止 FIM 与选段改写 RPC(含快捷键);缺省 true 保持兼容。 */
+  /* 可选补全能力开关：false 时停止 FIM；选段改写由对话能力独立承载。 */
   completionEnabled?: boolean
+  completionSessionId?: SessionId
   authorPreferences: string
   authorMemory: string
   typewriter?: boolean
@@ -99,6 +102,7 @@ export function Editor(props: {
   reveal: RevealRequest | null
   onHandle?(handle: EditorCoreHandle | null): void
   onStatusChange?(status: EditorCoreStatus): void
+  onRewrite?(input: { path: string; selection: string; instruction: string }): boolean
 }) {
   const {
     ctx,
@@ -138,7 +142,7 @@ export function Editor(props: {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuState, setMenuState] = useState<EditorCommandState>(() => editorCommandState({
-    loaded: false, conflict: false, busy: false, completionEnabled: false, enablePatch: false,
+    loaded: false, conflict: false, busy: false, completionEnabled: false,
     hasVisibleSelection: false, collapsed: true, dirty: false, canUndo: false, canRedo: false, paperLength: 0,
   }))
   const [menuTarget, setMenuTarget] = useState<EditorTargetSnapshot | null>(null)
@@ -186,6 +190,10 @@ export function Editor(props: {
   )
 
   const onNotice = useCallback((message: string) => { setNote(message) }, [])
+  const buildFimPayload = useCallback((input: FimPayloadInput) => defaultFimPayload({
+    ...input,
+    sessionId: props.completionSessionId ?? input.sessionId,
+  }), [props.completionSessionId])
   const onError = useCallback((message: string) => { setNote(message) }, [])
   const onHandle = useCallback((handle: EditorCoreHandle | null) => {
     handleRef.current = handle
@@ -228,7 +236,7 @@ export function Editor(props: {
       setNote(t('editor.clipboardExpired'))
       return
     }
-    const canRewriteTarget = live.loaded && live.completionEnabled && live.enablePatch && !live.conflict && !live.busy
+    const canRewriteTarget = live.loaded && live.hasVisibleSelection && !live.conflict && !live.busy
       && Boolean(target && target.start < target.end)
     const canCompleteTarget = live.loaded && live.completionEnabled && !live.conflict && !live.busy
       && Boolean(target && target.start === target.end)
@@ -329,13 +337,14 @@ export function Editor(props: {
     if (!instruction) return
     const handle = handleRef.current
     const target = customTarget
-    setCustomRewriteOpen(false)
     if (!handle || !target || !handle.isTargetCurrent(target)) {
+      setCustomRewriteOpen(false)
       setNote(t('editor.rewriteLocked'))
       return
     }
     handle.restoreTarget(target)
-    handle.requestRewrite(instruction, target)
+    if (props.onRewrite?.({ path, selection: target.selectedText, instruction })) setCustomRewriteOpen(false)
+    else setNote(t('editor.rewriteLocked'))
   }
   const runCustomRewrite = () => submitRewrite(customText)
 
@@ -516,6 +525,7 @@ export function Editor(props: {
             automaticCompletionEligible={isAuthorFacingDocumentPath(path)}
             fimDelayMs={completionDelayMs}
             completionEnabled={completionEnabled}
+            buildFimPayload={buildFimPayload}
             authorPreferences={authorPreferences}
             typewriter={typewriter}
             focusParagraph={focusParagraph}
@@ -566,7 +576,6 @@ export function Editor(props: {
               </Notice>
             </div>}
             maxGhostCandidates={3}
-            enablePatch={true}
             enableBeforeUnload={true}
             paperProjection={PAPER_PROJECTION}
             onReloadDisk={() => setReloadConfirm(true)}

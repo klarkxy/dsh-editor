@@ -28,7 +28,6 @@ export {
 export {
   EditorCore,
   defaultFimPayload,
-  defaultPatchPayload,
   type EditorCoreDraft,
   type EditorCoreHandle,
   type EditorCorePaperProjection,
@@ -37,7 +36,6 @@ export {
   type EditorCoreStatus,
   type EditorCoreTypography,
   type FimPayloadInput,
-  type PatchPayloadInput,
 } from './editor.tsx'
 export { REWRITE_PRESETS, type RewritePresetId } from './rewrite-presets.ts'
 export {

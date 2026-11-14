@@ -19,7 +19,6 @@ const state = editorCommandState({
   conflict: true,
   busy: false,
   completionEnabled: true,
-  enablePatch: true,
   hasVisibleSelection: true,
   collapsed: false,
   dirty: true,
