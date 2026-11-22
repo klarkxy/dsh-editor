@@ -290,6 +290,91 @@ export function reasoningEffortsFor(choice: ReasoningChoice): Record<string, str
   return choice === 'standard' ? { ...STANDARD_REASONING_EFFORTS } : undefined
 }
 
+/*
+ * models.dev 自动补全：CatalogFacts 是 `models.catalog.lookup` 应答的精简形状
+ * （宿主侧定义见 ../models-catalog.ts）。补全只填空字段，字段名按提供方族
+ * 映射——pi-ai 的模型条目用 `input` / `reasoningEfforts`，llm-deepseek 的
+ * `DeepSeekCatalogModel` 用 `inputModalities`（schema 含 contextWindow 与
+ * maxTokens，已对照 rc.5 制品核实），其它命名空间的模型 schema 未知，只补
+ * 容量两个公共字段。
+ */
+export type ModelFamily = 'pi-ai' | 'deepseek' | 'other'
+
+export type CatalogFacts = {
+  contextWindow?: number
+  maxTokens?: number
+  input?: ('text' | 'image')[]
+  reasoning?: false | { efforts: string[]; canDisable: boolean }
+}
+
+export function inputFieldFor(family: ModelFamily): 'input' | 'inputModalities' | undefined {
+  if (family === 'pi-ai') return 'input'
+  if (family === 'deepseek') return 'inputModalities'
+  return undefined
+}
+
+/** Gemini 只接受四档推理等级；其余档位的 Effort 值会让请求失败。 */
+export const GEMINI_REASONING_EFFORTS: ReadonlySet<string> = new Set(['minimal', 'low', 'medium', 'high'])
+
+/**
+ * The reasoningEfforts map a catalog `reasoning` fact writes. `false` writes
+ * nothing: an empty field already renders as the un-declared state. Effort
+ * keys double as selector levels and wire spellings; `off` appears only when
+ * the model can disable thinking.
+ */
+export function reasoningEffortsFromCatalog(
+  api: string | undefined,
+  reasoning: { efforts: string[]; canDisable: boolean } | undefined,
+): Record<string, string | null> | undefined {
+  if (reasoning === undefined) return undefined
+  const efforts = api === 'google-generative-ai'
+    ? reasoning.efforts.filter((effort) => GEMINI_REASONING_EFFORTS.has(effort))
+    : reasoning.efforts
+  if (efforts.length === 0) return undefined
+  const map: Record<string, string | null> = {}
+  if (reasoning.canDisable) map['off'] = null
+  for (const effort of efforts) map[effort] = effort
+  return map
+}
+
+export type CatalogField = 'context' | 'max' | 'input' | 'reasoning'
+
+/**
+ * The draft patch one catalog fact contributes to a model row. Only empty
+ * fields are patched — a value the author or discovery already set always
+ * wins — and every write still lands in the draft until the card is saved.
+ */
+export function catalogFill(
+  model: Record<string, unknown>,
+  family: ModelFamily,
+  api: string | undefined,
+  facts: CatalogFacts,
+): { patch: Record<string, unknown>; fields: CatalogField[] } {
+  const patch: Record<string, unknown> = {}
+  const fields: CatalogField[] = []
+  if (facts.contextWindow !== undefined && model['contextWindow'] === undefined) {
+    patch['contextWindow'] = facts.contextWindow
+    fields.push('context')
+  }
+  if (facts.maxTokens !== undefined && model['maxTokens'] === undefined) {
+    patch['maxTokens'] = facts.maxTokens
+    fields.push('max')
+  }
+  const inputKey = inputFieldFor(family)
+  if (inputKey !== undefined && facts.input !== undefined && model[inputKey] === undefined) {
+    patch[inputKey] = [...facts.input]
+    fields.push('input')
+  }
+  if (family === 'pi-ai' && model['reasoningEfforts'] === undefined && facts.reasoning !== undefined && facts.reasoning !== false) {
+    const efforts = reasoningEffortsFromCatalog(api, facts.reasoning)
+    if (efforts !== undefined) {
+      patch['reasoningEfforts'] = efforts
+      fields.push('reasoning')
+    }
+  }
+  return { patch, fields }
+}
+
 /** Convert a schema-validated catalog value into records without dropping hidden fields. */
 export function modelDrafts(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []

@@ -293,6 +293,8 @@ export function ProviderEditor(props: {
             baseURL={stringAt(draft, 'baseURL') ?? stringAt(fallbackRecord, 'baseURL')}
             api={isPiAi ? stringAt(draft, 'api') ?? stringAt(fallbackRecord, 'api') : undefined}
             apiKey={keyValue.length > 0 ? keyValue : undefined}
+            family={family === 'unknown' ? 'other' : family}
+            catalogBacked={isPiAi && !isDeclared}
             disabled={readOnly || busy}
             onChange={setModelsRef}
             t={text()} />
@@ -512,6 +514,8 @@ export function CustomProviderCard(props: {
         baseURL={baseURL}
         api={protocol}
         apiKey={keyValue.length > 0 ? keyValue : undefined}
+        family="pi-ai"
+        catalogBacked={false}
         disabled={readOnly || busy || committed}
         onChange={setModels}
         t={text()} />

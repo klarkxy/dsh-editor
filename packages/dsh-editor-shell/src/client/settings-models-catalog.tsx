@@ -2,17 +2,23 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { Badge, Button, Card, Checkbox, Flex, Heading, IconButton, Input, Notice, Text } from '../ui/index.ts'
 import type { DiscoveredModelView } from '../dsh-compat.ts'
-import { reasoningChoiceOf, reasoningEffortsFor, type ReasoningChoice } from './settings-models-store.ts'
+import { catalogFill, inputFieldFor, reasoningChoiceOf, reasoningEffortsFor, type CatalogFacts, type CatalogField, type ModelFamily, type ReasoningChoice } from './settings-models-store.ts'
+import { SHELL_RPC_CHANNEL } from '../capabilities.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
 import { ActivityDots, Dialog, DialogDescription, DialogTitle } from './ui/index.ts'
 
-import type { ShellContext } from './shared.ts'
-import { failureMessage, text } from './settings-models-copy.ts'
+import { safeRpcCall, type ShellContext } from './shared.ts'
+import { failureMessage, joinList, text } from './settings-models-copy.ts'
+
+export type { ModelFamily }
+
+type LookupValue = { fetchedAt: string; stale: boolean; models: Record<string, CatalogFacts> }
 
 /* Model-list editor shared by the editing and creating cards. Local state
-   owns the per-row capacity keystroke buffer and the candidate picker. */
+   owns the per-row capacity keystroke buffer, the candidate picker, and the
+   models.dev autofill bookkeeping. */
 export function ModelListEditor(props: {
   ctx: ShellContext
   models: Record<string, unknown>[]
@@ -21,16 +27,33 @@ export function ModelListEditor(props: {
   baseURL: string | undefined
   api: string | undefined
   apiKey: string | undefined
+  family: ModelFamily
+  catalogBacked: boolean
   disabled?: boolean
   onChange(models: Record<string, unknown>[]): void
   t: ReturnType<typeof text>
 }): ReactNode {
-  const { ctx, models, onChange, settingsNs, provider, baseURL, api, apiKey, disabled = false, t } = props
+  const { ctx, models, onChange, settingsNs, provider, baseURL, api, apiKey, family, catalogBacked, disabled = false, t } = props
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<DiscoveredModelView[] | undefined>(undefined)
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  const [statuses, setStatuses] = useState<Record<number, string>>({})
+  /* Mutable bookkeeping shared across renders: input types seen on discovery
+     candidates, ids the author typed by hand (so a blur without an edit does
+     not hit the network), the id each row last asked models.dev about, and
+     the freshest model draft — an in-flight lookup applies against it so a
+     slow fetch cannot overwrite edits made while the request was out. */
+  const [refs] = useState(() => ({
+    discoveredInputs: new Map<string, ('text' | 'image')[]>(),
+    editedIds: new Set<number>(),
+    lookupKeys: new Map<number, string>(),
+    latest: [] as Record<string, unknown>[],
+  }))
+  refs.latest = models
+  const inputKey = inputFieldFor(family)
 
   const fetchable = (provider !== '' || (baseURL !== undefined && baseURL.length > 0)) && apiKey === undefined || apiKey !== undefined
 
@@ -48,14 +71,36 @@ export function ModelListEditor(props: {
   }
   const remove = (index: number): void => {
     onChange(models.filter((_, at) => at !== index))
+    // 行号键的状态都跟行走:删掉被删行的项,后面的行号减一。
+    const shifted = (at: number): number | undefined => (at === index ? undefined : at > index ? at - 1 : at)
     setExpanded((current) => {
       const next = new Set<number>()
       for (const at of current) {
-        if (at === index) continue
-        next.add(at > index ? at - 1 : at)
+        const moved = shifted(at)
+        if (moved !== undefined) next.add(moved)
       }
       return next
     })
+    setStatuses((current) => {
+      const next: Record<number, string> = {}
+      for (const [key, value] of Object.entries(current)) {
+        const moved = shifted(Number(key))
+        if (moved !== undefined) next[moved] = value
+      }
+      return next
+    })
+    const nextEdited = new Set<number>()
+    refs.editedIds.forEach((at) => {
+      const moved = shifted(at)
+      if (moved !== undefined) nextEdited.add(moved)
+    })
+    refs.editedIds = nextEdited
+    const nextLookups = new Map<number, string>()
+    refs.lookupKeys.forEach((id, at) => {
+      const moved = shifted(at)
+      if (moved !== undefined) nextLookups.set(moved, id)
+    })
+    refs.lookupKeys = nextLookups
   }
   const toggle = (index: number): void => {
     setExpanded((current) => {
@@ -67,6 +112,66 @@ export function ModelListEditor(props: {
   }
   const add = (): void => {
     onChange([...models, { id: '' }])
+  }
+
+  const FIELD_LABEL: Record<CatalogField, string> = {
+    context: t.fieldContext,
+    max: t.fieldMax,
+    input: t.fieldInput,
+    reasoning: t.fieldReasoning,
+  }
+
+  /**
+   * Ask `models.catalog.lookup` about the ids on the given rows and fill the
+   * fields still empty. `announce` gates the miss and failure notices: auto
+   * triggers (adopt, blur) stay silent when nothing was filled, while the
+   * explicit row button always reports the outcome. Built-in catalog
+   * providers inherit from the installed catalog, so the RPC is skipped
+   * entirely for them.
+   */
+  const lookupIds = async (targets: { index: number; id: string }[], announce: boolean): Promise<void> => {
+    if (catalogBacked || targets.length === 0) return
+    targets.forEach(({ index, id }) => refs.lookupKeys.set(index, id))
+    setCatalogBusy(true)
+    const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: targets.map((target) => target.id) }))
+    setCatalogBusy(false)
+    if (!result.ok) {
+      if (!announce) return
+      const message = failureMessage(result)
+      setStatuses((prev) => {
+        const next = { ...prev }
+        targets.forEach(({ index }) => { next[index] = message })
+        return next
+      })
+      return
+    }
+    const stale = result.value.stale === true
+    /* 在请求挂起期间作者可能继续编辑;按最新草稿逐行判断——行还在原位
+       (id 相同)且字段仍为空才补,绝不覆盖挂起期间敲进去的值。 */
+    const latest = refs.latest
+    const fills: Record<number, Record<string, unknown>> = {}
+    const notes: Record<number, string> = {}
+    for (const { index, id } of targets) {
+      const row = latest[index]
+      if (row?.id !== id) continue
+      const facts = result.value.models[id]
+      if (facts === undefined) {
+        if (announce) notes[index] = t.autofillMiss
+        continue
+      }
+      const { patch: fill, fields } = catalogFill(row, family, api, facts)
+      if (fields.length === 0) {
+        if (announce) notes[index] = t.autofillNone
+        continue
+      }
+      fills[index] = fill
+      const note = t.autofilled(joinList(fields.map((field) => FIELD_LABEL[field])))
+      notes[index] = stale ? note + t.autofillStale : note
+    }
+    if (Object.keys(fills).length > 0) {
+      onChange(latest.map((model, index) => (fills[index] !== undefined ? { ...model, ...fills[index] } : model)))
+    }
+    if (Object.keys(notes).length > 0) setStatuses((prev) => ({ ...prev, ...notes }))
   }
 
   const fetch = async (): Promise<void> => {
@@ -89,6 +194,12 @@ export function ModelListEditor(props: {
         return
       }
       const known = new Set(models.map((model) => (typeof model['id'] === 'string' ? (model['id'] as string) : '')))
+      for (const candidate of result.value) {
+        const input = candidate['inputModalities']
+        if (Array.isArray(input)) {
+          refs.discoveredInputs.set(candidate.id, input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image'))
+        }
+      }
       setCandidates(result.value)
       setPicked(new Set(result.value.filter((model) => !known.has(model.id)).map((model) => model.id)))
     } catch (error) {
@@ -118,10 +229,26 @@ export function ModelListEditor(props: {
       if (candidate.name !== undefined) next['name'] = candidate.name
       if (candidate.contextWindow !== undefined) next['contextWindow'] = candidate.contextWindow
       if (candidate.maxTokens !== undefined) next['maxTokens'] = candidate.maxTokens
+      if (inputKey !== undefined) {
+        const input = candidate['inputModalities']
+        if (Array.isArray(input)) {
+          const kinds = input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image')
+          if (kinds.length > 0) next[inputKey] = kinds
+        }
+      }
       byId.set(candidate.id, next)
     }
-    onChange([...byId.values()])
+    const next = [...byId.values()]
+    onChange(next)
     closePicker()
+    // 下一次渲染前 lookup 就已经在读 refs.latest;先同步过去,采纳结果不丢。
+    refs.latest = next
+    // 发现候选自带字段之外，向 models.dev 补齐这一批 id 仍空着的字段。
+    void lookupIds(
+      next.map((model, index) => ({ index, id: model['id'] }))
+        .filter((row): row is { index: number; id: string } => typeof row.id === 'string' && picked.has(row.id)),
+      false,
+    )
   }
   const togglePick = (id: string): void => {
     setPicked((current) => {
@@ -174,7 +301,17 @@ export function ModelListEditor(props: {
             placeholder={t.modelId}
             aria-label={`${t.modelId} ${index + 1}`}
             disabled={disabled}
-            onChange={(value) => patch(index, { id: value })} />
+            onChange={(value) => {
+              refs.editedIds.add(index)
+              patch(index, { id: value })
+            }}
+            onBlur={() => {
+              // 手动改过 ID 后失焦才查目录；同一 id 已查过就不再打扰。
+              const id = model['id']
+              if (typeof id !== 'string' || id === '' || !refs.editedIds.has(index)) return
+              if (refs.lookupKeys.get(index) === id) return
+              void lookupIds([{ index, id }], false)
+            }} />
           <Input
             type="text"
             className="models-input models-input-name"
@@ -212,7 +349,7 @@ export function ModelListEditor(props: {
               min={1}
               step={1}
               value={typeof model['contextWindow'] === 'number' ? String(model['contextWindow']) : ''}
-              placeholder="256000"
+              placeholder={catalogBacked ? t.followCatalog : '256000'}
               aria-label={`${t.modelContext} ${index + 1}`}
               disabled={disabled}
               onChange={(raw) => {
@@ -235,7 +372,7 @@ export function ModelListEditor(props: {
               min={1}
               step={1}
               value={typeof model['maxTokens'] === 'number' ? String(model['maxTokens']) : ''}
-              placeholder="8192"
+              placeholder={catalogBacked ? t.followCatalog : '8192'}
               aria-label={`${t.modelMax} ${index + 1}`}
               disabled={disabled}
               onChange={(raw) => {
@@ -247,27 +384,85 @@ export function ModelListEditor(props: {
               }} />
             </label>
           </Flex>
+          {inputKey !== undefined ? <Flex align="center" gap="3" className="models-field models-field-row">
+            <Text size="2" weight="medium" className="models-field-label">
+              {t.modelInputTypes}
+            </Text>
+            {/* 两个复选框是一个控件组,只占 grid 第二列;窄窗整组换行而不是图片孤行。 */}
+            <Flex align="center" gap="3" className="models-input-types">
+              {(['text', 'image'] as const).map((kind) => {
+                const stored = model[inputKey]
+                // 字段为空时只显示继承值:内置目录的取发现结果,其余默认文本;
+                // 只有点过复选框才会真正写入 input / inputModalities。
+                const inherited = catalogBacked && typeof model['id'] === 'string'
+                  ? refs.discoveredInputs.get(model['id'] as string) ?? ['text']
+                  : ['text']
+                const active = Array.isArray(stored)
+                  ? stored.filter((value): value is 'text' | 'image' => value === 'text' || value === 'image')
+                  : inherited
+                const checked = active.includes(kind)
+                return <Checkbox
+                  key={kind}
+                  checked={checked}
+                  disabled={disabled || (checked && active.length === 1)}
+                  label={kind === 'text' ? t.modelInputText : t.modelInputImage}
+                  onCheckedChange={() => {
+                    // 至少保留一种输入类型;空集对 pi-ai 与 deepseek 都非法。
+                    const next = checked ? active.filter((value) => value !== kind) : [...active, kind]
+                    if (next.length > 0) patch(index, { [inputKey]: next })
+                  }} />
+              })}
+            </Flex>
+          </Flex> : null}
           <Flex asChild align="center" gap="3" className="models-field models-field-row">
             <label>
             <Text size="2" weight="medium" className="models-field-label">
               {t.modelReasoning}
             </Text>
             <Select
-              value={reasoningChoiceOf(model)}
-              options={[
-                { value: 'off', label: t.modelReasoningOff },
-                { value: 'standard', label: t.modelReasoningStandard },
-                ...(reasoningChoiceOf(model) === 'custom' ? [{ value: 'custom', label: t.modelReasoningCustom }] : []),
-              ]}
+              value={catalogBacked && model['reasoningEfforts'] === undefined ? 'catalog' : reasoningChoiceOf(model)}
+              options={
+                catalogBacked && model['reasoningEfforts'] === undefined
+                  ? [
+                    { value: 'catalog', label: t.followCatalog },
+                    { value: 'standard', label: t.modelReasoningStandard },
+                  ]
+                  : [
+                    { value: 'off', label: t.modelReasoningOff },
+                    { value: 'standard', label: t.modelReasoningStandard },
+                    ...(reasoningChoiceOf(model) === 'custom'
+                      ? [{
+                        value: 'custom',
+                        // 自定义档位只读;标签列出除 off 外的键,方便对照手写配置。
+                        label: t.modelReasoningCustom(joinList(Object.keys(model['reasoningEfforts'] as Record<string, unknown>).filter((key) => key !== 'off'))),
+                      }]
+                      : []),
+                  ]}
               disabled={disabled}
               aria-label={`${t.modelReasoning} ${index + 1}`}
               onChange={(choice) => {
-                // custom 只在读取手写配置时出现,不可由此写入;切回其它档位才会落盘。
-                if (choice === 'custom') return
+                // custom 与 catalog 都是只读态:前者回写手会清掉手写键,后者只是占位的继承提示。
+                if (choice === 'custom' || choice === 'catalog') return
                 patch(index, { reasoningEfforts: reasoningEffortsFor(choice as ReasoningChoice) })
               }} />
             </label>
           </Flex>
+          {!catalogBacked ? <Flex align="center" gap="2" className="models-field models-field-row">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="models-button"
+              disabled={disabled || catalogBusy || typeof model['id'] !== 'string' || (model['id'] as string) === ''}
+              onClick={() => {
+                const id = model['id'] as string
+                void lookupIds([{ index, id }], true)
+              }}>
+              {t.autofill}
+            </Button>
+          </Flex> : null}
+          {statuses[index] !== undefined ? <Text size="1" color="gray" className="models-field models-autofill-status">
+            {statuses[index]}
+          </Text> : null}
         </Flex> : null}
       </Card>)}
       <Button

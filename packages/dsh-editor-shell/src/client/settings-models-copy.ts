@@ -2,7 +2,12 @@
 import type { RpcResult } from '../dsh-compat.ts'
 import type { ProviderRow } from './settings-models-store.ts'
 import { providerIdOf } from './settings-models-store.ts'
-import { t } from '../i18n/index.ts'
+import { getLocale, t } from '../i18n/index.ts'
+
+/** Join short labels the way the locale separates list items: 「、」/「, 」. */
+export function joinList(items: string[]): string {
+  return items.join(getLocale() === 'zh' ? '、' : ', ')
+}
 
 /* Read the message of a rejected wire call without unwrapping to a host
    stack — the page shows the same text the user would see in the DevTools
@@ -59,7 +64,20 @@ export function text() {
   modelReasoning: t('chat.reasoning'),
   modelReasoningOff: t('models.reasoningOff'),
   modelReasoningStandard: t('models.reasoningStandard'),
-  modelReasoningCustom: t('models.reasoningCustom'),
+  modelReasoningCustom: (list: string) => t('models.reasoningCustom', { list }),
+  modelInputTypes: t('models.inputTypes'),
+  modelInputText: t('models.inputText'),
+  modelInputImage: t('models.inputImage'),
+  followCatalog: t('models.followCatalog'),
+  autofill: t('models.autofill'),
+  autofilled: (list: string) => t('models.autofilled', { list }),
+  autofillMiss: t('models.autofillMiss'),
+  autofillNone: t('models.autofillNone'),
+  autofillStale: t('models.autofillStale'),
+  fieldContext: t('models.fieldContext'),
+  fieldMax: t('models.fieldMax'),
+  fieldInput: t('models.fieldInput'),
+  fieldReasoning: t('models.fieldReasoning'),
   modelAdvanced: t('models.params'),
   removeModel: t('models.removeModel'),
   deleteProvider: t('common.delete'),

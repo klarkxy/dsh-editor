@@ -4,6 +4,7 @@ import { importWritingModels } from './writing-ai-migration.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } from './capabilities.ts'
+import { createModelsCatalog } from './models-catalog.ts'
 import Schema from '@deepseek-ai/schemastery'
 import type { EditorWritingPreferences, WritingModelMigrationStatus } from './writing-settings-contract.ts'
 
@@ -52,7 +53,10 @@ export async function apply(ctx: Context, config: ShellFeatureConfig = {}): Prom
       else delete preferences.modelsReady
     }
   }, 'shell.writing-model-readiness')
-  ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {
+  // models.dev lookups fetch lazily on first call; nothing touches the network here.
+  const modelsCatalog = createModelsCatalog()
+  ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint, payload, signal) => {
+    if (endpoint === 'models.catalog.lookup') return modelsCatalog.handle(payload, signal)
     if (endpoint === 'models.migration.status' || endpoint === 'models.migrate') {
       await waitMigration()
       if (disposed) return { ok: false, error: { code: 'internal', message: '模型配置服务已关闭。', details: {} } }
