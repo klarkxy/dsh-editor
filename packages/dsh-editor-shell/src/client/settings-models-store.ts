@@ -316,11 +316,20 @@ export function inputFieldFor(family: ModelFamily): 'input' | 'inputModalities' 
 /** Gemini 只接受四档推理等级；其余档位的 Effort 值会让请求失败。 */
 export const GEMINI_REASONING_EFFORTS: ReadonlySet<string> = new Set(['minimal', 'low', 'medium', 'high'])
 
+/* pi-ai 模型条目 reasoningEfforts 的合法键——rc.5 制品
+   `dsh-llm-pi-ai/lib/index.js` 的 THINKING_LEVELS(off | minimal | low |
+   medium | high | xhigh | max)去掉 off;off 是禁用槽,不算 effort 等级。
+   宿主 schema 是 z.dict(string|null, union(THINKING_LEVELS)),键必须在
+   集合内,值是线协议拼写(只有 off 可以是 null)。 */
+export const REASONING_EFFORT_KEYS: ReadonlySet<string> = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
 /**
  * The reasoningEfforts map a catalog `reasoning` fact writes. `false` writes
- * nothing: an empty field already renders as the un-declared state. Effort
- * keys double as selector levels and wire spellings; `off` appears only when
- * the model can disable thinking.
+ * nothing: an empty field already renders as the un-declared state. models.dev
+ * 的 `none` 表示该模型可以关掉思考,写成 `off: 'none'`;其余值只在本身
+ * 是合法键时才写成 key:value,不认识的丢弃。有 toggle 而没有 none 才写
+ * `off: null`;既有 toggle 又有 none 时以 `off: 'none'` 为准。过滤后没有
+ * 任何非 off 档位时整个字段不写——宿主拒绝只有 off 的 reasoningEfforts。
  */
 export function reasoningEffortsFromCatalog(
   api: string | undefined,
@@ -330,10 +339,12 @@ export function reasoningEffortsFromCatalog(
   const efforts = api === 'google-generative-ai'
     ? reasoning.efforts.filter((effort) => GEMINI_REASONING_EFFORTS.has(effort))
     : reasoning.efforts
-  if (efforts.length === 0) return undefined
+  const levels = efforts.filter((effort) => effort !== 'none' && REASONING_EFFORT_KEYS.has(effort))
+  if (levels.length === 0) return undefined
   const map: Record<string, string | null> = {}
-  if (reasoning.canDisable) map['off'] = null
-  for (const effort of efforts) map[effort] = effort
+  if (efforts.includes('none')) map['off'] = 'none'
+  else if (reasoning.canDisable) map['off'] = null
+  for (const level of levels) map[level] = level
   return map
 }
 

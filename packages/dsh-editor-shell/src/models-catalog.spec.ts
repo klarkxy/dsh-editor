@@ -1,3 +1,4 @@
+import { mkdtempSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -86,12 +87,24 @@ const PAYLOAD = {
 
 const INDEX = indexFromPayload(PAYLOAD)
 
+/* 每个夹具写进自己的临时目录,运行后统一删除,不留文件。 */
+const specDirs: string[] = []
+afterEach(async () => {
+  await Promise.all(specDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+function specDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'models-dev-'))
+  specDirs.push(dir)
+  return dir
+}
+
 function catalogFixture(overrides: Partial<Parameters<typeof createModelsCatalog>[0]> = {}) {
   let clock = 1_000_000
   const fetcher = vi.fn(async () => new Response(JSON.stringify(PAYLOAD)))
   const catalog = createModelsCatalog({
     fetcher: fetcher as unknown as typeof fetch,
-    cacheFile: overrides.cacheFile ?? join(tmpdir(), `models-dev-spec-${Math.random().toString(36).slice(2)}.json`),
+    cacheFile: overrides.cacheFile ?? join(specDir(), 'models-dev-index.json'),
     now: () => clock,
     ...overrides,
   })
@@ -167,10 +180,6 @@ describe('factsFor matching', () => {
 })
 
 describe('models.catalog.lookup', () => {
-  const dirs: string[] = []
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
-  })
 
   it('validates the request shape', async () => {
     const { catalog } = catalogFixture()
@@ -213,7 +222,7 @@ describe('models.catalog.lookup', () => {
 
   it('falls back to the expired cache with stale when refresh fails', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'models-dev-'))
-    dirs.push(dir)
+    specDirs.push(dir)
     const cacheFile = join(dir, 'models-dev-index.json')
     const index: CatalogIndex = { acme: { m1: { contextWindow: 100 } } }
     await writeFile(cacheFile, JSON.stringify({ fetchedAt: new Date(500).toISOString(), index }))
@@ -233,7 +242,7 @@ describe('models.catalog.lookup', () => {
 
   it('treats an unusable payload as a failed fetch and keeps the old cache', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'models-dev-'))
-    dirs.push(dir)
+    specDirs.push(dir)
     const cacheFile = join(dir, 'models-dev-index.json')
     const index: CatalogIndex = { acme: { m1: { contextWindow: 100 } } }
     await writeFile(cacheFile, JSON.stringify({ fetchedAt: new Date(500).toISOString(), index }))
@@ -253,11 +262,23 @@ describe('models.catalog.lookup', () => {
     expect(kept.index).toEqual(index)
   })
 
+  it('treats entries with only empty facts as unusable too', async () => {
+    const dir = specDir()
+    const cacheFile = join(dir, 'models-dev-index.json')
+    // 条目还在但一个字段都解析不出来(modalities/limit/reasoning 全空)——
+    // 与「没有可用模型」同等,不写缓存、有旧缓存就 stale、没有就 network。
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      acme: { models: { hollow: { id: 'hollow', modalities: { input: [], output: [] }, limit: {} } } },
+    })))
+    const catalog = createModelsCatalog({ fetcher: fetcher as unknown as typeof fetch, cacheFile })
+    expect(await catalog.handle({ ids: ['hollow'] })).toMatchObject({ ok: false, error: { code: 'network' } })
+  })
+
   it('reports a network error when the payload has no usable models and nothing is cached', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: 'not found' })))
     const catalog = createModelsCatalog({
       fetcher: fetcher as unknown as typeof fetch,
-      cacheFile: join(tmpdir(), `empty-${Math.random().toString(36).slice(2)}.json`),
+      cacheFile: join(specDir(), 'models-dev-index.json'),
     })
     expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({ ok: false, error: { code: 'network' } })
   })
@@ -266,7 +287,7 @@ describe('models.catalog.lookup', () => {
     const fetcher = vi.fn(async () => { throw new Error('offline') })
     const catalog = createModelsCatalog({
       fetcher: fetcher as unknown as typeof fetch,
-      cacheFile: join(tmpdir(), `never-${Math.random().toString(36).slice(2)}.json`),
+      cacheFile: join(specDir(), 'models-dev-index.json'),
     })
     expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({
       ok: false,
@@ -278,7 +299,7 @@ describe('models.catalog.lookup', () => {
     const fetcher = vi.fn(async () => new Response('x'.repeat(64), { headers: { 'content-length': '64' } }))
     const catalog = createModelsCatalog({
       fetcher: fetcher as unknown as typeof fetch,
-      cacheFile: join(tmpdir(), `size-${Math.random().toString(36).slice(2)}.json`),
+      cacheFile: join(specDir(), 'models-dev-index.json'),
       maxBytes: 8,
     })
     expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({ ok: false, error: { code: 'network' } })
@@ -288,7 +309,7 @@ describe('models.catalog.lookup', () => {
     const fetcher = vi.fn(async () => new Response('x'.repeat(64), { headers: { 'content-length': '4' } }))
     const catalog = createModelsCatalog({
       fetcher: fetcher as unknown as typeof fetch,
-      cacheFile: join(tmpdir(), `size2-${Math.random().toString(36).slice(2)}.json`),
+      cacheFile: join(specDir(), 'models-dev-index.json'),
       maxBytes: 8,
     })
     expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({ ok: false, error: { code: 'network' } })

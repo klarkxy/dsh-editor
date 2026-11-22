@@ -315,8 +315,10 @@ export function createModelsCatalog(deps: ModelsCatalogDeps = {}) {
       const payload = await fetchPayload(fetcher, maxBytes, undefined)
       const index = indexFromPayload(payload)
       // 结构变了或拿到错误页时一个可用模型都解析不出来——按拉取失败处理,
-      // 不覆盖内存与磁盘缓存,让 stale 回退或 network 错误生效。
-      const usable = Object.values(index).some((table) => Object.keys(table).length > 0)
+      // 不覆盖内存与磁盘缓存,让 stale 回退或 network 错误生效。条目存在
+      // 但一个字段都没解析出来(空 facts)同样不可用。
+      const usable = Object.values(index).some((table) =>
+        Object.values(table).some((facts) => Object.keys(facts).length > 0))
       if (!usable) throw new Error('models.dev payload contained no usable model entries')
       const record: CachedEntry = {
         fetchedAt: new Date(now()).toISOString(),

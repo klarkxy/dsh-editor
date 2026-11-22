@@ -1,7 +1,9 @@
 import { isValidElement, useState, type ReactElement, type ReactNode, type SetStateAction } from 'react'
 import { Button, Card, Checkbox, Input, Text } from '../ui/index.ts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import Schema from '@deepseek-ai/schemastery'
 import { ModelListEditor, type ModelFamily } from './settings-models-catalog.tsx'
+import { reasoningEffortsFromCatalog } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import { text } from './settings-models-copy.ts'
 import type { ShellContext } from './shared.ts'
@@ -18,6 +20,8 @@ type EditorOptions = {
   call?: (...args: unknown[]) => Promise<unknown>
   /** Stub for ctx.remote.llm.discoverModels. */
   discover?: (...args: unknown[]) => Promise<unknown>
+  /** Wired to the card's save-button gate. */
+  onBusyChange?: (busy: boolean) => void
 }
 
 /** Exercise editor event handlers and the resulting React reconciliation keys without a browser. */
@@ -45,6 +49,7 @@ function editor(initial: Record<string, unknown>[], options: EditorOptions = {})
       baseURL: undefined, api: options.api, apiKey: undefined,
       family: options.family ?? 'pi-ai',
       catalogBacked: options.catalogBacked ?? false,
+      onBusyChange: options.onBusyChange,
       onChange: next => { models = next }, t: text(),
     })
   }
@@ -297,6 +302,128 @@ describe('models.dev autofill', () => {
     expect(field(tree, `${text().modelId} 1`).props['value']).toBe('b')
     expect(nodes(tree, node => node.props['children'] === text().autofillMiss)).toHaveLength(1)
   })
+
+  /* 真实条目摘录:openai/gpt-5.2 的 effort 值含 none(可关思考),写进
+     reasoningEfforts 必须过宿主 schema——pi-ai 的 THINKING_LEVELS 键集合
+     {off,minimal,low,medium,high,xhigh,max},值是 string|null。 */
+  const REASONING_SCHEMA = Schema.dict(
+    Schema.union([Schema.string(), null] as const),
+    Schema.union(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const),
+  )
+
+  it('maps a real gpt-5.2 none effort to off:none inside the host thinking levels', async () => {
+    const call = vi.fn(async () => catalogOk({
+      'gpt-5.2': {
+        contextWindow: 400000,
+        maxTokens: 128000,
+        input: ['text', 'image'],
+        reasoning: { efforts: ['none', 'low', 'medium', 'high', 'xhigh'], canDisable: false },
+      },
+    }))
+    const form = editor([{ id: '' }], { call })
+    typeValue(field(form.render(), `${text().modelId} 1`), 'gpt-5.2')
+    ;(field(form.render(), `${text().modelId} 1`).props['onBlur'] as () => void)()
+    await settle()
+    const written = form.models()[0]!['reasoningEfforts']
+    expect(written).toEqual({ off: 'none', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' })
+    expect(() => REASONING_SCHEMA(written as Record<string, unknown>)).not.toThrow()
+  })
+
+  it('drops unknown effort spellings, prefers off:none over off:null, and skips off-only maps', () => {
+    // toggle + none 并存时 off:'none' 优先;非法键(spicy)丢弃。
+    expect(reasoningEffortsFromCatalog('openai', { efforts: ['none', 'spicy', 'low'], canDisable: true }))
+      .toEqual({ off: 'none', low: 'low' })
+    // toggle 无 none → off:null。
+    expect(reasoningEffortsFromCatalog('openai', { efforts: ['low'], canDisable: true }))
+      .toEqual({ off: null, low: 'low' })
+    // 只剩 off(none)没有非 off 档位 → 整个字段不写(宿主拒绝 all-off)。
+    expect(reasoningEffortsFromCatalog('openai', { efforts: ['none'], canDisable: true })).toBeUndefined()
+  })
+
+  it('chunks large adoptions into sequential 200-id batches and merges the answers', async () => {
+    const ids = Array.from({ length: 450 }, (_, index) => `m-${index}`)
+    const discover = vi.fn(async () => ({ ok: true, value: ids.map((id) => ({ id })) }))
+    const calls: string[][] = []
+    const call = vi.fn(async (_channel: unknown, _endpoint: unknown, payload: unknown) => {
+      const batchIds = (payload as { ids: string[] }).ids
+      calls.push(batchIds)
+      return catalogOk(Object.fromEntries(batchIds.map((id) => [id, { contextWindow: 1 }])))
+    })
+    const form = editor([], { call, discover })
+    pressButton(form.render(), text().fetchModels)
+    await settle()
+    pressButton(form.render(), text().candidateAdopt)
+    await settle()
+    expect(calls.map((batch) => batch.length)).toEqual([200, 200, 50])
+    expect(form.models()).toHaveLength(450)
+    expect(form.models().every((model) => model['contextWindow'] === 1)).toBe(true)
+  })
+
+  it('keeps results from the batches that answer when one batch fails', async () => {
+    const ids = Array.from({ length: 450 }, (_, index) => `m-${index}`)
+    const discover = vi.fn(async () => ({ ok: true, value: ids.map((id) => ({ id })) }))
+    let batch = 0
+    const call = vi.fn(async (_channel: unknown, _endpoint: unknown, payload: unknown) => {
+      batch += 1
+      if (batch === 2) return { ok: false, error: { code: 'network', message: 'boom', details: {} } }
+      return catalogOk(Object.fromEntries((payload as { ids: string[] }).ids.map((id) => [id, { contextWindow: 1 }])))
+    })
+    const form = editor([], { call, discover })
+    pressButton(form.render(), text().fetchModels)
+    await settle()
+    pressButton(form.render(), text().candidateAdopt)
+    await settle()
+    expect(call).toHaveBeenCalledTimes(3)
+    const models = form.models()
+    expect(models.slice(0, 200).every((model) => model['contextWindow'] === 1)).toBe(true)
+    expect(models.slice(200, 400).every((model) => model['contextWindow'] === undefined)).toBe(true)
+    expect(models.slice(400).every((model) => model['contextWindow'] === 1)).toBe(true)
+  })
+
+  it('reports catalog busy to the card while a lookup is in flight', async () => {
+    let release!: (value: unknown) => void
+    const call = vi.fn(() => new Promise((resolve) => { release = resolve }))
+    const busy = vi.fn()
+    const form = editor([{ id: 'm' }], { call, onBusyChange: busy })
+    click(form.render(), `${text().modelAdvanced} 1`)
+    pressButton(form.render(), text().autofill)
+    await settle()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    release(catalogOk({ m: { contextWindow: 1 } }))
+    await settle()
+    expect(busy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('clears auto-written fields when the id changes, keeps author edits, and refills for the new id', async () => {
+    const discover = vi.fn(async () => ({
+      ok: true,
+      value: [{ id: 'model-a', contextWindow: 100, inputModalities: ['text'] }],
+    }))
+    const call = vi.fn(async () => catalogOk({
+      'model-a': { maxTokens: 50 },
+      'model-b': { contextWindow: 77, maxTokens: 88 },
+    }))
+    const form = editor([], { call, discover })
+    pressButton(form.render(), text().fetchModels)
+    await settle()
+    pressButton(form.render(), text().candidateAdopt)
+    await settle()
+    // 采纳自带字段 + models.dev 补齐:自动写入的来源都记录在这行。
+    expect(form.models()).toEqual([{ id: 'model-a', contextWindow: 100, input: ['text'], maxTokens: 50 }])
+
+    // 作者手动改过 contextWindow——来源记录的值已被覆盖,改 ID 时保留。
+    click(form.render(), `${text().modelAdvanced} 1`)
+    typeValue(field(form.render(), `${text().modelContext} 1`), '42')
+
+    typeValue(field(form.render(), `${text().modelId} 1`), 'model-b')
+    // 仍等于自动值的 input / maxTokens 被清掉;手改的 contextWindow 留下。
+    expect(form.models()).toEqual([{ id: 'model-b', contextWindow: 42 }])
+
+    ;(field(form.render(), `${text().modelId} 1`).props['onBlur'] as () => void)()
+    await settle()
+    // 新 id 的补全照跑:空位补齐,手改的 contextWindow 仍不被覆盖。
+    expect(form.models()).toEqual([{ id: 'model-b', contextWindow: 42, maxTokens: 88 }])
+  })
 })
 
 describe('input types', () => {
@@ -349,6 +476,30 @@ describe('built-in catalog providers', () => {
     await settle()
     expect(nodes(form.render(), node => node.props['children'] === text().autofill)).toHaveLength(0)
     expect(call).not.toHaveBeenCalled()
+  })
+
+  it('asks the installed catalog once for inherited input types on first expand', async () => {
+    const discover = vi.fn(async () => ({
+      ok: true,
+      value: [{ id: 'vision-m', inputModalities: ['text', 'image'] }],
+    }))
+    const form = editor([{ id: 'vision-m' }], { catalogBacked: true, discover })
+    click(form.render(), `${text().modelAdvanced} 1`)
+    await settle()
+    // pi-ai 内置目录应答,不走 models.dev;同一编辑器实例只调一次。
+    expect(discover).toHaveBeenCalledTimes(1)
+    expect(discover).toHaveBeenCalledWith('llm-pi-ai', { provider: 'custom' })
+    const kind = (tree: ReactNode, label: string) =>
+      nodes(tree, node => node.type === Checkbox && node.props['label'] === label)[0]!
+    // 继承的输入类型显示了图片勾选;再次展开不再查询。
+    expect(kind(form.render(), text().modelInputImage).props['checked']).toBe(true)
+    click(form.render(), `${text().modelAdvanced} 1`)
+    click(form.render(), `${text().modelAdvanced} 1`)
+    await settle()
+    expect(discover).toHaveBeenCalledTimes(1)
+    // 取消继承来的图片即真正写入 ['text'](至少一项的规则照旧)。
+    ;(kind(form.render(), text().modelInputImage).props['onCheckedChange'] as () => void)()
+    expect(form.models()).toEqual([{ id: 'vision-m', input: ['text'] }])
   })
 })
 

@@ -16,6 +16,14 @@ export type { ModelFamily }
 
 type LookupValue = { fetchedAt: string; stale: boolean; models: Record<string, CatalogFacts> }
 
+/* 宿主 `models.catalog.lookup` 的单批上限(入参 ids 去重后最多 200)。 */
+const LOOKUP_BATCH = 200
+
+/* JSON 值相等即可——来源记录里只有数字、字符串数组和 string|null 表。 */
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 /* Model-list editor shared by the editing and creating cards. Local state
    owns the per-row capacity keystroke buffer, the candidate picker, and the
    models.dev autofill bookkeeping. */
@@ -30,10 +38,12 @@ export function ModelListEditor(props: {
   family: ModelFamily
   catalogBacked: boolean
   disabled?: boolean
+  /* models.dev 查询进行中报 true,让外层卡片先禁用保存/创建。 */
+  onBusyChange?(busy: boolean): void
   onChange(models: Record<string, unknown>[]): void
   t: ReturnType<typeof text>
 }): ReactNode {
-  const { ctx, models, onChange, settingsNs, provider, baseURL, api, apiKey, family, catalogBacked, disabled = false, t } = props
+  const { ctx, models, onChange, onBusyChange, settingsNs, provider, baseURL, api, apiKey, family, catalogBacked, disabled = false, t } = props
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -43,17 +53,23 @@ export function ModelListEditor(props: {
   const [statuses, setStatuses] = useState<Record<number, string>>({})
   /* Mutable bookkeeping shared across renders: input types seen on discovery
      candidates, ids the author typed by hand (so a blur without an edit does
-     not hit the network), the id each row last asked models.dev about, and
-     the freshest model draft — an in-flight lookup applies against it so a
-     slow fetch cannot overwrite edits made while the request was out. */
+     not hit the network), the id each row last asked models.dev about,
+     per-row field→auto-value provenance (so an id change drops only the
+     values autofill actually wrote), whether the built-in catalog answer was
+     already fetched for inherited input types, and the freshest model
+     draft — an in-flight lookup applies against it so a slow fetch cannot
+     overwrite edits made while the request was out. */
   const [refs] = useState(() => ({
     discoveredInputs: new Map<string, ('text' | 'image')[]>(),
     editedIds: new Set<number>(),
     lookupKeys: new Map<number, string>(),
+    provenance: new Map<number, Map<string, unknown>>(),
+    discoveryAsked: false,
     latest: [] as Record<string, unknown>[],
   }))
   refs.latest = models
   const inputKey = inputFieldFor(family)
+  const [, setDiscoveryTick] = useState(0)
 
   const fetchable = (provider !== '' || (baseURL !== undefined && baseURL.length > 0)) && apiKey === undefined || apiKey !== undefined
 
@@ -101,14 +117,42 @@ export function ModelListEditor(props: {
       if (moved !== undefined) nextLookups.set(moved, id)
     })
     refs.lookupKeys = nextLookups
+    const nextProvenance = new Map<number, Map<string, unknown>>()
+    refs.provenance.forEach((fields, at) => {
+      const moved = shifted(at)
+      if (moved !== undefined) nextProvenance.set(moved, fields)
+    })
+    refs.provenance = nextProvenance
   }
   const toggle = (index: number): void => {
+    const opening = !expanded.has(index)
     setExpanded((current) => {
       const next = new Set(current)
       if (next.has(index)) next.delete(index)
       else next.add(index)
       return next
     })
+    if (opening) ensureInheritedInputs(index)
+  }
+  /* 内置目录提供方(catalogBacked)不联网:这一行的 id 没有已知输入类型
+     时,第一次展开高级区向 pi-ai 内置目录要一次 discoverModels(本地
+     应答),把 inputModalities 当继承值显示。同一编辑器实例只调一次,
+     结果缓存;失败就保持「文本」占位。 */
+  const ensureInheritedInputs = (index: number): void => {
+    if (!catalogBacked || inputKey === undefined || refs.discoveryAsked) return
+    const id = models[index]?.['id']
+    if (typeof id !== 'string' || id === '' || refs.discoveredInputs.has(id)) return
+    refs.discoveryAsked = true
+    void ctx.remote.llm.discoverModels(settingsNs, { provider }).then((result) => {
+      if (!result?.ok || !Array.isArray(result.value)) return
+      for (const candidate of result.value) {
+        const input = candidate['inputModalities']
+        if (Array.isArray(input)) {
+          refs.discoveredInputs.set(candidate.id, input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image'))
+        }
+      }
+      setDiscoveryTick((tick) => tick + 1)
+    }).catch(() => { /* 本地目录读取失败就保持默认继承值 */ })
   }
   const add = (): void => {
     onChange([...models, { id: '' }])
@@ -132,36 +176,46 @@ export function ModelListEditor(props: {
   const lookupIds = async (targets: { index: number; id: string }[], announce: boolean): Promise<void> => {
     if (catalogBacked || targets.length === 0) return
     targets.forEach(({ index, id }) => refs.lookupKeys.set(index, id))
-    setCatalogBusy(true)
-    const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: targets.map((target) => target.id) }))
-    setCatalogBusy(false)
-    if (!result.ok) {
-      if (!announce) return
-      const message = failureMessage(result)
-      setStatuses((prev) => {
-        const next = { ...prev }
-        targets.forEach(({ index }) => { next[index] = message })
-        return next
-      })
-      return
+    const setBusy = (next: boolean) => { setCatalogBusy(next); onBusyChange?.(next) }
+    setBusy(true)
+    /* 宿主每次最多查 200 个 id;分批顺序请求,结果合并后统一应用,
+       某一批失败只影响那批行,其他批照常补。 */
+    const batches: { index: number; id: string }[][] = []
+    for (let at = 0; at < targets.length; at += LOOKUP_BATCH) batches.push(targets.slice(at, at + LOOKUP_BATCH))
+    const merged: Record<string, CatalogFacts> = {}
+    let stale = false
+    const notes: Record<number, string> = {}
+    try {
+      for (const batch of batches) {
+        const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: batch.map((target) => target.id) }))
+        if (!result.ok) {
+          if (announce) {
+            const message = failureMessage(result)
+            batch.forEach(({ index }) => { notes[index] = message })
+          }
+          continue
+        }
+        stale = stale || result.value.stale === true
+        Object.assign(merged, result.value.models)
+      }
+    } finally {
+      setBusy(false)
     }
-    const stale = result.value.stale === true
     /* 在请求挂起期间作者可能继续编辑;按最新草稿逐行判断——行还在原位
        (id 相同)且字段仍为空才补,绝不覆盖挂起期间敲进去的值。 */
     const latest = refs.latest
     const fills: Record<number, Record<string, unknown>> = {}
-    const notes: Record<number, string> = {}
     for (const { index, id } of targets) {
       const row = latest[index]
       if (row?.id !== id) continue
-      const facts = result.value.models[id]
+      const facts = merged[id]
       if (facts === undefined) {
-        if (announce) notes[index] = t.autofillMiss
+        if (announce && notes[index] === undefined) notes[index] = t.autofillMiss
         continue
       }
       const { patch: fill, fields } = catalogFill(row, family, api, facts)
       if (fields.length === 0) {
-        if (announce) notes[index] = t.autofillNone
+        if (announce && notes[index] === undefined) notes[index] = t.autofillNone
         continue
       }
       fills[index] = fill
@@ -170,6 +224,12 @@ export function ModelListEditor(props: {
     }
     if (Object.keys(fills).length > 0) {
       onChange(latest.map((model, index) => (fills[index] !== undefined ? { ...model, ...fills[index] } : model)))
+      // 记录每个字段的自动写入值;作者改 ID 时把没被手改的自动值清回去。
+      for (const [indexText, fill] of Object.entries(fills)) {
+        const proven = refs.provenance.get(Number(indexText)) ?? new Map<string, unknown>()
+        for (const [key, value] of Object.entries(fill)) proven.set(key, value)
+        refs.provenance.set(Number(indexText), proven)
+      }
     }
     if (Object.keys(notes).length > 0) setStatuses((prev) => ({ ...prev, ...notes }))
   }
@@ -243,6 +303,16 @@ export function ModelListEditor(props: {
     closePicker()
     // 下一次渲染前 lookup 就已经在读 refs.latest;先同步过去,采纳结果不丢。
     refs.latest = next
+    /* 采纳候选自带字段也算自动写入:作者随后改 ID 时,没被手改的字段
+       跟 models.dev 补的一样被清掉。 */
+    next.forEach((model, index) => {
+      if (typeof model['id'] !== 'string' || !picked.has(model['id'] as string)) return
+      const proven = refs.provenance.get(index) ?? new Map<string, unknown>()
+      for (const key of ['name', 'contextWindow', 'maxTokens', ...(inputKey !== undefined ? [inputKey] : [])]) {
+        if (model[key] !== undefined) proven.set(key, model[key])
+      }
+      if (proven.size > 0) refs.provenance.set(index, proven)
+    })
     // 发现候选自带字段之外，向 models.dev 补齐这一批 id 仍空着的字段。
     void lookupIds(
       next.map((model, index) => ({ index, id: model['id'] }))
@@ -303,7 +373,19 @@ export function ModelListEditor(props: {
             disabled={disabled}
             onChange={(value) => {
               refs.editedIds.add(index)
-              patch(index, { id: value })
+              /* 改了 ID 就把这一行还等于自动写入值的字段删掉(作者手动
+                 改过的不动),并清空来源记录;失焦后的查询按新 id 重补。 */
+              const proven = refs.provenance.get(index)
+              if (proven !== undefined && proven.size > 0) {
+                const clear: Record<string, unknown> = {}
+                for (const [key, auto] of proven) {
+                  if (sameValue(model[key], auto)) clear[key] = undefined
+                }
+                refs.provenance.delete(index)
+                patch(index, { ...clear, id: value })
+              } else {
+                patch(index, { id: value })
+              }
             }}
             onBlur={() => {
               // 手动改过 ID 后失焦才查目录；同一 id 已查过就不再打扰。
