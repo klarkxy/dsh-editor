@@ -207,6 +207,7 @@ export const S = Object.freeze({
   modelsAccountCancel: '[data-testid="dsh-models-account-cancel"]',
   modelsAccountOpen: '[data-testid="dsh-models-account-open"]',
   modelsAccountCopy: '[data-testid="dsh-models-account-copy"]',
+  modelsAccountFixture: '[data-testid="dsh-models-account-fixture"]',
   assistantSettingsButton: '.assistant-settings button',
   aboutRelease: '.about-release',
   aboutNote: '.about-page .about-note',

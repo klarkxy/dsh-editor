@@ -32,6 +32,7 @@
     "test:e2e:writing-shortcuts": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-shortcuts.mjs",
     "test:external-plugins": "node --test scripts/external-plugins.test.mjs",
     "test:e2e:editor-models": "node e2e/writing-model-routes.mjs --editor-models",
+    "test:e2e:account-logout": "node e2e/account-logout.mjs",
     "test:e2e:writing-models": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-models.mjs",
     "test:e2e:on-demand-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-models.mjs --optional-install"
   },

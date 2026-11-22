@@ -284,6 +284,8 @@ export function createModelsCatalog(deps: ModelsCatalogDeps = {}) {
   let memory: CachedEntry | undefined
   let cacheRead: Promise<CachedEntry | undefined> | undefined
   let refreshing: Promise<CachedEntry> | undefined
+  let lastFailureAt: number | undefined
+  let lastFailure: unknown
 
   const readDiskCache = async (): Promise<CachedEntry | undefined> => {
     try {
@@ -326,6 +328,8 @@ export function createModelsCatalog(deps: ModelsCatalogDeps = {}) {
         index,
       }
       memory = record
+      lastFailureAt = undefined
+      lastFailure = undefined
       await writeDiskCache({ fetchedAt: record.fetchedAt, index: record.index })
       return record
     } finally {
@@ -336,9 +340,17 @@ export function createModelsCatalog(deps: ModelsCatalogDeps = {}) {
   const ensureIndex = async (): Promise<{ entry: CachedEntry; stale: boolean }> => {
     if (memory === undefined) memory = await diskCache()
     if (memory !== undefined && now() - memory.fetchedAtMs < ttlMs) return { entry: memory, stale: false }
+    /* 刷新刚失败时,FETCH_TIMEOUT_MS 内不再打网络:批量采纳的后续
+       批次会立刻拿到同一失败或 stale 缓存,而不是再叠一次 15s 超时。 */
+    if (lastFailureAt !== undefined && now() - lastFailureAt < FETCH_TIMEOUT_MS) {
+      if (memory !== undefined) return { entry: memory, stale: true }
+      throw lastFailure
+    }
     try {
       return { entry: await refresh(), stale: false }
     } catch (error) {
+      lastFailureAt = now()
+      lastFailure = error
       if (memory !== undefined) return { entry: memory, stale: true }
       throw error
     }

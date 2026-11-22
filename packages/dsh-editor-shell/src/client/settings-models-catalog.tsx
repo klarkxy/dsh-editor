@@ -55,15 +55,17 @@ export function ModelListEditor(props: {
      candidates, ids the author typed by hand (so a blur without an edit does
      not hit the network), the id each row last asked models.dev about,
      per-row field→auto-value provenance (so an id change drops only the
-     values autofill actually wrote), whether the built-in catalog answer was
-     already fetched for inherited input types, and the freshest model
-     draft — an in-flight lookup applies against it so a slow fetch cannot
-     overwrite edits made while the request was out. */
+     values autofill actually wrote), overlapping lookup count (save stays
+     gated until every in-flight request settles), whether the built-in
+     catalog answer was already fetched for inherited input types, and the
+     freshest model draft — an in-flight lookup applies against it so a
+     slow fetch cannot overwrite edits made while the request was out. */
   const [refs] = useState(() => ({
     discoveredInputs: new Map<string, ('text' | 'image')[]>(),
     editedIds: new Set<number>(),
     lookupKeys: new Map<number, string>(),
     provenance: new Map<number, Map<string, unknown>>(),
+    inflight: 0,
     discoveryAsked: false,
     latest: [] as Record<string, unknown>[],
   }))
@@ -176,30 +178,38 @@ export function ModelListEditor(props: {
   const lookupIds = async (targets: { index: number; id: string }[], announce: boolean): Promise<void> => {
     if (catalogBacked || targets.length === 0) return
     targets.forEach(({ index, id }) => refs.lookupKeys.set(index, id))
-    const setBusy = (next: boolean) => { setCatalogBusy(next); onBusyChange?.(next) }
-    setBusy(true)
-    /* 宿主每次最多查 200 个 id;分批顺序请求,结果合并后统一应用,
-       某一批失败只影响那批行,其他批照常补。 */
+    const setLookupBusy = (delta: number) => {
+      const was = refs.inflight > 0
+      refs.inflight += delta
+      const next = refs.inflight > 0
+      if (was === next) return
+      setCatalogBusy(next)
+      onBusyChange?.(next)
+    }
+    setLookupBusy(1)
+    /* 宿主每次最多查 200 个 id;分批顺序请求,结果合并后统一应用。
+       某一批网络失败后跳过剩余批次,避免缓存刷新失败时连续叠 15s 超时。 */
     const batches: { index: number; id: string }[][] = []
     for (let at = 0; at < targets.length; at += LOOKUP_BATCH) batches.push(targets.slice(at, at + LOOKUP_BATCH))
     const merged: Record<string, CatalogFacts> = {}
     let stale = false
     const notes: Record<number, string> = {}
     try {
-      for (const batch of batches) {
+      for (let at = 0; at < batches.length; at++) {
+        const batch = batches[at]!
         const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: batch.map((target) => target.id) }))
         if (!result.ok) {
           if (announce) {
             const message = failureMessage(result)
-            batch.forEach(({ index }) => { notes[index] = message })
+            batches.slice(at).forEach((rest) => rest.forEach(({ index }) => { notes[index] = message }))
           }
-          continue
+          break
         }
         stale = stale || result.value.stale === true
         Object.assign(merged, result.value.models)
       }
     } finally {
-      setBusy(false)
+      setLookupBusy(-1)
     }
     /* 在请求挂起期间作者可能继续编辑;按最新草稿逐行判断——行还在原位
        (id 相同)且字段仍为空才补,绝不覆盖挂起期间敲进去的值。 */
@@ -373,8 +383,17 @@ export function ModelListEditor(props: {
             disabled={disabled}
             onChange={(value) => {
               refs.editedIds.add(index)
-              /* 改了 ID 就把这一行还等于自动写入值的字段删掉(作者手动
-                 改过的不动),并清空来源记录;失焦后的查询按新 id 重补。 */
+              /* 键入只改 id。自动写入字段等到失焦且最终 id 确实变了
+                 才清:失焦前改回去时保留已补全的参数。 */
+              patch(index, { id: value })
+            }}
+            onBlur={() => {
+              // 手动改过 ID 后失焦才查目录；同一 id 已查过就不再打扰。
+              const id = model['id']
+              if (typeof id !== 'string' || id === '' || !refs.editedIds.has(index)) return
+              if (refs.lookupKeys.get(index) === id) return
+              /* 最终 id 与上次查询不同:删掉仍等于自动写入值的字段
+                 (作者手动改过的不动),并清空来源记录,再按新 id 重补。 */
               const proven = refs.provenance.get(index)
               if (proven !== undefined && proven.size > 0) {
                 const clear: Record<string, unknown> = {}
@@ -382,16 +401,13 @@ export function ModelListEditor(props: {
                   if (sameValue(model[key], auto)) clear[key] = undefined
                 }
                 refs.provenance.delete(index)
-                patch(index, { ...clear, id: value })
-              } else {
-                patch(index, { id: value })
+                if (Object.keys(clear).length > 0) {
+                  const row = { ...model } as Record<string, unknown>
+                  for (const key of Object.keys(clear)) delete row[key]
+                  patch(index, clear)
+                  refs.latest = refs.latest.map((current, at) => at === index ? row : current)
+                }
               }
-            }}
-            onBlur={() => {
-              // 手动改过 ID 后失焦才查目录；同一 id 已查过就不再打扰。
-              const id = model['id']
-              if (typeof id !== 'string' || id === '' || !refs.editedIds.has(index)) return
-              if (refs.lookupKeys.get(index) === id) return
               void lookupIds([{ index, id }], false)
             }} />
           <Input

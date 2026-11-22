@@ -162,7 +162,7 @@ plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop`
 
 `packages/dsh-editor-plugins/src/curation.ts` 集中声明发行策展：`EDITOR_OFFICIAL_BUNDLES`（目前只有 `@deepseek-ai/dsh-experimental-voice-input-bundle`）、`RECOMMENDED_PLUGINS`（`@klarkxy/dsh-web-search-manager`、`@klarkxy/dsh-zhihu`）与 `HIDDEN_DISCOVERY_REPOS`（`klarkxy/dsh-plugins`、`deepseek-ai/deepseek-harness`）。
 
-- 官方区（`catalog.ts`）：进入官方分支的行先登记 `officialNames`，非白名单且未启用的官方包被跳过，因此不会漏进 builtin 或 user 分区；已启用的非白名单官方包仍显示，便于作者关闭。`UPSTREAM_DISPLAY` 删除上游已移除的 `dsh-experimental-agent-team-profile`。
+- 官方区（`catalog.ts`）：进入官方分支的行先登记 `officialNames`，非白名单且未启用、也未安装可卸载副本的官方包被跳过，因此不会漏进 builtin 或 user 分区；已启用、或已安装且可卸载的非白名单官方包仍显示，便于作者关闭或卸载。`UPSTREAM_DISPLAY` 删除上游已移除的 `dsh-experimental-agent-team-profile`。
 - 发现页（`index.ts` / `client.tsx`）：空查询返回「推荐在前、本地随附在后」，推荐包与本地条目重复时保留本地；关键词命中推荐或本地时视为本地命中，不发 GitHub 请求；GitHub 结果过滤 `HIDDEN_DISCOVERY_REPOS` 的仓库级命中；显式 npm/GitHub spec 行为不变。浏览态分「推荐插件」与「可重新添加的随附插件」两组，均已安装项显示「配置与详情」。
 - `MarketplaceListing.source` 增加 `'recommended'`；推荐项 `spec` 为 `npm:<包名>`，无 stars，链接指向插件主页。
 
@@ -196,4 +196,22 @@ dev profile 真实启动核实（脚本 `.dev/curation-inspect.mjs`，Playwright
 
 - `pnpm test:e2e:desktop` 及依赖 Electron 窗口的 settings-ui / settings-lifecycle / plugins-page / official-plugins / writing-shortcuts / layout-invariants：本轮未运行，上一轮同环境 Electron 无法启动的记录仍适用（见上文「未通过 / 未运行」）。
 - `pnpm pack:desktop`、`scripts/verify-desktop-package.mjs`、plugin-matrix、真实 `DEEPSEEK_API_KEY` 下的联网搜索。
-- Electron 窗口渲染冒烟：dev profile 真实启动已由 curation-inspect / curation-install / curation-shots（均为 web 方式起宿主）与 on-demand e2e 覆盖，Electron 壳本身未跑。
+- Electron 窗口渲染冒烟：dev profile 真实启动已由 curation-inspect / curation-install / curation-shots（均为 web 方式起宿主）与 on-demand e2e 覆盖，Electron 壳本身未跑。不要把 10 月 / rc.1 桌面截图改标为 rc.5 证据。
+
+### 桌面退出登录验收清单
+
+本轮补了可在无 Electron、无真实 DeepSeek 账号下跑通的点击路径：
+
+1. 单元测试 `settings-models-account.spec.tsx`：点击「退出登录」→ 确认对话框 → 宿主推送 `credentials-changed` → 同一挂载实例显示「登录」。
+2. Playwright Chromium 夹具 `e2e/account-logout.mjs`（`pnpm test:e2e:account-logout`）：真实点击上述路径。截图 `e2e/out/account-logout/after/after-signout.png` 只证明夹具，不证明 Electron。
+
+父机在捆绑 rc.5 宿主上请按下列步骤补 Electron 验收，截图存 `e2e/out/account-logout/desktop/`：
+
+1. 仓库根执行 `pnpm build` 与 `node scripts/prepare-desktop-dev.mjs`。
+2. 启动桌面：`apps/desktop/node_modules/electron/dist` 下的 Electron 可执行文件，参数 `apps/desktop/dist/main.js`；环境变量 `DSH_HOME` 用隔离目录，`DSH_DESKTOP_CLI_PATH` 指向 `.dev/desktop-dsh-runtime-0.2.2-rc.5/lib/bin.js`，`DSH_DESKTOP_PROFILE_TEMPLATE` 指向 `.dev/desktop-profile-template`，`DSH_DESKTOP_USER_DATA_DIR` 指向该 home 下的 `electron-user-data`。也可沿用 `e2e/desktop.mjs` 的同一启动路径。
+3. 打开「设置 → 模型」。
+4. 在 DeepSeek Account 行点击「登录」，完成浏览器授权后回到设置页（不要关闭设置页）。
+5. 确认该行显示「退出登录」与资料名（或「已登录」）。
+6. 点击「退出登录」，确认对话框「退出 DeepSeek 账号？」出现，点确认。
+7. 期望：无需重开设置页，该行立刻恢复「登录」入口；已保存的 API 密钥不受影响。
+8. 再点「登录」，应再次打开浏览器授权页或出现「打开授权页」按钮。
