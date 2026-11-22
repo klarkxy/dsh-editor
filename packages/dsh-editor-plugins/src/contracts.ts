@@ -6,7 +6,7 @@ export const MARKETPLACE_PAGE_SIZE = 20
 export const MARKETPLACE_QUERY_MAX = 80
 export type MarketplaceListing = {
   spec: string
-  source?: 'github' | 'npm' | 'local'
+  source?: 'github' | 'npm' | 'local' | 'recommended'
   owner: string
   repo: string
   description: string

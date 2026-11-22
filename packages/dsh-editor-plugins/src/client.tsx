@@ -130,6 +130,15 @@ export function listingPresentation(item: MarketplaceListing): {
       showStars: false,
     }
   }
+  if (item.source === 'recommended') {
+    return {
+      title: item.title?.trim() || item.packageName || item.repo,
+      origin: '推荐',
+      showStars: false,
+      linkLabel: '插件主页',
+      url: item.url,
+    }
+  }
   return {
     title: `${item.owner}/${item.repo}`,
     showStars: item.source !== 'npm',
@@ -199,11 +208,12 @@ export function PluginDiscovery(props: {
       {props.searching ? <p className="dsh-plugins-status">正在搜索…</p> : null}
       {(() => {
         if (props.searching) return null
-        // 浏览态（未提交搜索词）只列出「已移除、可重新添加」的随附本地包；
-        // 已安装的随附包属于「已安装」页，不在发现页展开。
+        // 浏览态（未提交搜索词）先列「推荐插件」，再列「已移除、可重新添加」
+        // 的随附本地包；已安装的随附包属于「已安装」页，不在发现页展开。
         const browsing = !props.submittedQuery?.trim()
         const inventoryReady = props.inventory?.status === 'ready'
         const installedNames = inventoryReady ? new Set(props.inventory!.packages.map((row) => row.name)) : null
+        const recommended = browsing ? props.listings.filter((item) => item.source === 'recommended') : []
         const visible = browsing
           ? (installedNames
             ? props.listings.filter((item) => item.source === 'local'
@@ -211,21 +221,18 @@ export function PluginDiscovery(props: {
               && !installedNames.has(item.packageName || parseNpmSpec(item.spec)!.name!))
             : [])
           : props.listings
-        if (visible.length === 0) {
+        if (visible.length === 0 && recommended.length === 0) {
           return <p className="dsh-plugins-empty">{browsing
             ? '输入关键词、npm 包名或 GitHub 仓库搜索插件。'
             : `没有找到与「${props.submittedQuery?.trim() ?? ''}」匹配的插件。`}</p>
         }
-        return <>
-          {browsing ? <h3 className="dsh-plugins-subhead">可重新添加的随附插件</h3> : null}
-          <div className="dsh-plugins-group">
-          {visible.map((item) => {
-            const view = listingPresentation(item)
-            const npm = parseNpmSpec(item.spec)
-            const explicit = discoverInstallSpec(item.spec)
-            const packageName = item.packageName || npm?.name
-            const installed = packageName ? props.inventory?.packages.find(row => row.name === packageName) : undefined
-            return <article key={item.spec} className="dsh-plugins-card">
+        const renderCard = (item: MarketplaceListing) => {
+          const view = listingPresentation(item)
+          const npm = parseNpmSpec(item.spec)
+          const explicit = discoverInstallSpec(item.spec)
+          const packageName = item.packageName || npm?.name
+          const installed = packageName ? props.inventory?.packages.find(row => row.name === packageName) : undefined
+          return <article key={item.spec} className="dsh-plugins-card">
               <div>
                 <div className="dsh-plugins-card-title">{view.title}</div>
                 <div className="dsh-plugins-card-desc">{item.description || '暂无简介'}</div>
@@ -261,9 +268,21 @@ export function PluginDiscovery(props: {
                 <SeatButton host={props.Button} onClick={() => props.onCopy(item.spec)}>复制规格</SeatButton>
               </details>
             </article>
-          })}
-          </div>
-        </>
+          }
+          return <>
+            {recommended.length > 0 ? <>
+              <h3 className="dsh-plugins-subhead">推荐插件</h3>
+              <div className="dsh-plugins-group">
+              {recommended.map(renderCard)}
+              </div>
+            </> : null}
+            {visible.length > 0 ? <>
+              {browsing ? <h3 className="dsh-plugins-subhead">可重新添加的随附插件</h3> : null}
+              <div className="dsh-plugins-group">
+              {visible.map(renderCard)}
+              </div>
+            </> : null}
+          </>
       })()}
     </section>
   )

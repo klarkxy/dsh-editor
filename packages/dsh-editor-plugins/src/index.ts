@@ -16,6 +16,7 @@ import {
 } from './contracts.ts'
 import { CORE_PLUGIN_BUNDLE_NAMES, protectCorePluginManager } from './core-lock.ts'
 import { isSafePackageName, readPreparedCatalog } from './core.ts'
+import { HIDDEN_DISCOVERY_REPOS, RECOMMENDED_PLUGINS, type RecommendedPlugin } from './curation.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { npmMarketplaceListing, parseNpmSpec } from './npm.ts'
 import { emptyPluginState, parsePluginState, type PluginState } from './overlay.ts'
@@ -71,6 +72,23 @@ function localMarketplaceListing(packageName: string, artifactDir: string, copy:
     description: copy.description,
     stars: 0,
     url: '',
+    updatedAt: '',
+    topics: [],
+  }
+}
+
+function recommendedMarketplaceListing(item: RecommendedPlugin): MarketplaceListing {
+  const slash = item.packageName.indexOf('/')
+  return {
+    spec: `npm:${item.packageName}`,
+    source: 'recommended',
+    packageName: item.packageName,
+    title: item.title,
+    owner: slash < 0 ? '' : item.packageName.slice(0, slash),
+    repo: slash < 0 ? item.packageName : item.packageName.slice(slash + 1),
+    description: item.description,
+    stars: 0,
+    url: item.homepage,
     updatedAt: '',
     topics: [],
   }
@@ -141,7 +159,11 @@ export async function handlePluginsRpc(
     if (endpoint === 'marketplace.search') {
       const query = typeof body.query === 'string' ? body.query : ''
       const locals = await listLocalMarketplaceListings(options.paths.profileDir)
-      const matchedLocal = locals.filter((item) => matchesLocalQuery(item, query))
+      const localNames = new Set(locals.map((item) => item.packageName))
+      const recommended = RECOMMENDED_PLUGINS
+        .filter((item) => !localNames.has(item.packageName))
+        .map(recommendedMarketplaceListing)
+      const matchedLocal = [...recommended, ...locals].filter((item) => matchesLocalQuery(item, query))
       const npm = parseNpmSpec(query)
       const spec = parseGitHubSpec(query)
       if (!query.trim()) return { ok: true, value: { listings: matchedLocal } }
@@ -155,6 +177,7 @@ export async function handlePluginsRpc(
       if (signal.aborted) return cancelled()
       if (!response.ok) return fail('network', response.status === 403 ? 'GitHub 搜索次数过多，请稍后再试' : `搜索失败（HTTP ${response.status}）`)
       const listings = parseMarketplaceSearch(await response.json())
+        .filter((item) => !HIDDEN_DISCOVERY_REPOS.has(`${item.owner}/${item.repo}`.toLocaleLowerCase()))
       if (spec && !listings.some((item) => item.spec === spec.spec)) {
         listings.unshift({
           spec: spec.spec, owner: spec.owner, repo: spec.repo, description: '按仓库名直接安装',

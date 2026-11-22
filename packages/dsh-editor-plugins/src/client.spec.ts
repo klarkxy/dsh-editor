@@ -225,6 +225,35 @@ describe('plugin discovery', () => {
     expect(collectText(initial)).not.toContain('没有找到')
   })
 
+  it('lists recommended plugins in browse view with install or detail actions', () => {
+    const recommended: MarketplaceListing = {
+      spec: 'npm:@klarkxy/dsh-zhihu', source: 'recommended', packageName: '@klarkxy/dsh-zhihu',
+      title: '知乎', owner: '@klarkxy', repo: 'dsh-zhihu', description: '检索知乎内容、热榜与直答。',
+      stars: 0, url: 'https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu', updatedAt: '', topics: [],
+    }
+    expect(listingPresentation(recommended)).toEqual({
+      title: '知乎', origin: '推荐', showStars: false, linkLabel: '插件主页', url: recommended.url,
+    })
+    const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[],
+      status = 'ready') => PluginDiscovery({
+      query: '', listings: [recommended], searching: false, note: '', error: '',
+      inventory: { status, packages },
+      onInstall: vi.fn(), onOpen: vi.fn(), onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn(),
+    })
+    // 浏览态渲染「推荐插件」区和安装按钮；inventory 未就绪时推荐项仍列出。
+    const tree = render([])
+    expect(collectText(tree)).toContain('推荐插件')
+    expect(collectText(tree)).toContain('知乎')
+    expect(elements(tree).some((el) => el.props.children === '安装')).toBe(true)
+    expect(collectHrefs(tree)).toEqual([recommended.url])
+    const loading = render([], 'loading')
+    expect(collectText(loading)).toContain('推荐插件')
+    expect(elements(loading).some((el) => el.props.children === '安装')).toBe(true)
+    // 已安装的推荐项显示「配置与详情」。
+    const installed = render([{ name: '@klarkxy/dsh-zhihu', installed: true, optional: false, enabled: true }])
+    expect(elements(installed).some((el) => el.props.children === '配置与详情')).toBe(true)
+  })
+
   it('browse view only lists removable bundled packages behind the re-add heading', () => {
     const local: MarketplaceListing = {
       spec: 'link:/profile/bundled-packages/node_modules/dsh-editor-cards',

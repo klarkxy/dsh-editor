@@ -10,6 +10,12 @@
 - rc.5 新增上游行处置：`agent-team`、`tool-agent-team`、`ui-agent-team`、`ui-account-notifications`、`skill-office` 在桌面 profile 中关闭；`mcp-manager`、`office-kit`、`workspace-dependencies` 及各项默认值跟随上游。
 - 模型设置的 DeepSeek 退出登录：单元测试改为真实点击「退出登录」并确认，再消费 `credentials-changed`；新增 Playwright 夹具 `e2e/account-logout.mjs` 覆盖同一路径。Electron 窗口验收见升级审计清单。
 
+### 插件策展
+
+- 官方设置页的 Shell 与子代理配置卡在桌面 profile 中关闭（`ui-settings-shell`、`ui-settings-subagent`）：写作搭档不使用 shell 与子代理。
+- 「已安装」的 DSH 官方插件区列 Editor 能用上的官方组合包（目前只有语音输入）与官方功能配置卡（网页搜索与获取、Agent 循环）；作者已启用、或已安装且可卸载的其他官方包也显示，便于关闭或卸载。
+- 「发现」页空搜索词时先列发行策展的推荐插件（网络搜索管理器、知乎），再列可重新添加的随附插件；关键词命中推荐或本机包时直接返回，不发 GitHub 请求；GitHub 结果过滤成员已被策展的 monorepo。
+
 ## 0.5.2 - 2026-11-14
 
 ### 发行检查修复

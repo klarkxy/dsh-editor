@@ -133,3 +133,10 @@
 # office-kit stays for document preview support.
 - id: skill-office
   disabled: true
+# The writing partner never runs shell commands or subagents (tool-bash,
+# tool-pwsh and the subagent surface are off), so their settings cards are
+# hidden; ui-settings-agent-loop and ui-settings-web-search stay.
+- id: ui-settings-shell
+  disabled: true
+- id: ui-settings-subagent
+  disabled: true

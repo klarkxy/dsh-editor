@@ -156,11 +156,32 @@ plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop`
 
 上游 web-frontend 资产哈希变化，`scripts/scan-dsw-vars.mjs` 重新生成变量表 `dsw-vars.ts`（463 个变量）。
 
+既有行的追加守卫（非 rc.5 新增，rc.1 已存在）：`ui-settings-shell`（dsh-client-ui-settings-shell）与 `ui-settings-subagent`（dsh-client-ui-settings-subagent）两张官方设置页配置卡 `disabled: true`——写作预设已禁用 tool-bash / tool-pwsh 且提示词禁止调用 shell 与子代理，两张卡在 Editor 内不可用；`ui-settings-agent-loop` 与 `ui-settings-web-search` 保留。组合与核心环 e2e 复验通过，无 pending 条目与不兼容警告。
+
+### 插件策展与运行时核实（rc.5）
+
+`packages/dsh-editor-plugins/src/curation.ts` 集中声明发行策展：`EDITOR_OFFICIAL_BUNDLES`（目前只有 `@deepseek-ai/dsh-experimental-voice-input-bundle`）、`RECOMMENDED_PLUGINS`（`@klarkxy/dsh-web-search-manager`、`@klarkxy/dsh-zhihu`）与 `HIDDEN_DISCOVERY_REPOS`（`klarkxy/dsh-plugins`、`deepseek-ai/deepseek-harness`）。
+
+- 官方区（`catalog.ts`）：进入官方分支的行先登记 `officialNames`，非白名单且未启用、也未安装可卸载副本的官方包被跳过，因此不会漏进 builtin 或 user 分区；已启用、或已安装且可卸载的非白名单官方包仍显示，便于作者关闭或卸载。`UPSTREAM_DISPLAY` 删除上游已移除的 `dsh-experimental-agent-team-profile`。
+- 发现页（`index.ts` / `client.tsx`）：空查询返回「推荐在前、本地随附在后」，推荐包与本地条目重复时保留本地；关键词命中推荐或本地时视为本地命中，不发 GitHub 请求；GitHub 结果过滤 `HIDDEN_DISCOVERY_REPOS` 的仓库级命中；显式 npm/GitHub spec 行为不变。浏览态分「推荐插件」与「可重新添加的随附插件」两组，均已安装项显示「配置与详情」。
+- `MarketplaceListing.source` 增加 `'recommended'`；推荐项 `spec` 为 `npm:<包名>`，无 stars，链接指向插件主页。
+
+dev profile 真实启动核实（脚本 `.dev/curation-inspect.mjs`，Playwright 进入带 token 的宿主后复用 `page.request` 读 `/api/pluginManager/listBundles`）：共 33 个 bundle；`dsh-base` 与 `dsh-web-app` 以 `official:false`、`installed:false`、`enabled:true` 组合包呈现，无 `installTarget`；官方（`official:true`）行 17 个，其中仅语音输入 `enabled:true`，`dsh-subagent-claude-code` 与 `dsh-subagent-codex` 带 `installTarget`（`…@0.2.2-rc.5`）且未启用——按白名单规则二者被隐藏。守卫行 `agent-team` / `tool-agent-team` / `ui-agent-team` / `ui-account-notifications` / `skill-office` 均 `enabled:false`；`mcp-manager` 与 `office-kit` `enabled:true` 且 `fiberPhase:'active'`；`workspace-dependencies` 由上游自带守卫 `enabled:false`。宿主 stdout 无 pending 条目、无不兼容警告。
+
+推荐插件实测安装（脚本 `.dev/curation-install.mjs`，独立 home 上真实 manager inspect/install）：
+
+- `inspect @klarkxy/dsh-web-search-manager@0.4.1` → accepted；`install` → `{"changed":true,"application":"applied"}`；`@klarkxy/dsh-zhihu@0.3.8` 同样 accepted + applied。两个 bundle `installed:true`、`enabled:true`；active components 含 `include:web-search-manager`、`include:zhihu`、`include:zhihu-tools`、`include:zhihu-study`。
+- 写作搭档工具列表中 `web_search` 恰好出现 1 次（另有 `web_fetch`），与原生 tool-web 无重名冲突；知乎工具为 `zhihu_account`、`zhihu_research`、`zhihu_study`、`zhihu_study_report`、`zhihu_sync`（0.3.8 无 `zhihu_search`，断言按 `zhihu_*` 存在判定）。
+- 知乎设置入口经「插件 → plugins-orphan-zhihu」打开，详情页 `data-testid="zhihu-settings"` 可见。脚本输出 `REPORT OK`。
+
+插件页截图（脚本 `.dev/curation-shots.mjs`，dev profile + Chromium，桌面 1440 与窄窗 390、浅色深色各一组，共 8 张）：`.dev/curation-shots/{installed,discovery}-{desktop,390}-{light,dark}.png`。深色/浅色主题经 localStorage `dsh-editor.theme` 键加重载切换（`.radix-themes.dark` 作用域由 React 状态驱动，直接写 `data-theme` 属性无效）。补拍中间宽度（脚本 `.dev/curation-shots-v3.mjs`，浅色）：`.dev/curation-shots/{installed,discovery}-desktop-light-{1024,760}.png`，1024 与 760 两档「已安装」「发现」均无溢出、截断或错位（760 下发现页「安装」按钮按卡片布局折到描述下方，属预期换行）。注：`e2e/writing-models.mjs --optional-install` 的既有流程安装的是四个旧插件且清理阶段 `removeBundle` 曾超时，本轮推荐组合以 `curation-install.mjs` 为准。
+
 ### 验证记录（rc.5）
 
 - `pnpm typecheck`：通过。
+- `pnpm --filter dsh-editor-plugins test` + typecheck：12 个测试文件 111 项通过；typecheck 通过。
 - `pnpm build`：通过（各 e2e 前置构建均成功）。
-- `pnpm test`：通过，219 个测试文件、1835 项通过、4 项跳过。
+- `pnpm test`：通过，219 个测试文件、1839 项通过、4 项跳过。
 - `node --test scripts/external-plugins.test.mjs`：10/10 通过。
 - `node --test scripts/check-ui-drift.test.mjs`：12/12 通过。
 - `node scripts/check-ui-drift.mjs --base 4adfd23`：无新增字面量违规（1 个改动 UI 文件）。
@@ -175,7 +196,7 @@ plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop`
 
 - `pnpm test:e2e:desktop` 及依赖 Electron 窗口的 settings-ui / settings-lifecycle / plugins-page / official-plugins / writing-shortcuts / layout-invariants：本轮未运行，上一轮同环境 Electron 无法启动的记录仍适用（见上文「未通过 / 未运行」）。
 - `pnpm pack:desktop`、`scripts/verify-desktop-package.mjs`、plugin-matrix、真实 `DEEPSEEK_API_KEY` 下的联网搜索。
-- Electron 窗口渲染冒烟：dev profile 真实启动已由 curation-inspect（web 方式起宿主）与 on-demand e2e 覆盖，Electron 壳本身未跑。不要把 10 月 / rc.1 桌面截图改标为 rc.5 证据。
+- Electron 窗口渲染冒烟：dev profile 真实启动已由 curation-inspect / curation-install / curation-shots（均为 web 方式起宿主）与 on-demand e2e 覆盖，Electron 壳本身未跑。不要把 10 月 / rc.1 桌面截图改标为 rc.5 证据。
 
 ### 桌面退出登录验收清单
 

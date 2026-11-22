@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildPluginCatalog, readPluginCatalog } from './catalog.ts'
+import { RECOMMENDED_PLUGINS } from './curation.ts'
+import { isAllowedExternalUrl } from '../../../apps/desktop/src/navigation.ts'
 import type { PluginCatalog, PluginCatalogCard } from './contracts.ts'
 import type { RuntimeCatalog } from './core.ts'
 import { mkdtemp } from 'node:fs/promises'
@@ -79,7 +81,8 @@ describe('plugin catalog classification', () => {
   it('splits the default distribution into official, builtin and user without duplicates', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
     expect(catalog.sections.map((row) => row.id)).toEqual(['official', 'builtin', 'user'])
-    expect(section(catalog, 'official').map((card) => card.packageName)).toEqual(EXPERIMENTAL_BUNDLES)
+    // Only the whitelisted official bundle surfaces; the rest stay hidden.
+    expect(section(catalog, 'official').map((card) => card.packageName)).toEqual(['@deepseek-ai/dsh-experimental-voice-input-bundle'])
     expect(byTitle(catalog, 'builtin', '快捷键')).toHaveLength(0)
     expect(byTitle(catalog, 'builtin', '资料预览')).toHaveLength(1)
     expect(byTitle(catalog, 'builtin', 'MCP 资源')).toHaveLength(1)
@@ -99,10 +102,10 @@ describe('plugin catalog classification', () => {
       expect(byTitle(catalog, 'builtin', '语音输入')).toHaveLength(0)
       expect(section(catalog, 'builtin').some((card) => card.entryId === id)).toBe(false)
     }
-    // No experimental package ever reaches builtin.
+    // No experimental package ever reaches builtin, and hidden official
+    // bundles reach no section at all.
     expect(section(catalog, 'builtin').every((card) => !card.packageName?.startsWith('@deepseek-ai/dsh-experimental-'))).toBe(true)
-    const agentTeam = section(catalog, 'official').find((card) => card.packageName === '@deepseek-ai/dsh-experimental-agent-team')
-    expect(agentTeam?.title).toBe('@deepseek-ai/dsh-experimental-agent-team')
+    expect(catalog.sections.flatMap((row) => row.items).some((card) => card.packageName === '@deepseek-ai/dsh-experimental-agent-team')).toBe(false)
   })
 
   it('routes a no-longer-preinstalled third-party package to user like any install', () => {
@@ -174,9 +177,8 @@ describe('plugin catalog classification', () => {
     const catalog = buildPluginCatalog({
       catalog: defaultCatalog(),
       bundles: [
-        { name: '@deepseek-ai/dsh-experimental-agent-team-profile', enabled: false, installed: true },
-        { name: '@deepseek-ai/dsh-experimental-auto-review', enabled: false, installed: true },
-        { name: '@deepseek-ai/dsh-experimental-schedule-bundle', enabled: false, installed: true },
+        { name: '@deepseek-ai/dsh-experimental-auto-review', enabled: true, installed: true },
+        { name: '@deepseek-ai/dsh-experimental-schedule-bundle', enabled: true, installed: true },
         { name: '@deepseek-ai/dsh-experimental-voice-input-bundle', enabled: false, installed: true },
         { name: '@deepseek-ai/dsh-base', enabled: true, installed: true, readOnlyReason: 'management-required' },
         { name: '@deepseek-ai/dsh-sdk-app', enabled: true, installed: true, readOnlyReason: 'management-required' },
@@ -184,10 +186,38 @@ describe('plugin catalog classification', () => {
       ],
       plugins: DEFAULT_PLUGINS,
     })
-    expect(section(catalog, 'official').map((card) => card.title)).toEqual(['智能体团队', '自动授权审查', '自动化任务', '语音输入'])
+    // Hidden official bundles the author already enabled still show so they can be switched off.
+    expect(section(catalog, 'official').map((card) => card.title)).toEqual(['自动授权审查', '自动化任务', '语音输入'])
     expect(section(catalog, 'official').every((card) => card.action === 'switch')).toBe(true)
     expect(section(catalog, 'builtin').some((card) => card.packageName === '@deepseek-ai/dsh-base')).toBe(false)
     expect(section(catalog, 'user').map((card) => card.packageName)).toEqual(['@klarkxy/dsh-web-search-manager'])
+  })
+
+  it('keeps an author-installed removable official bundle listed after it is switched off', () => {
+    const catalog = buildPluginCatalog({
+      catalog: defaultCatalog(),
+      bundles: [
+        // Author-installed official package: switching it off must not remove
+        // the uninstall entry along with the row.
+        { name: '@deepseek-ai/dsh-subagent-claude-code', official: true, enabled: false, installed: true, removable: true },
+        // Merely declared (not installed) non-whitelist rows stay hidden.
+        { name: '@deepseek-ai/dsh-subagent-codex', official: true, enabled: false, installed: false, removable: false },
+        { name: '@deepseek-ai/dsh-experimental-voice-input-bundle', enabled: true, installed: true },
+      ],
+      plugins: DEFAULT_PLUGINS,
+    })
+    expect(section(catalog, 'official').map((card) => card.packageName)).toEqual([
+      '@deepseek-ai/dsh-subagent-claude-code',
+      '@deepseek-ai/dsh-experimental-voice-input-bundle',
+    ])
+    expect(section(catalog, 'builtin').some((card) => card.packageName === '@deepseek-ai/dsh-subagent-codex')).toBe(false)
+    expect(section(catalog, 'user').some((card) => card.packageName === '@deepseek-ai/dsh-subagent-codex')).toBe(false)
+  })
+
+  it('points every recommended homepage at a host allowed by the desktop external-link whitelist', () => {
+    for (const plugin of RECOMMENDED_PLUGINS) {
+      expect(isAllowedExternalUrl(plugin.homepage), plugin.packageName).toBe(true)
+    }
   })
 
   it('projects catalog managedBy onto session and feature badges', () => {
@@ -350,18 +380,29 @@ describe('plugin catalog classification', () => {
 })
 
 describe('official bundles not installed by the distribution', () => {
-  it('lists an official not-installed bundle as an install switch card', () => {
+  it('lists a whitelisted official not-installed bundle as an install switch card', () => {
+    const bundles = [...defaultBundles().filter((row) => row.name !== '@deepseek-ai/dsh-experimental-voice-input-bundle'), {
+      name: '@deepseek-ai/dsh-experimental-voice-input-bundle', official: true, installed: false, enabled: false,
+      availability: 'installation', installTarget: { spec: '@deepseek-ai/dsh-experimental-voice-input-bundle@1.2.0', version: '1.2.0' },
+    }]
+    const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles, plugins: DEFAULT_PLUGINS })
+    const card = section(catalog, 'official').find((item) => item.packageName === '@deepseek-ai/dsh-experimental-voice-input-bundle')
+    expect(card).toMatchObject({
+      key: 'bundle:@deepseek-ai/dsh-experimental-voice-input-bundle', installed: false,
+      installSpec: '@deepseek-ai/dsh-experimental-voice-input-bundle@1.2.0', enabled: false, action: 'switch',
+    })
+    expect(card?.badges).toContain('experimental')
+  })
+
+  it('hides a non-whitelisted official not-installed bundle from every section', () => {
     const bundles = [...defaultBundles(), {
       name: '@deepseek-ai/dsh-automation', official: true, installed: false, enabled: false,
       availability: 'installation', installTarget: { spec: '@deepseek-ai/dsh-automation@1.2.0', version: '1.2.0' },
     }]
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles, plugins: DEFAULT_PLUGINS })
-    const card = section(catalog, 'official').find((item) => item.packageName === '@deepseek-ai/dsh-automation')
-    expect(card).toMatchObject({
-      key: 'bundle:@deepseek-ai/dsh-automation', installed: false,
-      installSpec: '@deepseek-ai/dsh-automation@1.2.0', enabled: false, action: 'switch',
-    })
-    expect(card?.badges).not.toContain('experimental')
+    const all = catalog.sections.flatMap((row) => row.items)
+    expect(all.some((card) => card.packageName === '@deepseek-ai/dsh-automation')).toBe(false)
+    expect(section(catalog, 'official').map((card) => card.packageName)).toEqual(['@deepseek-ai/dsh-experimental-voice-input-bundle'])
   })
 
   it('keeps an installation-supplied bundle without a target as a normal card', () => {
@@ -394,7 +435,7 @@ describe('official bundles not installed by the distribution', () => {
 
   it('keeps experimental bundle projection unchanged when installed', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
-    const voice = section(catalog, 'official').find((card) => card.packageName === EXPERIMENTAL_BUNDLES[0])
+    const voice = section(catalog, 'official').find((card) => card.packageName === '@deepseek-ai/dsh-experimental-voice-input-bundle')
     expect(voice?.installed).toBeUndefined()
     expect(voice?.installSpec).toBeUndefined()
     expect(voice?.badges).toContain('experimental')

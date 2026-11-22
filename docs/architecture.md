@@ -42,4 +42,4 @@ commit、push、tag、release 与签名须获授权。桌面发布先建 draft R
 
 ## 公共插件源码归属
 
-公共插件由 dsh-plugins 维护。Editor 不预装第三方公共插件；网页搜索由 DSH 原生工具承担，网页搜索管理器、当前标题、需求记录、会话纪要与知乎按需经编辑器「添加插件」对话框安装。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已退役；写作模型选择使用原生 DSH 接口和现有写作偏好。仓库归属与随包交付独立；详见[迁移与发布交接](public-plugin-migration.md)。
+公共插件由 dsh-plugins 维护。Editor 不预装第三方公共插件；网页搜索由 DSH 原生工具承担，网络搜索管理器、当前标题、需求记录、会话纪要与知乎按需经编辑器「添加插件」对话框安装。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已退役；写作模型选择使用原生 DSH 接口和现有写作偏好。仓库归属与随包交付独立；详见[迁移与发布交接](public-plugin-migration.md)。
