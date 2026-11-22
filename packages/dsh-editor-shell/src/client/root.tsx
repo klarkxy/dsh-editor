@@ -36,7 +36,7 @@ import './dialogs.styles.ts'
 import './select.styles.ts'
 import './pinned-pane.styles.ts'
 import './ui/activity.styles.ts'
-import { type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
+import { safeRpcCall, type ShellContext, type WorkspaceOpenState, proposalAppliedNavigation } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { ShellErrorBoundary, useObservable } from './components.tsx'
 import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarTools } from './root-columns.tsx'
@@ -515,11 +515,88 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     })),
     [commandTick, commands, hasFileSession, locale, seatContext, seatRegistryContext],
   )
-  /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
+  /* 直接写入落盘后的轻量刷新：只刷新树，并在打开文档上就地同步磁盘。
+     syncFromDisk 返回 unavailable 且缓冲区干净时才退回整文重载；
+     conflict 交给编辑器自身的冲突 UI，不做导航。 */
   const refreshWrittenPath = useCallback((writtenPath: string) => {
     setTreeRevision((old) => old + 1)
-    if (!editorDirtyRef.current && writtenPath === path) setContentRevision((old) => old + 1)
-  }, [path])
+    if (!writtenPath || writtenPath !== path) return
+    const handle = editorHandleRef.current
+    if (!handle) {
+      if (!editorDirtyRef.current) setContentRevision((old) => old + 1)
+      return
+    }
+    void handle.syncFromDisk().then((result) => {
+      if (result === 'unavailable' && !editorDirtyRef.current) {
+        setContentRevision((old) => old + 1)
+      }
+    }).catch(() => undefined)
+  }, [path, editorHandleRef])
+  /* 直接写入把打开文档移走/归档（renames、merge 源文件）：干净时打开新路径，
+     脏时保持缓冲区，交给既有的缺失文件处理。 */
+  const onWrittenMoved = useCallback((from: string, to: string) => {
+    setTreeRevision((old) => old + 1)
+    if (from !== path) return
+    if (editorDirtyRef.current) {
+      setWorkbenchNote(t('note.movedDirty'))
+      return
+    }
+    openDocument(to)
+  }, [openDocument, path])
+  /* 定位：打开目标文件并揭示第一处新文本。当前文档直读缓冲区与版本；
+     其他文件先 file.read 拿文本和版本，命中则带着偏移 reveal，
+     找不到或 excerpt 为空就只打开文件。 */
+  const onLocateWritten = useCallback((target: string, excerpt: string) => {
+    const handle = editorHandleRef.current
+    const doc = handle?.getDocument()
+    if (target === path && handle && doc) {
+      const text = handle.getText()
+      const at = excerpt ? text.indexOf(excerpt) : -1
+      if (at >= 0) {
+        openDocument(target, {
+          path: target,
+          line: 1,
+          column: 1,
+          start: at,
+          end: at + excerpt.length,
+          excerpt,
+          version: doc.version,
+        })
+      } else if (excerpt) {
+        setWorkbenchNote(t('note.locateMiss'))
+      }
+      return
+    }
+    if (!excerpt || !fileSession) {
+      openDocument(target)
+      return
+    }
+    void (async () => {
+      const read = await safeRpcCall<{ version: string; text: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
+        sessionId: fileSession.sessionId,
+        path: target,
+      }))
+      if (!read.ok) {
+        openDocument(target)
+        return
+      }
+      const at = read.value.text.indexOf(excerpt)
+      if (at < 0) {
+        openDocument(target)
+        setWorkbenchNote(t('note.locateMiss'))
+        return
+      }
+      openDocument(target, {
+        path: target,
+        line: 1,
+        column: 1,
+        start: at,
+        end: at + excerpt.length,
+        excerpt,
+        version: read.value.version,
+      })
+    })()
+  }, [openDocument, path, fileSession, ctx])
   const onAppliedChat = refreshAppliedPath
   /* 侧栏搜索命中/替换后的刷新：均经保存 gate 或内容修订，供 memo 化的侧栏列复用。 */
   const onSearchReplaced = useCallback((sourceSessionId: string, paths: string[]) => {
@@ -737,6 +814,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 onConfigure={configureChatModel}
                 onDraftDirtyChange={setAssistantDraftDirty}
                 onWritten={refreshWrittenPath}
+                onMoved={onWrittenMoved}
+                onLocate={onLocateWritten}
                 onApplied={onAppliedChat}
                 onHide={() => workbench.setAuxOpen(false)}
                 rewriteRequest={rewriteRequest?.workspaceId === openWorkspaceId ? rewriteRequest : undefined}

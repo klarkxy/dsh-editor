@@ -34,6 +34,7 @@ export {
   type EditorCoreProps,
   type EditorCoreSlot,
   type EditorCoreStatus,
+  type EditorCoreSyncResult,
   type EditorCoreTypography,
   type FimPayloadInput,
 } from './editor.tsx'
@@ -56,6 +57,7 @@ export {
   type EditorTargetSnapshot,
 } from './editor-clipboard.ts'
 export { openFindPanel, openReplacePanel } from './search.ts'
+export { diffText, rebaseExternal, type ExternalChange, type RebaseResult } from './external-sync.ts'
 export {
   WRITING_PROPOSAL_BASIS_MAX,
   WRITING_PROPOSAL_LABEL_MAX_CHARS,

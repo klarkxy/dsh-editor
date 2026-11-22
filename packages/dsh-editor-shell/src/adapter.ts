@@ -16,6 +16,7 @@ import { AUTHOR_OBSERVE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
+import { parseWritingChangeReceipt, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 
 import { isNovelIndexJobPrompt } from './novel-index.ts'
@@ -50,7 +51,8 @@ export type ChatRow = {
   recovered?: boolean
   /** Author-readable cause of a failed tool call, shown above the verbatim body. */
   reason?: string
-  proposal?: AuthorProposal
+  /** `writing_change` 直接写入回执；渲染为可撤销的写入卡。 */
+  writingChange?: WritingChangeReceipt
   /** `node.call.name` when present; Chat looks up plugin message cards by this key. */
   toolName?: string
   /** Payload for a registered message card. Today: the parsed `novel_memory_update` receipt. */
@@ -161,29 +163,18 @@ export function splitAssistantContent(blocks: readonly AssistantBlock[] | readon
   return { thinking: thinkingParts.join('\n'), text: textParts.join('\n') }
 }
 
-/** 区分不同 kind 的提案,以便聊天行展示对应的"提案"标签文案。renames 不带 path 字段,需要在使用前 narrow。 */
-function proposalDetailText(proposal: AuthorProposal): string {
-  switch (proposal.kind) {
-    case 'split': return t('adapter.splitProposal')
-    case 'merge': return t('adapter.mergeProposal')
-    case 'renames': return t('adapter.renamesProposal')
-    case 'edit':
-    case 'create':
-      return t('adapter.editProposal')
-    case 'chapter_plan':
-      return t('adapter.chapterPlanProposal')
-    case 'chapter_summary':
-      return t('adapter.chapterSummaryProposal')
-  }
-}
-
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
   const body = blocksText(node.content)
   const name = node.call?.name ?? t('adapter.toolFallback', { id: node.callId })
   const toolName = node.call?.name
+  const writingChange = name === WRITING_CHANGE_TOOL_NAME ? parseWritingChangeReceipt(body) : undefined
+  if (writingChange) {
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: writingChange.summary, toolName, result: writingChange, writingChange }
+  }
+  /* 旧版提案行只读展示：不再调用任何 prepare/apply 端点，也不带操作。 */
   const proposal = name === 'novel_propose' || name === WRITING_PROPOSE_TOOL_NAME ? parseAuthorProposal(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal, toolName }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: t('adapter.legacyProposal'), toolName }
   }
   const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
   if (memoryUpdate) {

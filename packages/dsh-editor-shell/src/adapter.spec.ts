@@ -27,13 +27,15 @@ describe('DSH snapshot adapter', () => {
       kind: 'tool-result', seq: 3, callId: 'proposal', call: { name: 'novel_propose', argsRaw: '{}' },
       content: [{ type: 'tool-result', toolCallId: 'proposal', content: [{ type: 'text', text: marker }] }], isError: false,
     }] } as never)
-    expect(row).toMatchObject({ role: 'tool', proposal: { path: '项目总览.md', oldText: '旧', newText: '新' } })
+    expect(row).toMatchObject({ role: 'tool', detail: '旧版提案，未写入' })
+    expect(row.proposal).toBeUndefined()
     const v2 = JSON.stringify({ marker: 'dsh-editor.proposal', version: 2, kind: 'create', path: 'notes/a.md', summary: '新建', text: '# 新' })
     const [v2Row] = chatRows({ nodes: [{
       kind: 'tool-result', seq: 4, callId: 'proposal', call: { name: 'writing_propose', argsRaw: '{}' },
       content: [{ type: 'text', text: v2 }], isError: false,
     }] } as never)
-    expect(v2Row).toMatchObject({ role: 'tool', proposal: { version: 2, kind: 'create', path: 'notes/a.md' } })
+    expect(v2Row).toMatchObject({ role: 'tool', detail: '旧版提案，未写入' })
+    expect(v2Row.proposal).toBeUndefined()
   })
   it('labels split/merge/renames proposals with their own detail copy and never touches proposal.path on renames', () => {
     const splitMarker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'split', path: '正文/001.md', summary: '把后半章拆出来', anchor: '### 转折', newPath: '正文/002.md' })
@@ -42,12 +44,11 @@ describe('DSH snapshot adapter', () => {
     const splitRow = toolResultRow({ kind: 'tool-result', seq: 10, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: splitMarker }], isError: false } as never)
     const mergeRow = toolResultRow({ kind: 'tool-result', seq: 11, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: mergeMarker }], isError: false } as never)
     const renamesRow = toolResultRow({ kind: 'tool-result', seq: 12, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: renamesMarker }], isError: false } as never)
-    expect(splitRow).toMatchObject({ role: 'tool', detail: '写作助手提出了一项章节拆分提案', proposal: { kind: 'split', path: '正文/001.md', newPath: '正文/002.md' } })
-    expect(mergeRow).toMatchObject({ role: 'tool', detail: '章节合并提案', proposal: { kind: 'merge', sourcePath: '正文/002.md', path: '正文/001.md' } })
-    expect(renamesRow).toMatchObject({ role: 'tool', detail: '批量重命名提案', proposal: { kind: 'renames', renames: [{ from: '正文/001.md', to: '正文/序章.md' }] } })
-    /* renames 提案没有 path 字段,UI 描述也必须落到 kind 文案,而不是默认的"文件修改提案"。 */
-    expect(renamesRow.detail).not.toBe('写作助手提出了一项文件修改提案')
-    expect(renamesRow.proposal).not.toHaveProperty('path')
+    /* 旧版提案行只读：detail 说明未写入，不携带 proposal 对象、不触发任何 RPC。 */
+    for (const legacyRow of [splitRow, mergeRow, renamesRow]) {
+      expect(legacyRow).toMatchObject({ role: 'tool', detail: '旧版提案，未写入' })
+      expect(legacyRow.proposal).toBeUndefined()
+    }
   })
   it('reads legacy author_observe markers without replaying writes and keeps their tool turns hidden', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
@@ -59,6 +60,15 @@ describe('DSH snapshot adapter', () => {
     expect(chatRows(snapshot as never)).toEqual([
       { id: 'assistant:10', role: 'assistant', text: '记住了，后面按这个来。', detail: undefined },
     ])
+  })
+  it('surfaces writing_change receipts as writable-change rows with the parsed receipt', () => {
+    const marker = JSON.stringify({ marker: 'dsh-editor.writing-change', version: 1, id: 'f'.repeat(32), kind: 'edit', summary: '替换了一句', status: 'applied', paths: ['正文/001.md'], count: 1 })
+    const row = toolResultRow({ kind: 'tool-result', seq: 15, callId: 'wc', call: { name: 'writing_change', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
+    expect(row).toMatchObject({ role: 'tool', text: '替换了一句', toolName: 'writing_change', result: { id: 'f'.repeat(32), kind: 'edit', status: 'applied' } })
+    expect(row.writingChange).toMatchObject({ kind: 'edit', paths: ['正文/001.md'] })
+    /* 其他工具输出同形状文本不升级成回执行。 */
+    const otherTool = toolResultRow({ kind: 'tool-result', seq: 16, callId: 'w', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
+    expect(otherTool.writingChange).toBeUndefined()
   })
   it('surfaces novel_memory_update markers as memory-update rows for the review card', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory-update', version: 1, id: 'mu-1', path: '项目规则.md', summary: '记录结局走向', status: 'pending', createdAt: '2026-09-09T08:00:00.000Z' })

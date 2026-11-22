@@ -4,7 +4,7 @@
   <img src="docs/assets/mascot.webp" alt="DSH Editor 看板娘" width="260">
 </p>
 
-Windows / macOS 桌面写作应用。作者在稿纸上写正文，AI 搭档在侧栏提供补全、改写、讨论与文件提案；修改经作者确认后写入。作品是普通的本地文件夹。
+Windows / macOS 桌面写作应用。作者在稿纸上写正文，AI 搭档在侧栏提供补全、改写、讨论与直接修改；改过的段落淡淡标出，对话里可定位、可撤销。作品是普通的本地文件夹。
 
 [下载](https://github.com/klarkxy/dsh-editor/releases) · [使用指南](docs/user-guide.md) · [变更记录](CHANGELOG.md)
 

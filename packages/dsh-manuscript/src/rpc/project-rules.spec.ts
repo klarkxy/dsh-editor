@@ -18,9 +18,9 @@ describe('project rules reader', () => {
     expect(PROJECT_RULES_TEMPLATE).toContain('计划')
     expect(PROJECT_RULES_TEMPLATE).toContain('来源')
     expect(PROJECT_RULES_TEMPLATE).toMatch(/\bread\b/)
-    expect(PROJECT_RULES_TEMPLATE).toContain('提案')
-    expect(PROJECT_RULES_TEMPLATE).toContain('作者确认')
-    for (const banned of ['小说', '正文', '设定', '人物卡', '世界书', 'novel_memory_update', 'canon']) {
+    expect(PROJECT_RULES_TEMPLATE).toContain('直接写入')
+    expect(PROJECT_RULES_TEMPLATE).toContain('撤销')
+    for (const banned of ['小说', '设定', '人物卡', '世界书', 'novel_memory_update', 'canon']) {
       expect(PROJECT_RULES_TEMPLATE).not.toContain(banned)
     }
   })

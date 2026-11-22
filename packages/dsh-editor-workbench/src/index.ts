@@ -11,6 +11,7 @@ import { OverviewError } from './integrations/overview.ts'
 import { MetadataIoError } from './io/metadata-io.ts'
 import { WritingLogError } from './lifecycle/writing-log.ts'
 import { ProposalOpsError } from './proposals/proposal-ops.ts'
+import { WritingChangeError } from './writing/writing-change.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 import { installBotRuntime } from './bot/rpc-index.ts'
 
@@ -69,7 +70,7 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
     if (error.code === 'INVALID_EXTENSION' || error.code === 'TOO_LARGE') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
   }
-  if (error instanceof WritingProposalError || error instanceof ProposalError) {
+  if (error instanceof WritingProposalError || error instanceof ProposalError || error instanceof WritingChangeError) {
     return badRequest(error.message)
   }
   if (error instanceof ProposalOpsError) {
@@ -84,7 +85,7 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
 /** Preserve the actionable cause while keeping the established RPC error codes. */
 export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
   const result = mapEditorFilesErrorBase(error)
-  if (!result.ok && (error instanceof ProposalOpsError || error instanceof FileOpError || error instanceof WritingProposalError || error instanceof ProposalError)) {
+  if (!result.ok && (error instanceof ProposalOpsError || error instanceof FileOpError || error instanceof WritingProposalError || error instanceof ProposalError || error instanceof WritingChangeError)) {
     result.error.details.reason = error.code
   }
   return result

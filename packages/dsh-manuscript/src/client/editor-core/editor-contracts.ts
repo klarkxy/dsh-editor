@@ -11,8 +11,22 @@ export type EditorCoreRpc = {
   call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
 }
 
+/**
+ * Result of an in-place disk sync: `unchanged` nothing applied, `updated` a
+ * clean buffer took the disk change, `merged` the disk change folded into a
+ * dirty buffer without touching author edits, `conflict` the buffer needs the
+ * existing conflict flow, `unavailable` the caller should fall back to reload.
+ */
+export type EditorCoreSyncResult = 'unchanged' | 'updated' | 'merged' | 'conflict' | 'unavailable'
+
 export type EditorCoreHandle = {
   save(): Promise<boolean>
+  /**
+   * Rebase the on-disk file into the open buffer in place. Never navigates or
+   * remounts the view; highlights the inserted ranges; waits out an active
+   * IME composition. See EditorCoreSyncResult for the return contract.
+   */
+  syncFromDisk(): Promise<EditorCoreSyncResult>
   /**
    * Writes a new full document text that must differ only in the hidden header
    * (e.g. chapter beats / chapter-end state). Rechecks the caller's target

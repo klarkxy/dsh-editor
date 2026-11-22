@@ -19,8 +19,8 @@
 
 | ID | 契约 | 实现位置 | 覆盖 | 缺口 |
 | --- | --- | --- | --- | --- |
-| C10 | 正文与大纲的修改先以提案呈现，作者确认后才写入 | `src/client/chat-proposal.tsx`、`packages/dsh-editor-workbench/src/proposals/` | `src/client/chat.spec.ts`、`src/client/planning-flow.spec.ts`、`packages/dsh-editor-workbench/src/proposals/proposal-ops.spec.ts`、`e2e/proposal-receipts.mjs` | 无 |
-| C11 | 文件变化后拒绝旧提案与旧写入；部分完成如实报告 | `src/client/shared.ts` 的 `isStaleFailure`、workbench RPC | `src/client.spec.ts`、`packages/dsh-editor-workbench/src/index.spec.ts`、`rpc/index.spec.ts` | 无 |
+| C10 | 搭档按作者要求直接写入正文与大纲；对话里留一条写入记录，可定位、可撤销、可查看改动 | `packages/dsh-editor-workbench/src/writing/writing-change.ts`、`src/client/chat-writing-change.tsx` | `packages/dsh-editor-workbench/src/writing/writing-change.spec.ts`、`e2e/writing-change-receipts.mjs` | 无 |
+| C11 | 写入以原文片段定位，找不到或不唯一时拒绝；打开文档就地同步磁盘变化，与作者改动相交时进入冲突处理；撤销按记录核对，部分完成如实报告 | `packages/dsh-manuscript/src/client/editor-core/external-sync.ts`、`packages/dsh-editor-workbench/src/writing/writing-change.ts` | `packages/dsh-manuscript/src/client/editor-core/external-sync.spec.ts`、`e2e/editor-external-sync.mjs` | 无 |
 | C12 | 离开文档、切章、离开作品前先保存；组字、冲突、失败与保存期间的新输入阻止离场 | `packages/dsh-manuscript/src/client/editor-core/save-before-leave.ts` | `save-before-leave.spec.ts` | 无 |
 | C13 | 自动保存与草稿同步只保留最新一次排程 | `editor-core/draft-sync.ts` | `draft-sync.spec.ts` | 无 |
 | C14 | 磁盘冲突提供重新载入与另存冲突副本 | `src/client/editor.tsx` | `e2e/core-loop.mjs`（部分） | 缺少不经界面的冲突处理测试 |
@@ -67,7 +67,7 @@
 | ID | 契约 | 实现位置 | 覆盖 | 缺口 |
 | --- | --- | --- | --- | --- |
 | C50 | 加载、失败、空、禁用、成功都有真实状态；不虚构进度或“已写入” | 各界面 | 分散在各 spec | 新界面逐个补状态夹具 |
-| C51 | 错误、冲突、待确认的信息不只靠颜色，不被折叠隐藏 | 各界面 | 无 | 新组件库的 Notice 与提案卡补测试 |
+| C51 | 错误、冲突、待确认的信息不只靠颜色，不被折叠隐藏 | 各界面 | 无 | 新组件库的 Notice 与写入回执卡补测试 |
 | C52 | 可选 AI 能力加载完成前不挂载对话与补全；失败显示可重试的错误态 | `src/client/capabilities.ts` | `capabilities.spec.ts` | 无 |
 | C53 | 图标按钮都有可访问名称；禁用与加载状态在语义上不可操作 | `src/ui/icon-button.tsx`（必填 `label`）等 | `src/ui/components.spec.tsx`、`e2e/settings-ui.mjs`（axe）、`e2e/ui-design.mjs` | 无 |
 | C54 | 减少动态效果与 forced-colors 下状态仍可辨认 | `src/ui/motion.ts`、各 sheet 的 `@media` 兜底 | `e2e/ui-design.mjs`（reduced motion + forced-colors 焦点/选中可见） | 无 |

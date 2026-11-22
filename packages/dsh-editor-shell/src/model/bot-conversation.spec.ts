@@ -6,7 +6,7 @@ import type { BotCheckResult } from 'dsh-editor-workbench/contracts'
 const check = (over: Partial<BotCheckResult> = {}): BotCheckResult => ({
   hasMessages: true, promptChanged: false, wrapUpRequested: false, ...over,
 })
-const guard = { running: false, rolling: false, pendingInteractions: false, pendingProposals: false }
+const guard = { running: false, rolling: false, pendingInteractions: false }
 const MIN = 60_000
 
 describe('rolloverReasonOnSubmit', () => {
@@ -50,7 +50,8 @@ describe('idleRecapDue', () => {
 
 describe('guard and recaps', () => {
   it('blocks on any pending surface', () => {
-    expect(rolloverGuardBlocked({ ...guard, pendingProposals: true })).toBe(true)
+    /* 提案板已删除：待处理提案不再阻塞 rollover，只有未决交互继续阻塞。 */
+    expect(rolloverGuardBlocked({ ...guard, pendingInteractions: true })).toBe(true)
     expect(rolloverGuardBlocked(guard)).toBe(false)
   })
   it('recap visibility is per-segment and after the last author message', () => {

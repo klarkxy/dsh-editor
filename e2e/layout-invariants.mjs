@@ -394,8 +394,6 @@ const absSource = (p) => JSON.stringify(resolve(root, p).replaceAll('\\', '/'))
 await writeFile(fixtureSrc, `
 import { createRoot } from ${JSON.stringify(shellRequire.resolve('react-dom/client').replaceAll('\\', '/'))}
 import { ProposalCard } from ${absSource('packages/dsh-editor-shell/src/client/chat-proposal.tsx')}
-import { createProposalBoard } from ${absSource('packages/dsh-editor-shell/src/model/proposal-board.ts')}
-import { ProposalBoardScope, useProposalRowBoard } from ${absSource('packages/dsh-editor-shell/src/client/chat-proposal-board.tsx')}
 
 const fileState = Object.fromEntries(['正文/001.md', '正文/002.md'].map(p => [p, { version: 'v0', text: '旧文 ' + p }]))
 const proposals = [
@@ -409,20 +407,15 @@ const ctx = { connection: { rpc: { async call(_channel, endpoint, body) {
   if (endpoint === 'file.read' && state) return { ok: true, value: { version: state.version, text: state.text } }
   return { ok: false, error: { code: 'probe', message: endpoint, details: {} } }
 } } } }
-function BoundCard({ id, proposal }) {
-  const rowBoard = useProposalRowBoard(id)
-  return <ProposalCard ctx={ctx} sessionId="probe" proposal={proposal}
-    board={rowBoard.board} boardId={id} boardTurnKey={rowBoard.turnKey}
-    applyAll={rowBoard.applyAll} onApplied={() => {}} />
+function BoundCard({ proposal }) {
+  return <ProposalCard ctx={ctx} sessionId="probe" proposal={proposal} onApplied={() => {}} />
 }
 window.__mountProposalProbe = (host) => {
-  const board = createProposalBoard()
-  const turnKeys = new Map([['p1', 0], ['p2', 0]])
   return createRoot(host).render(
-    <ProposalBoardScope board={board} turnKeys={turnKeys}>
-      <BoundCard id="p1" proposal={proposals[0]} />
-      <BoundCard id="p2" proposal={proposals[1]} />
-    </ProposalBoardScope>)
+    <>
+      <BoundCard proposal={proposals[0]} />
+      <BoundCard proposal={proposals[1]} />
+    </>)
 }
 `, 'utf8')
 await build({
@@ -486,10 +479,10 @@ try {
       return 'ok'
     }, scopeSelector)
     if (mounted !== 'ok') { failures.push(`${label}: proposal probe mount failed (${mounted})`); return }
-    /* 等两条卡都核对完成：首卡出现「全部应用 (2)」说明四键全宽行已在量测对象里。 */
+    /* 等两条卡都核对完成：首卡出现主操作「应用修改」说明全宽行已在量测对象里。 */
     await page.locator('#li-proposal-probe .proposal-actions button').first().waitFor({ timeout: 10_000 }).catch(() => undefined)
     await page.locator('#li-proposal-probe .proposal-actions').first()
-      .getByRole('button', { name: /全部应用/ }).waitFor({ timeout: 10_000 }).catch(() => undefined)
+      .getByRole('button', { name: /应用修改/ }).waitFor({ timeout: 10_000 }).catch(() => undefined)
     const rows = await page.evaluate(() => {
       const probe = document.querySelector('#li-proposal-probe')
       if (!probe) return null

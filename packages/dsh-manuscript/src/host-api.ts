@@ -81,6 +81,7 @@ export {
   parseWritingProposalMarker,
   parseWritingReceiptVersion,
   projectRelativePath,
+  visibleTargetPath,
   type WritingProposalBasis,
   type WritingProposalRename,
   type WritingProposalV2,

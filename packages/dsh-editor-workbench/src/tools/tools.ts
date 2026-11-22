@@ -2,7 +2,8 @@ import { installProjectContextHooks } from '../context/project-context-hooks.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import { createAuthorObserveTool } from '../tools/observe-tool.ts'
-import { createWritingProposeTool } from '../proposals/writing-propose-tool.ts'
+import { createWritingChangeTool } from '../writing/change-tool.ts'
+import { resolveMemoryAccess } from '../memory/memory-access.ts'
 import { createConversationReadTool, createConversationSearchTool, createConversationWrapUpTool } from '../bot/recall.ts'
 import { createBotToolDeps } from '../bot/deps.ts'
 export const name = 'dsh-editor-workbench-tools'
@@ -30,7 +31,7 @@ export function apply(ctx: Context): void {
   installProjectContextHooks(ctx)
   const tools = host.tools
   if (tools && typeof tools.register === 'function') {
-    tools.register(createWritingProposeTool())
+    tools.register(createWritingChangeTool((sessionId, signal) => resolveMemoryAccess(ctx, sessionId, signal)))
     tools.register(createAuthorObserveTool(async (observation) => {
       const preferences = ctx.get('editorWritingPreferences') as { remember(observation: string): Promise<'added' | 'already-present'> }
       return preferences.remember(observation)

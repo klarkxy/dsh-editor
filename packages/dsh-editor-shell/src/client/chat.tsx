@@ -60,11 +60,6 @@ import { PartnerEmptyState, PartnerSetupState } from '../app/assistant/partner-e
 import { useAuxRailActionsHost } from '../app/shell/aux-rail.tsx'
 import { ChatHistory } from './chat-history.tsx'
 import type { ChatOutgoing } from '../model/chat-history.ts'
-import {
-  createProposalBoard,
-  pendingProposalEntries,
-  proposalTurnKeys,
-} from '../model/proposal-board.ts'
 import { ModelPicker, type ModelPickerState } from './chat-model-picker.tsx'
 import { useBotConversation, useBotSettings } from './bot-conversation.ts'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
@@ -101,7 +96,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide, rewriteRequest, onRewriteConsumed }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void; rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }; onRewriteConsumed?(id: number): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onMoved, onLocate, onDraftDirtyChange, onHide, rewriteRequest, onRewriteConsumed }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onMoved?(from: string, to: string): void; onLocate?(path: string, excerpt: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void; rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }; onRewriteConsumed?(id: number): void }) {
   const locale = useLocale()
   /* 搭档页头并入辅助栏页签行右端动作位；非栏内挂载（overlay/隐藏）退回内联页头。 */
   const actionsHost = useAuxRailActionsHost()
@@ -179,33 +174,17 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
   const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
   const historyBlocks = useMemo(() => clusterChatRows(rows, messageCards), [rows, messageCards, messageCardTick])
   const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
-  /* 会话内提案板：各提案卡注册自己的状态/元素/apply；
-     pill 计数、回合分组与「全部应用」都读这张板。 */
-  const proposalBoard = useMemo(() => createProposalBoard(), [])
-  const proposalTurnKeyMap = useMemo(() => proposalTurnKeys(rows), [rows])
   /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
      依赖全部是记忆化数据:只有历史内容真的变化才补 scrollTop,draft 输入等
      无关重渲染不再触发;用 layout effect 在绘制前完成,避免跟随时闪一帧。
-     回合刚结束且有待处理提案时,跟随目标改为第一张待处理卡——
-     不再滚过卡片把提案按钮推出视野;之后该卡不在底部,跟随自然松开。 */
+     回合结束后历史底部保持跟随。 */
   const prevRunningForScroll = useRef(false)
   useLayoutEffect(() => {
     const el = historyRef.current
-    const turnEnded = prevRunningForScroll.current && !snapshot.running
     prevRunningForScroll.current = snapshot.running
     if (!el || !bottomPinnedRef.current) return
-    const firstPending = turnEnded
-      ? pendingProposalEntries(proposalBoard.entries())
-          .map((entry) => entry.element())
-          .find((node): node is HTMLElement => node != null)
-      : null
-    if (firstPending) {
-      firstPending.scrollIntoView({ block: 'start' })
-      bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-      return
-    }
     el.scrollTop = el.scrollHeight
-  }, [rows, partial, outgoing, visibleCalls, queuedSubmissions, pendingItems, snapshot.running, proposalBoard])
+  }, [rows, partial, outgoing, visibleCalls, queuedSubmissions, pendingItems, snapshot.running])
   const historyPrimed = useRef(false)
   const primedEmpty = useRef(false)
   const initialMessageIds = useRef(new Set<string>())
@@ -235,7 +214,6 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     workspaceIdFor: () => workspaceId,
     running: snapshot.running,
     pendingCount: pendingItems.length,
-    pendingProposals: pendingProposalEntries(proposalBoard.entries()).length > 0,
     botSettings,
   })
   const lastUserAt = transcript.nodes.reduce((max, node) => (node.kind === 'user' || node.kind === 'steering') && (node as { time?: number }).time ? Math.max(max, (node as { time?: number }).time ?? 0) : max, 0)
@@ -247,13 +225,15 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     sessionId: session.sessionId,
     locale,
     onApplied: (path) => onWritten?.(path),
+    onMoved: (from, to) => onMoved?.(from, to),
+    onLocate: (path, excerpt) => onLocate?.(path, excerpt),
     refresh: (scope) => {
       if (scope === 'overview') return
       if (scope === 'tree') onWritten?.('')
       else onWritten?.(activePath ?? '')
     },
     note: setNote,
-  }), [session.sessionId, locale, onWritten, activePath])
+  }), [session.sessionId, locale, onWritten, onMoved, onLocate, activePath])
   /* 空白对话:输入框只留占位提示,不贴说明文字。 */
   const showEmptyHistory = rows.length === 0
     && !outgoing
@@ -404,7 +384,6 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
         snapshot={snapshot} historyRef={historyRef} bottomPinnedRef={bottomPinnedRef} stitched={stitched}
         historyBlocks={historyBlocks} messageCards={messageCards} messageCardTick={messageCardTick}
         messageCardContext={messageCardContext} handleApplied={handleApplied} isNewMessage={isNewMessage}
-        board={proposalBoard} proposalTurnKeys={proposalTurnKeyMap}
         partial={partial} hasPartial={Boolean(transcript.partial)} visibleCalls={visibleCalls}
         queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
         outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}

@@ -105,22 +105,6 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
 :is(.shell, .dsh-drawer) .proposal-settled__row .proposal-status { flex: none; }
 :is(.shell, .dsh-drawer) .proposal-card-settled .dsh-disclosure__content { min-width: 0; margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line); }
 
-/* 待处理提案粘性条：吸顶满宽实底条 + 底部分隔线,按钮居中;
-   不再用浮起的圆角药丸,滚动内容从条下经过时不再压住卡片头。 */
-:is(.shell, .dsh-drawer) .chat-proposal-pill {
-  position: sticky; top: 0; z-index: var(--dsh-ui-z-sticky);
-  align-self: stretch;
-  /* 内容列内边距是 space-5（.chat-history .dsh-scroll-area > .dsh-flex）：
-     负 margin 让实底条与底线吃满整条线宽，而不是停在内容列内。 */
-  margin-inline: calc(-1 * var(--dsh-ui-space-5));
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
-  gap: var(--dsh-ui-space-2); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-5);
-  background: var(--dsh-ui-surface);
-  border-bottom: 0.5px solid var(--dsh-ui-line);
-}
-/* 吸顶条高度约 control-sm + 2×space-2 + 0.5px 线;滚到卡片时让卡片头
-   落在条下方(scrollIntoView 也吃 scroll-margin)。 */
-:is(.shell, .dsh-drawer) .proposal-card { scroll-margin-top: calc(var(--dsh-ui-control-sm) + var(--dsh-ui-space-5)); }
 
 /* 编辑提案 hunk 差异：3 行上下文、加删按 token 着色、未改动段折叠，
    超过 max-height 内部滚动（新建文件提案仍是全文块，不走这里）。 */
@@ -232,4 +216,18 @@ defineStyles('dsh.surfaces', 'dsh-chat', `
 /* .chat[hidden] 压过 surfaces 的 display:flex —— 层序代替 !important。 */
 defineStyles('dsh.state', 'dsh-chat-state', `
 :is(.shell, .dsh-drawer) .chat[hidden] { display: none; pointer-events: none; }
+`)
+
+/* writing_change 写入回执卡：头部一行摘要 + 状态徽标，diff 折叠在
+   「查看改动」disclosure 里；全文块只在新建/移除时用。 */
+defineStyles('dsh.components', 'dsh-chat-change', `
+:is(.shell, .dsh-drawer) .writing-change-line { min-width: 0; }
+:is(.shell, .dsh-drawer) .writing-change-full {
+  margin: var(--dsh-ui-space-2) 0 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3);
+  max-height: min(40dvh, 24rem); overflow: auto;
+  border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md);
+  background: var(--dsh-ui-surface); color: var(--dsh-ui-text);
+  font-size: var(--dsh-ui-text-sm); white-space: pre-wrap; word-break: break-word;
+}
+:is(.shell, .dsh-drawer) .writing-change-file code { font-size: var(--dsh-ui-text-sm); }
 `)

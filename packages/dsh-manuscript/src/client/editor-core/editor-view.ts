@@ -2,7 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { externalSync, ghostField, livePreviewExtension, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
+import { agentChangesField, externalSync, ghostField, livePreviewExtension, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
 import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, paperEscapePriority, paperSearch } from './search.ts'
 import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
 import { contextMenuSource, shouldPreserveSelectionOnContextMouseDown, type EditorContextMenuEvent } from './editor-clipboard.ts'
@@ -84,6 +84,7 @@ export function usePaperView({
           paperTheme,
           writingCompartments.current.livePreview.of(livePreviewExtension({ centerSectionMarks })),
           ghostField,
+          agentChangesField,
           paperSearch(),
           writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
           writingCompartments.current.focusParagraph.of(focusParagraphExtension(focusParagraph)),
