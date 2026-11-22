@@ -13,6 +13,7 @@ import type {
 } from './contracts.ts'
 import { corePluginPatchId } from './core-lock.ts'
 import { readPreparedCatalog, type RuntimeCatalog } from './core.ts'
+import { EDITOR_OFFICIAL_BUNDLES } from './curation.ts'
 import type { NativeToolManager } from './native-tools.ts'
 
 /** Upstream opt-in bundles the author switches from 官方插件. */
@@ -29,7 +30,6 @@ const FOUNDATION_ENTRY_IDS = new Set(['ui-shortcuts', 'ui-sidebar-documentprevie
  * so their product names live next to each other in this table.
  */
 const UPSTREAM_DISPLAY: Readonly<Record<string, { title: string; description: string }>> = {
-  '@deepseek-ai/dsh-experimental-agent-team-profile': { title: '智能体团队', description: '启用团队协作、团队工具、成员列表和共享任务看板。' },
   '@deepseek-ai/dsh-experimental-auto-review': { title: '自动授权审查', description: '提供自动审查权限模式，由模型在每次工具调用前判断是否授权。' },
   '@deepseek-ai/dsh-experimental-schedule-bundle': { title: '自动化任务', description: '按设定的时间或周期，在会话中自动执行任务。' },
   '@deepseek-ai/dsh-experimental-voice-input-bundle': { title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。' },
@@ -215,6 +215,9 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
   for (const row of bundles) {
     if (!isExperimental(row.name) && row.official !== true) continue
     officialNames.add(row.name)
+    // Hidden official bundles must not leak into builtin or user either; an
+    // author-enabled one still shows so it can be switched off.
+    if (!EDITOR_OFFICIAL_BUNDLES.has(row.name) && row.enabled !== true) continue
     const copy = experimentalCopy(row.name, entries, consumedCatalogEntries)
     const display = UPSTREAM_DISPLAY[row.name]
     const title = copy.title !== row.name ? copy.title : (display?.title ?? (rowTitle(row) || row.name))

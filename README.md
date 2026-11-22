@@ -33,7 +33,7 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | @deepseek-ai/dsh-mcp-resources | 读取已配置 MCP 服务提供的资源，默认关闭 | 内置官方插件 |
 | @deepseek-ai/dsh-experimental-voice-input-bundle | 语音输入，随包启用；首次点击麦克风可进入准备引导，模型由作者选择下载和准备 | 内置官方插件 |
 
-写作会话默认携带 DSH 原生网页搜索工具，通过官方 DeepSeek 搜索后端取回资料；知乎、当前标题、需求记录、会话纪要与其他公共插件不预装，可在「设置 → 插件 → 发现」搜索 npm 包名后复制规格，到编辑器「添加插件」对话框安装，例如 `@klarkxy/dsh-zhihu`。模型供应商和新对话、补全、改写的选择由内置设置管理，其他插件使用各自配置。已退役的 AI Services、Model Center、Memory、Self-improvement 和 Fusion 不再进入发行组合；作者的写作记忆面板仍保留，旧插件数据不删除。官方插件通过公有布局与界面槽位接入，Editor 保留稿纸界面；定时任务未加入。独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
+写作会话默认携带 DSH 原生网页搜索工具，通过官方 DeepSeek 搜索后端取回资料；公共插件不预装：「设置 → 插件 → 发现」推荐网络搜索管理器与知乎，其他公共插件可搜索 npm 包名后在「添加插件」对话框安装。DSH 官方插件区只列 Editor 能用上的官方组合包。模型供应商和新对话、补全、改写的选择由内置设置管理，其他插件使用各自配置。已退役的 AI Services、Model Center、Memory、Self-improvement 和 Fusion 不再进入发行组合；作者的写作记忆面板仍保留，旧插件数据不删除。官方插件通过公有布局与界面槽位接入，Editor 保留稿纸界面；定时任务未加入。独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
 
 安装步骤在各包目录。仓库根目录是桌面应用 workspace，不能作为单个 DSH 插件安装。全部包与发布说明见 [packages/](packages/README.md)。
 
