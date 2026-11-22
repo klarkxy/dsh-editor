@@ -326,7 +326,7 @@ describe('models.dev autofill', () => {
     await settle()
     const written = form.models()[0]!['reasoningEfforts']
     expect(written).toEqual({ off: 'none', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' })
-    expect(() => REASONING_SCHEMA(written as Record<string, unknown>)).not.toThrow()
+    expect(() => REASONING_SCHEMA(written as Parameters<typeof REASONING_SCHEMA>[0])).not.toThrow()
   })
 
   it('drops unknown effort spellings, prefers off:none over off:null, and skips off-only maps', () => {
