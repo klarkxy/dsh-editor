@@ -1,4 +1,4 @@
-/** Official bundles the Editor surfaces. Others stay hidden unless the author already enabled them. */
+/** Official bundles the Editor surfaces. Others stay hidden unless the author already enabled them, or installed a removable copy. */
 export const EDITOR_OFFICIAL_BUNDLES: ReadonlySet<string> = new Set(['@deepseek-ai/dsh-experimental-voice-input-bundle'])
 export type RecommendedPlugin = { packageName: string; title: string; description: string; homepage: string }
 /** Public plugins whose tools and settings reach the writing partner inside the Editor shell. */
