@@ -61,6 +61,8 @@ export function ProviderEditor(props: {
   const [keyDraft, setKeyDraft] = useState('')
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  /* models.dev 补全还在进行时禁掉保存:点快了会漏掉查询结果。 */
+  const [catalogBusy, setCatalogBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const latestSnapshot = store.getSnapshot()
   const sourceVerified = latestSnapshot.status === 'ready' && !latestSnapshot.refreshing && latestSnapshot.error === null
@@ -132,7 +134,7 @@ export function ProviderEditor(props: {
   const setModelsRef = setModels
 
   const submit = async (): Promise<void> => {
-    if (readOnly) return
+    if (readOnly || catalogBusy) return
     const currentSnapshot = store.getSnapshot()
     if (currentSnapshot.status !== 'ready' || currentSnapshot.refreshing || currentSnapshot.error !== null) return
     if (revisionChanged) { setFailure(text().conflict); return }
@@ -293,7 +295,10 @@ export function ProviderEditor(props: {
             baseURL={stringAt(draft, 'baseURL') ?? stringAt(fallbackRecord, 'baseURL')}
             api={isPiAi ? stringAt(draft, 'api') ?? stringAt(fallbackRecord, 'api') : undefined}
             apiKey={keyValue.length > 0 ? keyValue : undefined}
+            family={family === 'unknown' ? 'other' : family}
+            catalogBacked={isPiAi && !isDeclared}
             disabled={readOnly || busy}
+            onBusyChange={setCatalogBusy}
             onChange={setModelsRef}
             t={text()} />
         </div>
@@ -315,7 +320,7 @@ export function ProviderEditor(props: {
         <Button
           variant="primary"
           className="models-button models-button-primary"
-          disabled={readOnly || busy || !sourceVerified || keyFailure !== undefined || modelFailure !== undefined}
+          disabled={readOnly || busy || catalogBusy || !sourceVerified || keyFailure !== undefined || modelFailure !== undefined}
           onClick={() => void submit()}>
           {busy ? <Fragment>
             <ActivityDots />
@@ -354,6 +359,8 @@ export function CustomProviderCard(props: {
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<Record<string, unknown>[]>([])
   const [busy, setBusy] = useState(false)
+  /* models.dev 补全还在进行时禁掉创建:点快了会漏掉查询结果。 */
+  const [catalogBusy, setCatalogBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [committed, setCommitted] = useState(false)
 
@@ -370,7 +377,7 @@ export function CustomProviderCard(props: {
     keyFailure === undefined
 
   const submit = async (): Promise<void> => {
-    if (readOnly || !ready) return
+    if (readOnly || !ready || catalogBusy) return
     setBusy(true)
     setFailure(undefined)
     try {
@@ -512,7 +519,10 @@ export function CustomProviderCard(props: {
         baseURL={baseURL}
         api={protocol}
         apiKey={keyValue.length > 0 ? keyValue : undefined}
+        family="pi-ai"
+        catalogBacked={false}
         disabled={readOnly || busy || committed}
+        onBusyChange={setCatalogBusy}
         onChange={setModels}
         t={text()} />
       <Text size="1" color="gray" className="models-hint">
@@ -543,7 +553,7 @@ export function CustomProviderCard(props: {
         <Button
           variant="primary"
           className="models-button models-button-primary"
-          disabled={readOnly || busy || !ready}
+          disabled={readOnly || busy || catalogBusy || !ready}
           onClick={() => void submit()}>
           {busy ? <Fragment>
             <ActivityDots />

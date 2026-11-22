@@ -290,6 +290,102 @@ export function reasoningEffortsFor(choice: ReasoningChoice): Record<string, str
   return choice === 'standard' ? { ...STANDARD_REASONING_EFFORTS } : undefined
 }
 
+/*
+ * models.dev 自动补全：CatalogFacts 是 `models.catalog.lookup` 应答的精简形状
+ * （宿主侧定义见 ../models-catalog.ts）。补全只填空字段，字段名按提供方族
+ * 映射——pi-ai 的模型条目用 `input` / `reasoningEfforts`，llm-deepseek 的
+ * `DeepSeekCatalogModel` 用 `inputModalities`（schema 含 contextWindow 与
+ * maxTokens，已对照 rc.5 制品核实），其它命名空间的模型 schema 未知，只补
+ * 容量两个公共字段。
+ */
+export type ModelFamily = 'pi-ai' | 'deepseek' | 'other'
+
+export type CatalogFacts = {
+  contextWindow?: number
+  maxTokens?: number
+  input?: ('text' | 'image')[]
+  reasoning?: false | { efforts: string[]; canDisable: boolean }
+}
+
+export function inputFieldFor(family: ModelFamily): 'input' | 'inputModalities' | undefined {
+  if (family === 'pi-ai') return 'input'
+  if (family === 'deepseek') return 'inputModalities'
+  return undefined
+}
+
+/** Gemini 只接受四档推理等级；其余档位的 Effort 值会让请求失败。 */
+export const GEMINI_REASONING_EFFORTS: ReadonlySet<string> = new Set(['minimal', 'low', 'medium', 'high'])
+
+/* pi-ai 模型条目 reasoningEfforts 的合法键——rc.5 制品
+   `dsh-llm-pi-ai/lib/index.js` 的 THINKING_LEVELS(off | minimal | low |
+   medium | high | xhigh | max)去掉 off;off 是禁用槽,不算 effort 等级。
+   宿主 schema 是 z.dict(string|null, union(THINKING_LEVELS)),键必须在
+   集合内,值是线协议拼写(只有 off 可以是 null)。 */
+export const REASONING_EFFORT_KEYS: ReadonlySet<string> = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+/**
+ * The reasoningEfforts map a catalog `reasoning` fact writes. `false` writes
+ * nothing: an empty field already renders as the un-declared state. models.dev
+ * 的 `none` 表示该模型可以关掉思考,写成 `off: 'none'`;其余值只在本身
+ * 是合法键时才写成 key:value,不认识的丢弃。有 toggle 而没有 none 才写
+ * `off: null`;既有 toggle 又有 none 时以 `off: 'none'` 为准。过滤后没有
+ * 任何非 off 档位时整个字段不写——宿主拒绝只有 off 的 reasoningEfforts。
+ */
+export function reasoningEffortsFromCatalog(
+  api: string | undefined,
+  reasoning: { efforts: string[]; canDisable: boolean } | undefined,
+): Record<string, string | null> | undefined {
+  if (reasoning === undefined) return undefined
+  const efforts = api === 'google-generative-ai'
+    ? reasoning.efforts.filter((effort) => GEMINI_REASONING_EFFORTS.has(effort))
+    : reasoning.efforts
+  const levels = efforts.filter((effort) => effort !== 'none' && REASONING_EFFORT_KEYS.has(effort))
+  if (levels.length === 0) return undefined
+  const map: Record<string, string | null> = {}
+  if (efforts.includes('none')) map['off'] = 'none'
+  else if (reasoning.canDisable) map['off'] = null
+  for (const level of levels) map[level] = level
+  return map
+}
+
+export type CatalogField = 'context' | 'max' | 'input' | 'reasoning'
+
+/**
+ * The draft patch one catalog fact contributes to a model row. Only empty
+ * fields are patched — a value the author or discovery already set always
+ * wins — and every write still lands in the draft until the card is saved.
+ */
+export function catalogFill(
+  model: Record<string, unknown>,
+  family: ModelFamily,
+  api: string | undefined,
+  facts: CatalogFacts,
+): { patch: Record<string, unknown>; fields: CatalogField[] } {
+  const patch: Record<string, unknown> = {}
+  const fields: CatalogField[] = []
+  if (facts.contextWindow !== undefined && model['contextWindow'] === undefined) {
+    patch['contextWindow'] = facts.contextWindow
+    fields.push('context')
+  }
+  if (facts.maxTokens !== undefined && model['maxTokens'] === undefined) {
+    patch['maxTokens'] = facts.maxTokens
+    fields.push('max')
+  }
+  const inputKey = inputFieldFor(family)
+  if (inputKey !== undefined && facts.input !== undefined && model[inputKey] === undefined) {
+    patch[inputKey] = [...facts.input]
+    fields.push('input')
+  }
+  if (family === 'pi-ai' && model['reasoningEfforts'] === undefined && facts.reasoning !== undefined && facts.reasoning !== false) {
+    const efforts = reasoningEffortsFromCatalog(api, facts.reasoning)
+    if (efforts !== undefined) {
+      patch['reasoningEfforts'] = efforts
+      fields.push('reasoning')
+    }
+  }
+  return { patch, fields }
+}
+
 /** Convert a schema-validated catalog value into records without dropping hidden fields. */
 export function modelDrafts(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []
