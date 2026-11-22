@@ -207,7 +207,7 @@ describe('local distribution discovery', () => {
     const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { paths, fetch }))
     // 推荐在前、本地随附在后；web-search-manager 已有本地随附条目，推荐去重保留本地。
     expect(listings.map((row) => row.packageName)).toEqual(['@klarkxy/dsh-zhihu', 'dsh-editor-sample-alpha', 'dsh-editor-sample-beta', '@klarkxy/dsh-web-search-manager'])
-    expect(listings[0]).toMatchObject({ source: 'recommended', spec: 'npm:@klarkxy/dsh-zhihu', url: 'https://klarkxy.github.io/dsh-plugins/plugins/zhihu/' })
+    expect(listings[0]).toMatchObject({ source: 'recommended', spec: 'npm:@klarkxy/dsh-zhihu', url: 'https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu' })
     expect(listings.filter((row) => row.packageName === '@klarkxy/dsh-web-search-manager')).toHaveLength(1)
     expect(listings[1]).toMatchObject({
       source: 'local',

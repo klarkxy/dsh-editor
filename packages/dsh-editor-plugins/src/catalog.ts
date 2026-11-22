@@ -215,9 +215,11 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
   for (const row of bundles) {
     if (!isExperimental(row.name) && row.official !== true) continue
     officialNames.add(row.name)
-    // Hidden official bundles must not leak into builtin or user either; an
-    // author-enabled one still shows so it can be switched off.
-    if (!EDITOR_OFFICIAL_BUNDLES.has(row.name) && row.enabled !== true) continue
+    /* Hidden official bundles must not leak into builtin or user either; they
+       stay visible when the author enabled them or installed a removable copy,
+       so the switch-off / uninstall entry survives after deactivation. */
+    if (!EDITOR_OFFICIAL_BUNDLES.has(row.name) && row.enabled !== true
+      && !(row.installed === true && row.removable === true)) continue
     const copy = experimentalCopy(row.name, entries, consumedCatalogEntries)
     const display = UPSTREAM_DISPLAY[row.name]
     const title = copy.title !== row.name ? copy.title : (display?.title ?? (rowTitle(row) || row.name))

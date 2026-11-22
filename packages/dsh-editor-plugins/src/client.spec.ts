@@ -229,7 +229,7 @@ describe('plugin discovery', () => {
     const recommended: MarketplaceListing = {
       spec: 'npm:@klarkxy/dsh-zhihu', source: 'recommended', packageName: '@klarkxy/dsh-zhihu',
       title: '知乎', owner: '@klarkxy', repo: 'dsh-zhihu', description: '检索知乎内容、热榜与直答。',
-      stars: 0, url: 'https://klarkxy.github.io/dsh-plugins/plugins/zhihu/', updatedAt: '', topics: [],
+      stars: 0, url: 'https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu', updatedAt: '', topics: [],
     }
     expect(listingPresentation(recommended)).toEqual({
       title: '知乎', origin: '推荐', showStars: false, linkLabel: '插件主页', url: recommended.url,

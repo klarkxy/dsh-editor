@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildPluginCatalog, readPluginCatalog } from './catalog.ts'
+import { RECOMMENDED_PLUGINS } from './curation.ts'
+import { isAllowedExternalUrl } from '../../../apps/desktop/src/navigation.ts'
 import type { PluginCatalog, PluginCatalogCard } from './contracts.ts'
 import type { RuntimeCatalog } from './core.ts'
 import { mkdtemp } from 'node:fs/promises'
@@ -189,6 +191,33 @@ describe('plugin catalog classification', () => {
     expect(section(catalog, 'official').every((card) => card.action === 'switch')).toBe(true)
     expect(section(catalog, 'builtin').some((card) => card.packageName === '@deepseek-ai/dsh-base')).toBe(false)
     expect(section(catalog, 'user').map((card) => card.packageName)).toEqual(['@klarkxy/dsh-web-search-manager'])
+  })
+
+  it('keeps an author-installed removable official bundle listed after it is switched off', () => {
+    const catalog = buildPluginCatalog({
+      catalog: defaultCatalog(),
+      bundles: [
+        // Author-installed official package: switching it off must not remove
+        // the uninstall entry along with the row.
+        { name: '@deepseek-ai/dsh-subagent-claude-code', official: true, enabled: false, installed: true, removable: true },
+        // Merely declared (not installed) non-whitelist rows stay hidden.
+        { name: '@deepseek-ai/dsh-subagent-codex', official: true, enabled: false, installed: false, removable: false },
+        { name: '@deepseek-ai/dsh-experimental-voice-input-bundle', enabled: true, installed: true },
+      ],
+      plugins: DEFAULT_PLUGINS,
+    })
+    expect(section(catalog, 'official').map((card) => card.packageName)).toEqual([
+      '@deepseek-ai/dsh-subagent-claude-code',
+      '@deepseek-ai/dsh-experimental-voice-input-bundle',
+    ])
+    expect(section(catalog, 'builtin').some((card) => card.packageName === '@deepseek-ai/dsh-subagent-codex')).toBe(false)
+    expect(section(catalog, 'user').some((card) => card.packageName === '@deepseek-ai/dsh-subagent-codex')).toBe(false)
+  })
+
+  it('points every recommended homepage at a host allowed by the desktop external-link whitelist', () => {
+    for (const plugin of RECOMMENDED_PLUGINS) {
+      expect(isAllowedExternalUrl(plugin.homepage), plugin.packageName).toBe(true)
+    }
   })
 
   it('projects catalog managedBy onto session and feature badges', () => {

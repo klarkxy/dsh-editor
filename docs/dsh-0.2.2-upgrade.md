@@ -174,7 +174,7 @@ dev profile 真实启动核实（脚本 `.dev/curation-inspect.mjs`，Playwright
 - 写作搭档工具列表中 `web_search` 恰好出现 1 次（另有 `web_fetch`），与原生 tool-web 无重名冲突；知乎工具为 `zhihu_account`、`zhihu_research`、`zhihu_study`、`zhihu_study_report`、`zhihu_sync`（0.3.8 无 `zhihu_search`，断言按 `zhihu_*` 存在判定）。
 - 知乎设置入口经「插件 → plugins-orphan-zhihu」打开，详情页 `data-testid="zhihu-settings"` 可见。脚本输出 `REPORT OK`。
 
-插件页截图（脚本 `.dev/curation-shots.mjs`，dev profile + Chromium，桌面 1440 与窄窗 390、浅色深色各一组，共 8 张）：`.dev/curation-shots/{installed,discovery}-{desktop,390}-{light,dark}.png`。深色/浅色主题经 localStorage `dsh-editor.theme` 键加重载切换（`.radix-themes.dark` 作用域由 React 状态驱动，直接写 `data-theme` 属性无效）。注：`e2e/writing-models.mjs --optional-install` 的既有流程安装的是四个旧插件且清理阶段 `removeBundle` 曾超时，本轮推荐组合以 `curation-install.mjs` 为准。
+插件页截图（脚本 `.dev/curation-shots.mjs`，dev profile + Chromium，桌面 1440 与窄窗 390、浅色深色各一组，共 8 张）：`.dev/curation-shots/{installed,discovery}-{desktop,390}-{light,dark}.png`。深色/浅色主题经 localStorage `dsh-editor.theme` 键加重载切换（`.radix-themes.dark` 作用域由 React 状态驱动，直接写 `data-theme` 属性无效）。补拍中间宽度（脚本 `.dev/curation-shots-v3.mjs`，浅色）：`.dev/curation-shots/{installed,discovery}-desktop-light-{1024,760}.png`，1024 与 760 两档「已安装」「发现」均无溢出、截断或错位（760 下发现页「安装」按钮按卡片布局折到描述下方，属预期换行）。注：`e2e/writing-models.mjs --optional-install` 的既有流程安装的是四个旧插件且清理阶段 `removeBundle` 曾超时，本轮推荐组合以 `curation-install.mjs` 为准。
 
 ### 验证记录（rc.5）
 
