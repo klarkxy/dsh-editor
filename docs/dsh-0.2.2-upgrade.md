@@ -162,7 +162,7 @@ plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop`
 
 `packages/dsh-editor-plugins/src/curation.ts` 集中声明发行策展：`EDITOR_OFFICIAL_BUNDLES`（目前只有 `@deepseek-ai/dsh-experimental-voice-input-bundle`）、`RECOMMENDED_PLUGINS`（`@klarkxy/dsh-web-search-manager`、`@klarkxy/dsh-zhihu`）与 `HIDDEN_DISCOVERY_REPOS`（`klarkxy/dsh-plugins`、`deepseek-ai/deepseek-harness`）。
 
-- 官方区（`catalog.ts`）：进入官方分支的行先登记 `officialNames`，非白名单且未启用的官方包被跳过，因此不会漏进 builtin 或 user 分区；已启用的非白名单官方包仍显示，便于作者关闭。`UPSTREAM_DISPLAY` 删除上游已移除的 `dsh-experimental-agent-team-profile`。
+- 官方区（`catalog.ts`）：进入官方分支的行先登记 `officialNames`，非白名单且未启用、也未安装可卸载副本的官方包被跳过，因此不会漏进 builtin 或 user 分区；已启用、或已安装且可卸载的非白名单官方包仍显示，便于作者关闭或卸载。`UPSTREAM_DISPLAY` 删除上游已移除的 `dsh-experimental-agent-team-profile`。
 - 发现页（`index.ts` / `client.tsx`）：空查询返回「推荐在前、本地随附在后」，推荐包与本地条目重复时保留本地；关键词命中推荐或本地时视为本地命中，不发 GitHub 请求；GitHub 结果过滤 `HIDDEN_DISCOVERY_REPOS` 的仓库级命中；显式 npm/GitHub spec 行为不变。浏览态分「推荐插件」与「可重新添加的随附插件」两组，均已安装项显示「配置与详情」。
 - `MarketplaceListing.source` 增加 `'recommended'`；推荐项 `spec` 为 `npm:<包名>`，无 stars，链接指向插件主页。
 
