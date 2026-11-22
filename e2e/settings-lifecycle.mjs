@@ -13,7 +13,7 @@ const output = resolve(root, 'e2e/out/settings-ui', stage)
 const home = resolve(root, '.dev', 'settings-ui-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.5/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -58,11 +58,33 @@ try {
 
   // Exercise the pinned upstream owner/cleanup functions, including a real
   // unrelated style. Correctly owned application styles must survive both steps.
-  const runtimeModules = resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/node_modules')
+  const runtimeModules = resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.5/node_modules')
   const modulesSource = await readFile(resolve(runtimeModules, '@deepseek-ai/dsh-client-modules/lib/client.js'), 'utf8')
-  const cleanup = modulesSource.match(/function removeOwnedStyles\(id\) \{[\s\S]*?\n\t+\}/)?.[0]
-  const claim = modulesSource.match(/const claimStyles = \(id(?:, before)?\) => \{[\s\S]*?\n\t+\};/)?.[0]
+  // rc.5 minifies these helpers onto one line; extract them by balanced-brace
+  // matching (skipping string literals) instead of relying on layout.
+  const sliceBody = (braceIndex) => {
+    let depth = 0
+    for (let index = braceIndex; index < modulesSource.length; index++) {
+      const char = modulesSource[index]
+      if (char === '"' || char === "'" || char === '`') {
+        const quote = char
+        index++
+        while (index < modulesSource.length && modulesSource[index] !== quote) index += modulesSource[index] === '\\' ? 2 : 1
+        continue
+      }
+      if (char === '{') depth++
+      else if (char === '}' && --depth === 0) return modulesSource.slice(braceIndex, index + 1)
+    }
+    return undefined
+  }
+  const cleanupMatch = /\bfunction removeOwnedStyles\s*\(([^)]*)\)\s*\{/.exec(modulesSource)
+  const cleanup = cleanupMatch === null ? undefined
+    : `function removeOwnedStyles(${cleanupMatch[1]})` + sliceBody(cleanupMatch.index + cleanupMatch[0].length - 1)
+  const claimMatch = /\bclaimStyles\s*=\s*(\([^)]*\)\s*=>)\s*\{/.exec(modulesSource)
+  const claim = claimMatch === null ? undefined
+    : `const claimStyles = ${claimMatch[1]} ` + sliceBody(claimMatch.index + claimMatch[0].length - 1)
   assert.ok(cleanup && claim, 'pinned DSH style ownership implementation must be available')
+  assert.ok(claim.includes('untaggedStyles') && cleanup.includes('data-plugin'), 'extracted DSH style ownership code must be the expected helpers')
   const ids = ['dsh-editor-plugins']
   const selectors = [S.stylePlugins]
   const ownership = await page.evaluate(({ claim, cleanup, selectors }) => {

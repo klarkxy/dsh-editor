@@ -564,7 +564,7 @@ function deployIdentity(partial: Partial<ProfileDeployIdentity> = {}): ProfileDe
   return {
     algorithm: PROFILE_DEPLOY_ALGORITHM,
     profileSha256: 'sha-template',
-    dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
+    dsh: '@deepseek-ai/dsh@0.2.2-rc.5',
     nodePath: 'C:/runtime/node.exe',
     cliPath: 'C:/runtime/dsh/lib/bin.js',
     ...partial,

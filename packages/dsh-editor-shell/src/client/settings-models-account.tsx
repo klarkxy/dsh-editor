@@ -56,7 +56,8 @@ export function useDeepseekAccount(ctx: ShellContext): DeepseekAccountStatus {
           try {
             for await (const next of handle) {
               if (!live || ticket !== generation) break
-              setView(next)
+              // rc.5 的流元素是 `{type, state}` 事件;快照只取 `state`。
+              setView(next.state)
             }
           } catch { /* carrier error: reopen on the next connection/reset */ }
           if (live && ticket === generation) retryPending = true

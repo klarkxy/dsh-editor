@@ -16,7 +16,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AccountView } from '../dsh-compat.ts'
+import type { AccountUpdate, AccountView } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { useDeepseekAccount, useDeepseekAccountControls } from './settings-models-account.tsx'
 import { RowHead } from './settings-models.tsx'
@@ -129,13 +129,18 @@ function waitingAttempt(id: string, authorizeUrl?: string) {
   return { id, phase: 'waiting-browser' as const, authorizeUrl }
 }
 
+/* rc.5 的 account/watch 流元素是 `{type, state}` 事件壳,快照在 state 里。 */
+function update(state: AccountView, type: AccountUpdate['type'] = 'snapshot'): AccountUpdate {
+  return { type, state }
+}
+
 function makeStream() {
-  const items: AccountView[] = []
+  const items: AccountUpdate[] = []
   const waiters: Array<() => void> = []
   let done = false
   return {
     disposed: false,
-    push(next: AccountView) { items.push(next); for (const wake of waiters.splice(0)) wake() },
+    push(next: AccountUpdate) { items.push(next); for (const wake of waiters.splice(0)) wake() },
     end() { done = true; for (const wake of waiters.splice(0)) wake() },
     dispose() { this.disposed = true; done = true; for (const wake of waiters.splice(0)) wake() },
     [Symbol.asyncIterator]() {
@@ -245,20 +250,20 @@ describe('useDeepseekAccount + account row controls', () => {
     click(tree, 'dsh-models-account-signin')
     await tick()
 
-    stream.push(view('signed-out', waitingAttempt('att-1', 'https://platform.deepseek.com/authorize?attempt=att-1')))
+    stream.push(update(view('signed-out', waitingAttempt('att-1', 'https://platform.deepseek.com/authorize?attempt=att-1'))))
     await tick()
     tree = render(() => Harness({ ctx }))
     expect(bridge.openExternal).toHaveBeenCalledTimes(1)
     expect(bridge.openExternal).toHaveBeenCalledWith('https://platform.deepseek.com/authorize?attempt=att-1')
 
     // Watch replays / reconnects never re-open it.
-    stream.push(view('signed-out', waitingAttempt('att-1', 'https://platform.deepseek.com/authorize?attempt=att-1')))
+    stream.push(update(view('signed-out', waitingAttempt('att-1', 'https://platform.deepseek.com/authorize?attempt=att-1'))))
     await tick()
     render(() => Harness({ ctx }))
     expect(bridge.openExternal).toHaveBeenCalledTimes(1)
 
     // A pending attempt this page did not start is not auto-opened.
-    stream.push(view('signed-out', waitingAttempt('att-other', 'https://platform.deepseek.com/authorize?attempt=att-other')))
+    stream.push(update(view('signed-out', waitingAttempt('att-other', 'https://platform.deepseek.com/authorize?attempt=att-other'))))
     await tick()
     tree = render(() => Harness({ ctx }))
     expect(bridge.openExternal).toHaveBeenCalledTimes(1)
@@ -284,7 +289,7 @@ describe('useDeepseekAccount + account row controls', () => {
 
     // The stream delivers the authorize URL while the start call is still in
     // flight; nothing may open yet (the page cannot prove it owns the attempt).
-    stream.push(view('signed-out', waitingAttempt('att-race', 'https://platform.deepseek.com/authorize?attempt=att-race')))
+    stream.push(update(view('signed-out', waitingAttempt('att-race', 'https://platform.deepseek.com/authorize?attempt=att-race'))))
     await tick()
     render(() => Harness({ ctx }))
     expect(bridge.openExternal).not.toHaveBeenCalled()
@@ -314,7 +319,7 @@ describe('useDeepseekAccount + account row controls', () => {
     render(() => Harness({ ctx }))
     expect(bridge.openExternal).toHaveBeenCalledTimes(1)
 
-    stream.push(view('signed-out', waitingAttempt('att-direct', 'https://platform.deepseek.com/authorize?attempt=att-direct')))
+    stream.push(update(view('signed-out', waitingAttempt('att-direct', 'https://platform.deepseek.com/authorize?attempt=att-direct'))))
     await tick()
     render(() => Harness({ ctx }))
     expect(bridge.openExternal).toHaveBeenCalledTimes(1)
@@ -327,7 +332,7 @@ describe('useDeepseekAccount + account row controls', () => {
     bridge.clipboard.writeText = vi.fn(async () => { throw new Error('denied') })
     render(() => Harness({ ctx }))
     await tick()
-    stream.push(view('signed-out', waitingAttempt('att-9', 'https://platform.deepseek.com/authorize?x=9')))
+    stream.push(update(view('signed-out', waitingAttempt('att-9', 'https://platform.deepseek.com/authorize?x=9'))))
     await tick()
     const tree = render(() => Harness({ ctx }))
     click(tree, 'dsh-models-account-copy')
@@ -343,7 +348,7 @@ describe('useDeepseekAccount + account row controls', () => {
     render(() => Harness({ ctx }))
     await tick()
     render(() => Harness({ ctx }))
-    stream.push(view('signed-out', waitingAttempt('att-9', 'https://platform.deepseek.com/authorize?x=9')))
+    stream.push(update(view('signed-out', waitingAttempt('att-9', 'https://platform.deepseek.com/authorize?x=9'))))
     await tick()
     const tree = render(() => Harness({ ctx }))
     click(tree, 'dsh-models-account-cancel')
@@ -358,7 +363,7 @@ describe('useDeepseekAccount + account row controls', () => {
     const ctx = makeCtx(remote)
     render(() => Harness({ ctx }))
     await tick()
-    stream.push(view('signed-out', { id: 'att-x', phase: 'failed', errorCode: 'no-response' }))
+    stream.push(update(view('signed-out', { id: 'att-x', phase: 'failed', errorCode: 'no-response' })))
     await tick()
     const tree = render(() => Harness({ ctx }))
     const notices = nodes(tree, (node) => node.props.className === 'models-account-error')
@@ -374,7 +379,7 @@ describe('useDeepseekAccount + account row controls', () => {
     const ctx = makeCtx(remote)
     render(() => Harness({ ctx }))
     await tick()
-    stream.push(view('credential-stored'))
+    stream.push(update(view('credential-stored')))
     await tick()
     const tree = render(() => Harness({ ctx }))
     expect(byTestId(tree, 'dsh-models-account-signout')).toBeTruthy()
@@ -395,6 +400,14 @@ describe('useDeepseekAccount + account row controls', () => {
       locale: 'zh-CN',
       timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
     })
+
+    // rc.5 凭据移除走 credentials-changed;同一挂载实例消费 event.state 后
+    // 立刻回到登录入口,不必重开设置页。
+    stream.push(update(view('signed-out'), 'credentials-changed'))
+    await tick()
+    const afterSignOut = render(() => Harness({ ctx }))
+    expect(byTestId(afterSignOut, 'dsh-models-account-signout')).toBeUndefined()
+    expect(byTestId(afterSignOut, 'dsh-models-account-signin')).toBeTruthy()
 
     // The account row head swaps the API-key 编辑 button for account controls.
     // RowHead has a different hook graph than Harness, so it gets a fresh slot

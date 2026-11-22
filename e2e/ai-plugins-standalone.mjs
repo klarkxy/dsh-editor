@@ -17,7 +17,7 @@ assert.ok(relative(resolve(root, '.dev'), home) && !relative(resolve(root, '.dev
 const output = resolve(root, 'e2e/out/ai-standalone', stamp)
 const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
-const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.1/lib/bin.js')
+const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.2-rc.5/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
 const ids = ['web-search-manager']
 const fixtureVersions = { 'web-search-manager': '0.1.11' }

@@ -7,6 +7,8 @@ import { resolveDshInstallation } from './dsh-cli.mjs'
 
 // Verify the installed patched voice client, like the plugin-manager patch spec:
 // assert on the real artifact so a failed patch application cannot pass silently.
+// The rc.5 artifact ships minified (single-line bundle, backtick literals), so the
+// assertions match the compact emitted form rather than the old formatted source.
 const installation = resolveDshInstallation()
 const require = createRequire(join(installation.packageRoot, 'package.json'))
 const entry = require.resolve('@deepseek-ai/dsh-experimental-client-ui-voice-input')
@@ -16,22 +18,22 @@ expect(parsed.parseDiagnostics).toEqual([])
 
 describe('pinned voice input picker patch', () => {
   it('gates microphone acquisition behind an explicit preview toggle', () => {
-    expect(source).toContain('const [wanted, setWanted] = (0, react.useState)(false);')
+    expect(source).toContain('const[wanted,setWanted]=(0,react.useState)(false);')
     // The only acquisition site runs under the explicit opt-in flag; mounting or
     // re-entering the page must never call acquire().
-    expect(source).toContain('} else if (wanted && !document.hidden && !capture) acquire();')
-    expect(source).not.toContain('} else if (!document.hidden && !capture) acquire();')
+    expect(source).toContain('else if(wanted&&!document.hidden&&!capture)acquire()')
+    expect(source).not.toContain('else if(!document.hidden&&!capture)acquire()')
     // Device selection and the toggle both re-run the effect, which releases the
     // previous capture before acquiring again.
-    expect(source).toContain('}, [selected.id, createRecording, wanted]);')
+    expect(source).toContain('[selected.id,createRecording,wanted]')
   })
 
   it('renders a localized preview toggle next to the device picker', () => {
-    expect(source).toContain('onClick: () => setWanted((previous) => !previous),')
-    expect(source).toContain('children: preview ? t("previewStop") : t("previewStart")')
-    expect(source).toContain('previewStart: "测试麦克风",')
-    expect(source).toContain('previewStop: "停止测试",')
-    expect(source).toContain('previewStart: "Test microphone",')
-    expect(source).toContain('previewStop: "Stop test",')
+    expect(source).toContain('onClick:()=>setWanted(previous=>!previous)')
+    expect(source).toContain('children:preview?t(`previewStop`):t(`previewStart`)')
+    expect(source).toContain('previewStart:`测试麦克风`,')
+    expect(source).toContain('previewStop:`停止测试`,')
+    expect(source).toContain('previewStart:`Test microphone`,')
+    expect(source).toContain('previewStop:`Stop test`,')
   })
 })

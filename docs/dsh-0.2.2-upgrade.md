@@ -84,3 +84,113 @@
 - UI 检查器回归 12 项、增量偏移与设计契约 21 项通过；Markdown 本地文件链接检查无失效链接。
 - 本机标准打包遇到 Electron 下载失败；改用本机同版本 Electron 可生成便携包，但 NSIS 自提取步骤未成功。本机结果不替代最终发行产物检查；Windows/macOS 构建、包校验与便携包启动须由本次标签的发布工作流完成后，才可将草稿发行公开。
 - 未进行真实 DeepSeek Search API 联网请求；网页搜索沿用上游默认配置与计费边界。
+
+## 0.2.2-rc.5 升级
+
+日期：2026-11-22。目标版本 **0.2.2-rc.5**（npm `next` 通道），起点 0.2.2-rc.1、起点提交 4adfd23。
+
+### 升级范围（rc.5）
+
+- 版本切换由 `node scripts/upgrade-dsh.mjs --to 0.2.2-rc.5 --skip-install` 完成，共改写 52 个文件 137 处版本钉住；未改全局 CLI。
+- `pnpm.overrides` 中全部 43 个 `@deepseek-ai/dsh-*` 钉住改为 0.2.2-rc.5；逐包 npm 核实均存在，无 404 删除、无新增钉住。`zod` 钉住与根 devDependency 从 4.4.3 改为 4.6.6（上游 rc.5 `dsh-llm` 精确钉 4.6.6）；`@deepseek-ai/cordis@4.1.0`、`@deepseek-ai/schemastery@3.19.0` 与上游一致保持不变。
+- 锁文件：首轮 `pnpm install` 后仍解析出 `@deepseek-ai/dsh-*@0.2.2-rc.1` 快照（与上一轮相同的 dedupe 复用）；删除全部 workspace `node_modules` 重装后归零，`cordis` / `schemastery` / `zod` 各一份。
+- `scripts/prepare-desktop-dev.mjs` 物化目标改为 `.dev/desktop-dsh-runtime-0.2.2-rc.5`，`scripts/dsh-cli.mjs` 期望版本 0.2.2-rc.5；`packages/dsh-editor-plugins/README.md` 的宿主版本钉由升级脚本同步改写。
+- 安装期间发现 `packages/dsh-editor-workspace-kit` 目录缺失（`ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`），自 git 恢复后重装；与升级内容无关。
+
+### 补丁处置（rc.5）
+
+| 补丁 | 处置 | 依据 |
+| --- | --- | --- |
+| `@deepseek-ai__dsh-web-frontend@0.2.2-rc.5.patch` | 移植，目标资产改名 | Tag 等规则仍是 11px/17px 内联在新哈希资产 `index-CSAdOBx6.css`；补丁把全部两处提升为 12px/18px，意图不变。 |
+| `@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.2-rc.5.patch` | 移植，按新产物重写 hunk | rc.5 的 `lib/client.js` 是压缩产物，旧补丁上下文不可套用；按实际压缩字符串重建，意图不变：`wanted` 状态门控、`wanted && !document.hidden && !capture` 采集条件、effect 依赖加 `wanted`、「测试麦克风 / 停止测试」按钮与中英文案。`scripts/voice-input-patch.spec.mjs` 断言同步改为压缩产物形式并校验安装制品。 |
+
+### 官方升级指南核对（rc.5）
+
+plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop` 扫描（`--from 0.2.2-rc.1 --target 0.2.2-rc.5`），共 402 处命中逐条分诊，全部判定误报或不适用，无代码改动：
+
+- **forge-provider-hosts（约 170 处）**：仓内无 `ctx.forge` / `ForgeProvider` / `dsh-experimental-forge` 使用，命中是 `describe(`、`subscribe(` 等泛词匹配——误报。
+- **session-status-package（约 68 处）**：无 `@deepseek-ai/dsh-client-ui-session` 导入、无 `ctx.uiSession.sessionStatus` 读取；`dsh-compat.ts` 的 `sessionStatus` 是自有兼容形状——误报。
+- **workspace-write-boundary-follows-root（51 处）**：命中为 spec 中构造 `sandboxPolicy.resolve` 返回值的桩；发行组合无 worktree 会话，profile 未设 `workspaceRoot` / `additionalWritableRoots`——误报。
+- **session-retain-conversation-facet（37 处）**：对照已安装制品核实，`dsh-api-session-controller@0.2.2-rc.5` 的 `retain()` 只解构 `{source, signal}`，运行时不含 `facets` / `retainedFacets`——npm 制品未包含该机制，不适用；后续制品带上时按指南补 `facets: { conversation: true }`。
+- **deepseek-request-auth（31 处）**：命中为注释与测试夹具（`llm-deepseek` 名字空间键、`hasRunningAccountTasks` RPC），无被移除 helper 的调用——误报。
+- **personalized-recommendations-bundle-retired（3 处）**：rc.5 npm 制品仍单独发布 `dsh-personalized-recommendations` 并在其中挂载六个行，web-app 组合未并入；profile 也未引用该 bundle——制品未含此变更，不适用。
+- **web-search-deepseek-model-default（7 处）**：命中为 settings 测试夹具里的 `deepseek-account` provider id；编辑器不覆写 `web` 配置，跟随上游新默认（DeepSeek 模型会话走 Messages 搜索按 token 计费，其余走 Search API）——误报，行为变化随上游默认生效。
+- **client-module-metadata（6 处）**：自有 `<style data-plugin>` 注入由插件卸载时自行 remove，无 `data-plugin-css` 选择器依赖——不适用。
+- **profile-context-overlay-paths（1 处）**：`readProfilePatches('dsh-editor', profile)` 已是 `readProfilePatches(binName, ProfileContext)` 新签名——误报。
+- **working-directory-tool-removed（2 处）**、**cordis-loader-entry-validation（1 处）**、**ptc-tool-result-inspection（2 处）**：仓内无 `tool-working-directory` 行、无 `applyEntryPatches` / `EntryTree` 使用，命中的是自有 `tool.output.render` 测试辅助——误报。
+- apps/desktop 仅 1 条 medium 命中（`profile.ts` 的 `PEER_PACKAGES` 列表泛词匹配 `dsh-llm`）——误报。
+
+扫描环境说明：各报告内 "tsconfig 假绿" 与冒烟阻断是扫描器在未构建状态解析 workspace paths、无法加载同级 workspace 依赖所致，仓库自身 `pnpm typecheck`、`pnpm build` 通过；`panel-base` 首次扫描因子进程 spawn 未给带空格的 node 路径加引号而失败，改用短路径 `C:\PROGR~1\nodejs\node.exe` 重跑完成。签名差分因无 rc.1 基线跳过，rc.5 签名已留存供下次差分。日志：`.dev/upgrade-025/scan-*.log`。
+
+### 审查补修（rc.5）
+
+评审补查发现的四处遗漏，均已修复：
+
+- **account/watch 流元素形状**：rc.5 的 `dsh-deepseek-account` 把 `watch` / `watchState` 流元素从 `AccountView` 快照改为 `AccountUpdate` 事件（`{ type: 'snapshot' | 'credentials-changed', state: AccountView }`，见制品 `lib/types/types.d.ts`）。`dsh-compat.ts` 的类型与 `settings-models-account.tsx` 的消费循环按新形状解包 `event.state`；`getState()` 仍直接返回快照不变。升级指南扫描未扫出的原因：指南规则按已知破坏性变更模式匹配（`ctx.forge`、`retain` 参数等），deepseek-account 远程流的契约变化没有对应条目，且我方 `watch` 适配层形状与上游同名 API 近似，泛词分诊无法识别，属制品级类型差分才能发现的变化。
+- **e2e/official-plugins.mjs**：能力清单断言的 `dsh-office-to-pdf` 已在上游被 `dsh-office-kit` 组合替代，断言改为 `dsh-office-kit` 恰好一条且启用。
+- **e2e/settings-lifecycle.mjs**：rc.5 把 `removeOwnedStyles` / `claimStyles` 压成单行，原依赖缩进换行的提取正则失配。改为按函数名定位后花括号配平提取（跳过字符串字面量），并增加显式断言：提取不到或内容不像预期 helper 时直接失败，不再静默跳过。
+- **历史文档版本号还原**：升级脚本机械改写把 `docs/redesign/acceptance.md`（验收截图环境）与 `docs/redesign/decision.md`（视觉基准决策）里的历史版本 `0.2.2-rc.1` 改成 rc.5，按 `4adfd23` 原文还原；`scripts/upgrade-dsh.mjs` 的 `SKIP_REWRITE_PREFIXES` 增加 `docs/redesign/`。`docs/` 全量复查确认其余 rc.1→rc.5 改写均为现行钉住版本声明（architecture、ai-plugins-implementation、diagrams、ui-design），保留。
+
+### 上游新增 / 移除行（rc.5）
+
+对比 `dsh-base` 与 `dsh-web-app` 的 cordis.patch.yml（0.2.2-rc.1 → 0.2.2-rc.5）。处置已定并落到 `apps/desktop/resources/profile/cordis.patch.yml`：
+
+| 行 | 所属 | 变化 | 处置 |
+| --- | --- | --- | --- |
+| `agent-team`（dsh-agent-team，config maxTasks: 256） | dsh-base | 新增 | `disabled: true` —— Editor 不提供子代理和团队协作（ui-subagent 已关），写作搭档不能拿到团队工具 |
+| `tool-agent-team`（dsh-tool-agent-team） | dsh-base | 新增 | `disabled: true` —— 同上 |
+| `deepseek-account` | dsh-base | 包名 `dsh-deepseek-account-platform` 改为 `dsh-deepseek-account` | 跟随上游（非新增行） |
+| `tool-subagent-control` | dsh-base | 新增 `config.interrupt: false` | 跟随上游默认 |
+| `web` | dsh-base | 移除 `searchProvider: deepseek-official` 钉 | 跟随上游默认（见指南核对） |
+| `web-deepseek-api` | dsh-base | 移除 `apiKeyEnv: DEEPSEEK_API_KEY` | 跟随上游默认 |
+| `account-controller`（dsh-api-account-controller） | dsh-web-app | 移除 | 上游删除，profile 未引用 |
+| `ui-account-notifications`（dsh-client-ui-account-notifications） | dsh-web-app | 新增 | `disabled: true` —— 官方壳区域的账户通知 UI 由 Editor 外壳接管 |
+| `mcp-manager`（dsh-mcp-manager，inject `[credentials]`） | dsh-web-app | 新增 | 跟随上游默认（统一 MCP server 管理，实测 enabled + active） |
+| `office-to-pdf`（dsh-office-to-pdf） | dsh-web-app | 移除 | 上游删除，由 office-kit 组合替代 |
+| `office-kit`（dsh-office-kit，outputDirectory 指向 dshHomePath） | dsh-web-app | 新增 | 跟随上游默认（资料预览的 Office 文档可能依赖，实测 enabled + active） |
+| `workspace-dependencies`（dsh-tool-workspace-dependencies） | dsh-web-app | 新增 | 跟随上游默认（自带 disabled 守卫，无 `DSH_PRIMARY_RUNTIME` 时禁用，实测 disabled） |
+| `skill-office`（dsh-skill-office） | dsh-web-app | 新增 | `disabled: true` —— 写作搭档技能面只保留写作相关技能 |
+| `ui-agent-team`（dsh-client-ui-agent-team） | dsh-web-app | 新增 | `disabled: true` —— agent team UI，与 agent-team/tool-agent-team 一并关闭 |
+
+`@deepseek-ai/dsh` 依赖：新增 `dsh-cua-bundle`、`dsh-deepseek-chat-import`，移除 `dsh-experimental-agent-team-profile`。`dsh-web-app` 依赖：新增 `dsh-agent-tool-presentation`、`dsh-client-ui-account-notifications`、`dsh-client-ui-agent-team`、`dsh-mcp-manager`、`dsh-office-kit`、`dsh-skill-office`、`dsh-tool-office`、`dsh-tool-workspace-dependencies`；移除 `dsh-office-to-pdf`、`dsh-api-account-controller`（`tool-office` 与 `agent-tool-presentation` 在 `dsh-sdk-app` 组合挂载，未进 web-app 行）。
+
+上游 web-frontend 资产哈希变化，`scripts/scan-dsw-vars.mjs` 重新生成变量表 `dsw-vars.ts`（463 个变量）。
+
+### 验证记录（rc.5）
+
+- `pnpm typecheck`：通过。
+- `pnpm build`：通过（各 e2e 前置构建均成功）。
+- `pnpm test`：通过，219 个测试文件、1835 项通过、4 项跳过。
+- `node --test scripts/external-plugins.test.mjs`：10/10 通过。
+- `node --test scripts/check-ui-drift.test.mjs`：12/12 通过。
+- `node scripts/check-ui-drift.mjs --base 4adfd23`：无新增字面量违规（1 个改动 UI 文件）。
+- `node scripts/check-ui-design.mjs`：21 项通过。
+- `scripts/voice-input-patch.spec.mjs`：随 `pnpm test` 2/2 通过。
+- `pnpm test:e2e:composition`：通过（4 个组合物化，failures: []）。
+- `pnpm test:e2e:core-loop`：通过（failures: []）。
+- `pnpm test:e2e:on-demand-plugins`（`e2e/writing-models.mjs --optional-install`）：通过，`"ok":true`，含四个可选公共插件真实 npm 安装、工具即时生效、卸载与重启恢复；输出 `e2e/out/writing-models/1795350958796`。此前一轮清理阶段 `removeBundle` 超时为抖动。
+- rc.5 新增行守卫实测（dev profile 真实启动，`/api/pluginManager/listBundles` + `listPlugins`，脚本 `.dev/curation-inspect.mjs`）：`agent-team` / `tool-agent-team` / `ui-agent-team` / `ui-account-notifications` / `skill-office` 均 `enabled:false`；`mcp-manager` 与 `office-kit` `enabled:true` 且 `fiberPhase:'active'`；`workspace-dependencies` 由上游自带守卫 `enabled:false`。宿主 stdout 无 pending 条目、无不兼容警告；composition 与 core-loop e2e 均通过，未出现 ui-context-menu 式的依赖卡 pending。
+
+未运行：
+
+- `pnpm test:e2e:desktop` 及依赖 Electron 窗口的 settings-ui / settings-lifecycle / plugins-page / official-plugins / writing-shortcuts / layout-invariants：本轮未运行，上一轮同环境 Electron 无法启动的记录仍适用（见上文「未通过 / 未运行」）。
+- `pnpm pack:desktop`、`scripts/verify-desktop-package.mjs`、plugin-matrix、真实 `DEEPSEEK_API_KEY` 下的联网搜索。
+- Electron 窗口渲染冒烟：dev profile 真实启动已由 curation-inspect（web 方式起宿主）与 on-demand e2e 覆盖，Electron 壳本身未跑。不要把 10 月 / rc.1 桌面截图改标为 rc.5 证据。
+
+### 桌面退出登录验收清单
+
+本轮补了可在无 Electron、无真实 DeepSeek 账号下跑通的点击路径：
+
+1. 单元测试 `settings-models-account.spec.tsx`：点击「退出登录」→ 确认对话框 → 宿主推送 `credentials-changed` → 同一挂载实例显示「登录」。
+2. Playwright Chromium 夹具 `e2e/account-logout.mjs`（`pnpm test:e2e:account-logout`）：真实点击上述路径。截图 `e2e/out/account-logout/after/after-signout.png` 只证明夹具，不证明 Electron。
+
+父机在捆绑 rc.5 宿主上请按下列步骤补 Electron 验收，截图存 `e2e/out/account-logout/desktop/`：
+
+1. 仓库根执行 `pnpm build` 与 `node scripts/prepare-desktop-dev.mjs`。
+2. 启动桌面：`apps/desktop/node_modules/electron/dist` 下的 Electron 可执行文件，参数 `apps/desktop/dist/main.js`；环境变量 `DSH_HOME` 用隔离目录，`DSH_DESKTOP_CLI_PATH` 指向 `.dev/desktop-dsh-runtime-0.2.2-rc.5/lib/bin.js`，`DSH_DESKTOP_PROFILE_TEMPLATE` 指向 `.dev/desktop-profile-template`，`DSH_DESKTOP_USER_DATA_DIR` 指向该 home 下的 `electron-user-data`。也可沿用 `e2e/desktop.mjs` 的同一启动路径。
+3. 打开「设置 → 模型」。
+4. 在 DeepSeek Account 行点击「登录」，完成浏览器授权后回到设置页（不要关闭设置页）。
+5. 确认该行显示「退出登录」与资料名（或「已登录」）。
+6. 点击「退出登录」，确认对话框「退出 DeepSeek 账号？」出现，点确认。
+7. 期望：无需重开设置页，该行立刻恢复「登录」入口；已保存的 API 密钥不受影响。
+8. 再点「登录」，应再次打开浏览器授权页或出现「打开授权页」按钮。
