@@ -207,7 +207,13 @@ export type BotCheckResult = {
   promptChanged: boolean
   wrapUpRequested: boolean
 }
-export type BotHistoryRow = { seq: number; role: 'user' | 'assistant'; text: string; time: number }
+export type BotHistoryRow = {
+  seq: number
+  role: 'user' | 'assistant' | 'tool'
+  text: string
+  time: number
+  writingChange?: WritingChangeReceipt
+}
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
 export type WorkbenchRpcError = (

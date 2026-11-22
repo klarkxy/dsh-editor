@@ -470,6 +470,9 @@ export const zh = {
 
   'adapter.toolFallback': '工具 {id}',
   'adapter.legacyProposal': '旧版提案，未写入',
+  'adapter.legacyProposalApplied': '旧版提案，当时已写入',
+  'adapter.legacyProposalUndone': '旧版提案，当时已撤销',
+  'adapter.changeRecover': '写入已落盘，记录待核对',
   'adapter.memoryUpdate': '作品记忆更新',
   'adapter.notExecuted': '这项操作没有执行',
   'adapter.retried': '已改用其他方式继续',

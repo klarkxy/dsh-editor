@@ -472,6 +472,9 @@ export const en: { [K in keyof typeof zh]: string } = {
 
   'adapter.toolFallback': 'Tool {id}',
   'adapter.legacyProposal': 'Legacy proposal (not written)',
+  'adapter.legacyProposalApplied': 'Legacy proposal (written then)',
+  'adapter.legacyProposalUndone': 'Legacy proposal (undone then)',
+  'adapter.changeRecover': 'Write landed; journal still needs checking',
   'adapter.memoryUpdate': 'Work memory update',
   'adapter.notExecuted': 'This action was not run',
   'adapter.retried': 'Continued another way',

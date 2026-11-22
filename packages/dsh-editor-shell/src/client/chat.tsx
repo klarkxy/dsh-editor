@@ -96,7 +96,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onMoved, onLocate, onDraftDirtyChange, onHide, rewriteRequest, onRewriteConsumed }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onMoved?(from: string, to: string): void; onLocate?(path: string, excerpt: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void; rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }; onRewriteConsumed?(id: number): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onMoved, onLocate, onDraftDirtyChange, onHide, rewriteRequest, onRewriteConsumed }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; getActiveDocTitle?(): string | undefined; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onMoved?(from: string, to: string): void; onLocate?(path: string, excerpt: string, start?: number): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void; rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }; onRewriteConsumed?(id: number): void }) {
   const locale = useLocale()
   /* 搭档页头并入辅助栏页签行右端动作位；非栏内挂载（overlay/隐藏）退回内联页头。 */
   const actionsHost = useAuxRailActionsHost()
@@ -226,7 +226,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
     locale,
     onApplied: (path) => onWritten?.(path),
     onMoved: (from, to) => onMoved?.(from, to),
-    onLocate: (path, excerpt) => onLocate?.(path, excerpt),
+    onLocate: (path, excerpt, start) => onLocate?.(path, excerpt, start),
     refresh: (scope) => {
       if (scope === 'overview') return
       if (scope === 'tree') onWritten?.('')
@@ -342,7 +342,7 @@ export function Chat({ ctx, session, workspaceId, activePath, getActiveDocTitle,
       {segment.failed ? <div className="chat-bot-failed">{t('chat.botHistoryFailed')}</div>
         : (segment.rows ?? []).map((row) => <ChatRowView
             key={row.seq}
-            row={{ id: `bot-segment:${row.seq}`, role: row.role, text: row.text }}
+            row={{ id: `bot-segment:${row.seq}`, role: row.role, text: row.text, writingChange: row.writingChange }}
             ctx={ctx}
             sessionId={session.sessionId}
             locale={locale}

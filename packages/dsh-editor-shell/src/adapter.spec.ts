@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, isLegacyProposalResult, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -69,6 +69,28 @@ describe('DSH snapshot adapter', () => {
     /* 其他工具输出同形状文本不升级成回执行。 */
     const otherTool = toolResultRow({ kind: 'tool-result', seq: 16, callId: 'w', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
     expect(otherTool.writingChange).toBeUndefined()
+  })
+  it('recovers a writing_change card from a failed tool row that still recorded the journal id', () => {
+    const id = 'ab'.repeat(16)
+    const row = toolResultRow({
+      kind: 'tool-result', seq: 21, callId: 'wc', call: { name: 'writing_change', argsRaw: '{}' },
+      content: [{ type: 'text', text: `写入未完成（记录 ${id}）。磁盘忙` }], isError: true,
+    } as never)
+    expect(row.writingChange).toMatchObject({ id, status: 'applied', marker: 'dsh-editor.writing-change' })
+    expect(row.text).toBe('写入已落盘，记录待核对')
+  })
+  it('keeps a legacy proposal payload so the card can distinguish a landed receipt from never-written', () => {
+    const marker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: '项目总览.md', summary: '完善总览', oldText: '旧', newText: '新' })
+    const row = toolResultRow({
+      kind: 'tool-result', seq: 3, callId: 'proposal', call: { name: 'novel_propose', argsRaw: '{}' },
+      content: [{ type: 'text', text: marker }], isError: false,
+    } as never)
+    expect(isLegacyProposalResult(row.result)).toBe(true)
+    if (isLegacyProposalResult(row.result)) {
+      expect(row.result.proposal.summary).toBe('完善总览')
+      expect(row.result.receiptId).toBe('tool-result:3')
+    }
+    expect(row.detail).toBe('旧版提案，未写入')
   })
   it('surfaces novel_memory_update markers as memory-update rows for the review card', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory-update', version: 1, id: 'mu-1', path: '项目规则.md', summary: '记录结局走向', status: 'pending', createdAt: '2026-09-09T08:00:00.000Z' })

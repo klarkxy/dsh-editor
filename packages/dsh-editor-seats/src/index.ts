@@ -233,7 +233,7 @@ export type ShellMessageCardContext = {
    */
   onMoved?(from: string, to: string): void
   /** Optional: open `path` and reveal the first occurrence of `excerpt` in the open editor text. */
-  onLocate?(path: string, excerpt: string): void
+  onLocate?(path: string, excerpt: string, start?: number): void
   /** Ask the Shell to reload tree glyphs, the open document, or the cached overview. */
   refresh(scope: 'tree' | 'content' | 'overview'): void
   /** Show a short status line in the Shell chrome (Chat composer note today). */

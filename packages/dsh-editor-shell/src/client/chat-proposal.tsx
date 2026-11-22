@@ -13,6 +13,7 @@ import {
   errorMessage,
   isStaleFailure,
   partialApplyDetails,
+  safeRpcCall,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
@@ -603,4 +604,38 @@ export function ProposalCard(props: {
   );
 }
 
-/** author_observe 的作者确认卡。确认后由 Shell 把 observation 作为新一行追加进 authorMemory。 */
+/** 旧版提案只读：按当时审批回执区分「已写入 / 已撤销 / 从未写入」，不能再应用。 */
+export function LegacyProposalCard(props: {
+  ctx: ShellContext
+  sessionId: string
+  proposal: AuthorProposal
+  receiptId: string
+}) {
+  const [detail, setDetail] = useState(t('adapter.legacyProposal'))
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const result = await safeRpcCall<{ receipt: { state: 'applied' | 'undone' } | null }>(() => props.ctx.connection.rpc.call('/manuscript', 'proposal.receipt', {
+        sessionId: props.sessionId,
+        ...props.proposal,
+        receiptId: props.receiptId,
+      }))
+      if (!live) return
+      const state = result.ok ? result.value.receipt?.state : undefined
+      setDetail(state === 'applied' ? t('adapter.legacyProposalApplied')
+        : state === 'undone' ? t('adapter.legacyProposalUndone')
+          : t('adapter.legacyProposal'))
+    })()
+    return () => { live = false }
+  }, [props.sessionId, props.receiptId])
+  return (
+    <article className="proposal-card legacy" data-testid="dsh-chat-legacy-proposal" aria-label={t('adapter.legacyProposal')}>
+      <Text size="2" as="p">
+        {props.proposal.summary}
+      </Text>
+      <Text size="1" color="gray" mt="1" as="p">
+        {detail}
+      </Text>
+    </article>
+  )
+}

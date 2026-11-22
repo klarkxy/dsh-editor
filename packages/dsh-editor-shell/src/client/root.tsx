@@ -70,6 +70,8 @@ import { downloadExport } from '../model/export-dialog.ts'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { HistoryPanel } from './history-dialog.tsx'
 import { t, useLocale } from '../i18n/index.ts'
+import { desktopRewritePrompt } from './rewrite-request.ts'
+import { locateExcerpt } from './locate-excerpt.ts'
 
 const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog, Button: HostButton, Input: HostInput, TextArea: HostTextArea }
 
@@ -242,7 +244,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setRewriteRequest({
       id: ++rewriteRequestId.current,
       workspaceId: openWorkspaceId,
-      text: `请改写下面这段。文件：${input.path}\n改写要求：${instruction}\n请在回复中给出修改稿，不要直接写入文件。\n\n【待改写】\n${input.selection}`,
+      text: desktopRewritePrompt(input.path, input.selection, instruction),
     })
     return true
   }, [focusMode, assistantEnabled, chatSession, openWorkspaceId, workbench])
@@ -546,12 +548,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   /* 定位：打开目标文件并揭示第一处新文本。当前文档直读缓冲区与版本；
      其他文件先 file.read 拿文本和版本，命中则带着偏移 reveal，
      找不到或 excerpt 为空就只打开文件。 */
-  const onLocateWritten = useCallback((target: string, excerpt: string) => {
+  const onLocateWritten = useCallback((target: string, excerpt: string, start?: number) => {
     const handle = editorHandleRef.current
     const doc = handle?.getDocument()
     if (target === path && handle && doc) {
       const text = handle.getText()
-      const at = excerpt ? text.indexOf(excerpt) : -1
+      const at = locateExcerpt(text, excerpt, start)
       if (at >= 0) {
         openDocument(target, {
           path: target,
@@ -580,7 +582,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         openDocument(target)
         return
       }
-      const at = read.value.text.indexOf(excerpt)
+      const at = locateExcerpt(read.value.text, excerpt, start)
       if (at < 0) {
         openDocument(target)
         setWorkbenchNote(t('note.locateMiss'))

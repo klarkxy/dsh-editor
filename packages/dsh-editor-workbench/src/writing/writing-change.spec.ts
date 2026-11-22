@@ -2,9 +2,10 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readTextFile, type FileSystemLike, type FsDirEntryLike, type FsInfoLike, type FsPathInfoLike, type FsTargetLike, type FsWriteIntentLike, type SandboxExecutionPolicyLike } from 'dsh-manuscript/host-api'
+import { MAX_TEXT_BYTES, readTextFile, type FileSystemLike, type FsDirEntryLike, type FsInfoLike, type FsPathInfoLike, type FsTargetLike, type FsWriteIntentLike, type SandboxExecutionPolicyLike } from 'dsh-manuscript/host-api'
 import {
   applyEditsToText,
+  applyEditsWithRanges,
   applyWritingChange,
   getWritingChange,
   parseWritingChange,
@@ -314,5 +315,81 @@ describe('applyEditsToText', () => {
   it('rejects identical old/new text at parse time', () => {
     expect(() => parseWritingChange({ kind: 'edit', path: 'a.md', summary: 's', edits: [{ oldText: 'x', newText: 'x' }] }))
       .toThrow(WritingChangeError)
+  })
+
+  it('records after-ranges that still match in the rewritten file', () => {
+    const applied = applyEditsWithRanges('第一句。最后一句。', [
+      { oldText: '第一句', newText: '第一句改' },
+      { oldText: '最后一句', newText: '最后一句改' },
+    ])
+    expect(applied.text).toBe('第一句改。最后一句改。')
+    for (const edit of applied.edits) {
+      expect(applied.text.slice(edit.afterStart, edit.afterEnd)).toBe(edit.newText)
+    }
+  })
+})
+
+describe('writing_change review follow-ups', () => {
+  it('does not undo a later unique copy of the new text after the author rewrote the original sentence', async () => {
+    await fs.writeFile(path.join(root, '正文', '001.md'), '他住在北门。\n\n后记。')
+    const { receipt } = await applyWritingChange(access(), parseWritingChange({
+      kind: 'edit', path: '正文/001.md', summary: '改门',
+      edits: [{ oldText: '他住在北门', newText: '他住在南门' }],
+    }))
+    const rewritten = '他搬去了城外。\n\n后记。他住在南门。'
+    await fs.writeFile(path.join(root, '正文', '001.md'), rewritten)
+    await expect(undoWritingChange(access(), receipt.id)).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await text('正文/001.md')).toBe(rewritten)
+  })
+
+  it('journals a one-sentence edit on a normally editable long manuscript', async () => {
+    const body = `${'A'.repeat(1_200_000)}错字${'B'.repeat(80)}`
+    await fs.writeFile(path.join(root, '正文', '001.md'), body)
+    const { receipt } = await applyWritingChange(access(), parseWritingChange({
+      kind: 'edit', path: '正文/001.md', summary: '改一个字',
+      edits: [{ oldText: '错字', newText: '正字' }],
+    }))
+    expect(await text('正文/001.md')).toBe(`${'A'.repeat(1_200_000)}正字${'B'.repeat(80)}`)
+    const journal = path.join(root, '.dsh-editor', 'history', 'writing', `${receipt.id}.json`)
+    const stored = JSON.parse(await fs.readFile(journal, 'utf8')) as { files: Array<{ before: string | null; after: string | null; afterHash?: string }> }
+    expect(Buffer.byteLength(JSON.stringify(stored, null, 2))).toBeLessThanOrEqual(MAX_TEXT_BYTES)
+    expect(stored.files[0]?.before).toBeNull()
+    expect(stored.files[0]?.after).toBeNull()
+    expect(stored.files[0]?.afterHash).toMatch(/^[0-9a-f]{64}$/)
+    const undone = await undoWritingChange(access(), receipt.id)
+    expect(undone.receipt.status).toBe('undone')
+    expect(await text('正文/001.md')).toBe(body)
+  })
+
+  it('refuses to write auxiliary author rule files including root AGENTS.md', async () => {
+    await fs.writeFile(path.join(root, 'AGENTS.md'), '# 原规则\n')
+    expect(() => parseWritingChange({
+      kind: 'edit', path: 'AGENTS.md', summary: '改规则',
+      edits: [{ oldText: '原规则', newText: '第三方规则' }],
+    })).toThrow(WritingChangeError)
+    try {
+      parseWritingChange({
+        kind: 'edit', path: 'AGENTS.md', summary: '改规则',
+        edits: [{ oldText: '原规则', newText: '第三方规则' }],
+      })
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'BLOCKED' })
+    }
+    expect(await text('AGENTS.md')).toBe('# 原规则\n')
+    expect(await journalIds()).toHaveLength(0)
+  })
+
+  it('does not wait when a draft remains and draftTimeoutMs is 0', async () => {
+    await fs.writeFile(path.join(root, '正文', '001.md'), '原文。')
+    let waited = 0
+    await expect(applyWritingChange(access({ dirty: ['正文/001.md'] }), {
+      kind: 'edit', path: '正文/001.md', summary: 's', edits: [{ oldText: '原文', newText: '改后' }],
+    }, {
+      wait: async () => { waited += 1 },
+      draftPollMs: 200,
+      draftTimeoutMs: 0,
+    })).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(waited).toBe(0)
+    expect(await text('正文/001.md')).toBe('原文。')
   })
 })

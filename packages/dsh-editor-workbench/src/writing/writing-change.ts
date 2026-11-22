@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'
 import {
   createTextFile,
@@ -10,6 +10,7 @@ import {
   visibleTargetPath,
   writeTextFile,
 } from 'dsh-manuscript/host-api'
+import { isAuxiliaryAuthorFile } from 'dsh-editor-workspace-kit'
 import { mkdirSafe as mkdirSafeWalk } from '../kit/entries.ts'
 import { archiveDocument, listArchives, moveDocument, restoreArchive } from '../lifecycle/lifecycle.ts'
 import type { MemoryAccess } from '../memory/memory.ts'
@@ -18,6 +19,7 @@ import { applySplit, snapshotProposalTargets } from '../proposals/proposal-ops.t
 import {
   WRITING_CHANGE_MARKER,
   type WritingChangeEdit,
+  type WritingChangeFile,
   type WritingChangeKind,
   type WritingChangeReceipt,
   type WritingChangeRecord,
@@ -54,6 +56,88 @@ const HISTORY = '.dsh-editor/history/writing'
 const ID = /^[a-f0-9]{32}$/
 const MAX_EDITS = 50
 const MAX_RENAMES = 50
+const EDIT_CONTEXT = 64
+
+function textHash(text: string | null): string | undefined {
+  if (text === null) return undefined
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+function contextAround(text: string, start: number, end: number): { prefix: string; suffix: string } {
+  return {
+    prefix: text.slice(Math.max(0, start - EDIT_CONTEXT), start),
+    suffix: text.slice(end, Math.min(text.length, end + EDIT_CONTEXT)),
+  }
+}
+
+function withFileHashes(file: WritingChangeFile): WritingChangeFile {
+  return {
+    ...file,
+    ...(file.before !== null ? { beforeHash: textHash(file.before) } : {}),
+    ...(file.after !== null ? { afterHash: textHash(file.after) } : {}),
+  }
+}
+
+function compactRecord(record: StoredRecord): StoredRecord {
+  const text = JSON.stringify(record, null, 2)
+  if (Buffer.byteLength(text) <= MAX_TEXT_BYTES) return record
+  /* Edit journals keep hashes, ranges and local context; dropping the two full
+     copies is what lets a normally editable long manuscript record one sentence. */
+  if (record.kind !== 'edit') return record
+  return {
+    ...record,
+    files: record.files.map((file) => ({
+      path: file.path,
+      before: null,
+      after: null,
+      ...(file.beforeHash ? { beforeHash: file.beforeHash } : {}),
+      ...(file.afterHash ? { afterHash: file.afterHash } : {}),
+    })),
+  }
+}
+
+function fileMatchesAfter(entry: WritingChangeFile, current: { text: string } | null): boolean {
+  if (entry.after === null && !entry.afterHash) return current === null
+  if (current === null) return false
+  if (entry.after !== null && current.text === entry.after) return true
+  return Boolean(entry.afterHash && textHash(current.text) === entry.afterHash)
+}
+
+function locateReversible(current: string, edit: WritingChangeEdit): number {
+  if (edit.newText === '') return -1
+  const start = edit.afterStart
+  const end = edit.afterEnd
+  if (typeof start === 'number' && typeof end === 'number' && current.slice(start, end) === edit.newText) {
+    return start
+  }
+  const prefix = edit.prefix ?? ''
+  const suffix = edit.suffix ?? ''
+  const needles = [prefix + edit.newText + suffix]
+  if (suffix) needles.push(edit.newText + suffix)
+  if (prefix) needles.push(prefix + edit.newText)
+  const seen = new Set<string>()
+  for (const needle of needles) {
+    if (!needle || needle === edit.newText || seen.has(needle)) continue
+    seen.add(needle)
+    const at = findUniqueIndex(current, needle)
+    if (at < 0) continue
+    const inner = needle.indexOf(edit.newText)
+    if (inner < 0) continue
+    return at + inner
+  }
+  return -1
+}
+
+function reverseEdits(current: string, edits: readonly WritingChangeEdit[]): string {
+  const ordered = [...edits]
+    .filter((edit) => typeof edit.afterStart === 'number' && typeof edit.afterEnd === 'number')
+    .sort((a, b) => b.afterStart! - a.afterStart!)
+  let next = current
+  for (const edit of ordered) {
+    next = next.slice(0, edit.afterStart!) + edit.oldText + next.slice(edit.afterEnd!)
+  }
+  return next
+}
 
 type StoredRecord = WritingChangeRecord & { writing?: boolean }
 
@@ -78,8 +162,10 @@ async function optionalFile(files: WritingChangeAccess['files'], relative: strin
 }
 
 async function saveRecord(access: WritingChangeAccess, record: StoredRecord): Promise<void> {
-  const text = JSON.stringify(record, null, 2)
+  const stored = compactRecord(record)
+  const text = JSON.stringify(stored, null, 2)
   if (Buffer.byteLength(text) > MAX_TEXT_BYTES) throw new WritingChangeError('修改记录过大。', 'INVALID')
+  Object.assign(record, stored)
   await mkdirSafe(access.path, HISTORY)
   const relative = recordPath(record.id)
   const existing = await optionalFile(access.files, relative)
@@ -126,7 +212,7 @@ export async function getWritingChange(access: WritingChangeAccess, id: string):
   let complete = true
   for (const entry of record.files) {
     const current = await optionalFile(access.files, entry.path)
-    if (entry.after === null ? current !== null : current?.text !== entry.after) { complete = false; break }
+    if (!fileMatchesAfter(entry, current)) { complete = false; break }
   }
   if (complete) return { ...record, writing: false }
   return { ...record, writing: false, message: '上次写入可能未完成，请核对文件后再试。' }
@@ -143,6 +229,7 @@ async function waitForClearDraft(access: WritingChangeAccess, relative: string, 
   const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const poll = options.draftPollMs ?? 200
   const timeout = options.draftTimeoutMs ?? 3_000
+  if (timeout <= 0) throw new WritingChangeError(`《${relative}》有未保存的修改，作者正在编辑，稍后再试。`, 'BLOCKED')
   let elapsed = 0
   while (elapsed < timeout) {
     await wait(poll)
@@ -152,8 +239,14 @@ async function waitForClearDraft(access: WritingChangeAccess, relative: string, 
   throw new WritingChangeError(`《${relative}》有未保存的修改，作者正在编辑，稍后再试。`, 'BLOCKED')
 }
 
-async function guardDrafts(access: WritingChangeAccess, paths: readonly string[], options: WritingChangeOptions): Promise<void> {
+export async function guardDrafts(access: WritingChangeAccess, paths: readonly string[], options: WritingChangeOptions): Promise<void> {
   for (const relative of [...new Set(paths)]) await waitForClearDraft(access, relative, options)
+}
+
+function assertAuthorManuscript(relative: string): void {
+  if (isAuxiliaryAuthorFile(relative)) {
+    throw new WritingChangeError('作品规则文件不能由写作修改工具写入；规则只来自作者确认后的记忆维护。', 'BLOCKED')
+  }
 }
 
 function str(value: unknown, label: string): string {
@@ -180,17 +273,22 @@ export function parseWritingChange(value: unknown): WritingChangeInput {
       return { oldText: entry.oldText, newText: entry.newText }
     })
   }
-  if (kind === 'edit') return { kind, path: visibleTargetPath(v.path), summary, edits: parseEdits(v.edits) }
-  if (kind === 'create') return { kind, path: visibleTargetPath(v.path), summary, text: str(v.text, 'text') }
-  if (kind === 'split') return { kind, path: visibleTargetPath(v.path), summary, anchor: str(v.anchor, 'anchor'), newPath: visibleTargetPath(v.newPath) }
-  if (kind === 'merge') return { kind, path: visibleTargetPath(v.path), summary, sourcePath: visibleTargetPath(v.sourcePath) }
+  const manuscriptPath = (value: unknown): string => {
+    const relative = visibleTargetPath(value)
+    assertAuthorManuscript(relative)
+    return relative
+  }
+  if (kind === 'edit') return { kind, path: manuscriptPath(v.path), summary, edits: parseEdits(v.edits) }
+  if (kind === 'create') return { kind, path: manuscriptPath(v.path), summary, text: str(v.text, 'text') }
+  if (kind === 'split') return { kind, path: manuscriptPath(v.path), summary, anchor: str(v.anchor, 'anchor'), newPath: manuscriptPath(v.newPath) }
+  if (kind === 'merge') return { kind, path: manuscriptPath(v.path), summary, sourcePath: manuscriptPath(v.sourcePath) }
   const raw = v.renames
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_RENAMES) throw new WritingChangeError('renames 需要 1–50 项 { from, to }。', 'INVALID')
   const renames = raw.map((item): WritingChangeRename => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new WritingChangeError('renames 项必须是对象。', 'INVALID')
     const entry = item as Record<string, unknown>
     if (Object.keys(entry).some((key) => !['from', 'to'].includes(key))) throw new WritingChangeError('renames 项只能包含 from 和 to。', 'INVALID')
-    return { from: visibleTargetPath(entry.from), to: visibleTargetPath(entry.to) }
+    return { from: manuscriptPath(entry.from), to: manuscriptPath(entry.to) }
   })
   if (new Set([...renames.map((r) => r.from), ...renames.map((r) => r.to)]).size !== renames.length * 2) throw new WritingChangeError('renames 中存在重复或冲突的路径。', 'INVALID')
   return { kind, summary, renames }
@@ -198,28 +296,50 @@ export function parseWritingChange(value: unknown): WritingChangeInput {
 
 /** Apply every replacement to the current text; throws before touching anything on any invalid edit. */
 export function applyEditsToText(text: string, edits: readonly WritingChangeEdit[]): string {
+  return applyEditsWithRanges(text, edits).text
+}
+
+export function applyEditsWithRanges(
+  text: string,
+  edits: readonly WritingChangeEdit[],
+): { text: string; edits: WritingChangeEdit[] } {
   if (edits.length === 1 && edits[0]!.oldText === '') {
     if (text.trim()) throw new WritingChangeError('oldText 为空只能填充当前为空的文件。', 'INVALID')
-    return edits[0]!.newText
+    const after = edits[0]!.newText
+    return { text: after, edits: [{ ...edits[0]!, afterStart: 0, afterEnd: after.length, prefix: '', suffix: '' }] }
   }
   if (edits.some((edit) => edit.oldText === '')) throw new WritingChangeError('oldText 为空只能作为唯一一处修改填充空文件。', 'INVALID')
   const ranges = edits.map((edit, index) => {
     const at = findUniqueIndex(text, edit.oldText)
     if (at === -1) throw new WritingChangeError(`第 ${index + 1} 处原文在文件中找不到，请重新读取文件后再修改。`, 'STALE')
     if (at === -2) throw new WritingChangeError(`第 ${index + 1} 处原文在文件中出现多次，请提供更长的唯一片段。`, 'AMBIGUOUS')
-    return { at, end: at + edit.oldText.length, edit }
+    return { at, end: at + edit.oldText.length, edit, index }
   }).sort((a, b) => a.at - b.at)
   for (let i = 1; i < ranges.length; i += 1) {
     if (ranges[i]!.at < ranges[i - 1]!.end) throw new WritingChangeError('替换片段相互重叠，请合并为不重叠的修改。', 'INVALID')
   }
   let next = text
-  for (const range of [...ranges].reverse()) {
-    next = next.slice(0, range.at) + range.edit.newText + next.slice(range.end)
+  let shift = 0
+  const annotated = [...edits]
+  for (const range of ranges) {
+    const start = range.at + shift
+    const end = start + range.edit.newText.length
+    next = next.slice(0, start) + range.edit.newText + next.slice(start + range.edit.oldText.length)
+    shift += range.edit.newText.length - range.edit.oldText.length
+    const around = contextAround(next, start, end)
+    annotated[range.index] = {
+      oldText: range.edit.oldText,
+      newText: range.edit.newText,
+      afterStart: start,
+      afterEnd: end,
+      prefix: around.prefix,
+      suffix: around.suffix,
+    }
   }
-  return next
+  return { text: next, edits: annotated }
 }
 
-function draftGuardPaths(input: WritingChangeInput): string[] {
+export function draftGuardPaths(input: WritingChangeInput): string[] {
   switch (input.kind) {
     case 'edit':
     case 'create': return [input.path]
@@ -245,17 +365,18 @@ export async function applyWritingChange(
   }
   if (input.kind === 'edit') {
     const current = await readTextFile(access.files, input.path)
-    const after = applyEditsToText(current.text, input.edits)
-    record.files = [{ path: input.path, before: current.text, after }]
+    const applied = applyEditsWithRanges(current.text, input.edits)
+    record.edits = applied.edits
+    record.files = [withFileHashes({ path: input.path, before: current.text, after: applied.text })]
     record.writing = true
     await saveRecord(access, record)
     try {
-      await writeTextFile(access.files, input.path, after, current.version)
+      await writeTextFile(access.files, input.path, applied.text, current.version)
     } catch (error) { throw await journalFailure(access, record, error) }
   } else if (input.kind === 'create') {
     const proposal = { kind: 'create' as const, path: input.path, text: input.text, targetPolicy: 'exclusive' as const }
     const prepared = await prepareCreate(access.files, proposal)
-    record.files = [{ path: input.path, before: null, after: input.text }]
+    record.files = [withFileHashes({ path: input.path, before: null, after: input.text })]
     record.writing = true
     await saveRecord(access, record)
     try {
@@ -269,8 +390,8 @@ export async function applyWritingChange(
     const head = current.text.slice(0, anchorAt).trimEnd()
     const tail = current.text.slice(anchorAt)
     record.files = [
-      { path: input.path, before: current.text, after: head },
-      { path: input.newPath, before: null, after: tail },
+      withFileHashes({ path: input.path, before: current.text, after: head }),
+      withFileHashes({ path: input.newPath, before: null, after: tail }),
     ]
     record.writing = true
     await saveRecord(access, record)
@@ -284,8 +405,8 @@ export async function applyWritingChange(
     ])
     const merged = `${target.text.trimEnd()}\n\n${source.text.trim()}\n`
     record.files = [
-      { path: input.path, before: target.text, after: merged },
-      { path: input.sourcePath, before: source.text, after: null },
+      withFileHashes({ path: input.path, before: target.text, after: merged }),
+      withFileHashes({ path: input.sourcePath, before: source.text, after: null }),
     ]
     record.writing = true
     await saveRecord(access, record)
@@ -311,8 +432,8 @@ export async function applyWritingChange(
     record.files = input.renames.flatMap((entry) => {
       const text = versions.get(entry.from)!.text
       return [
-        { path: entry.from, before: text, after: null },
-        { path: entry.to, before: null, after: text },
+        withFileHashes({ path: entry.from, before: text, after: null }),
+        withFileHashes({ path: entry.to, before: null, after: text }),
       ]
     })
     record.writing = true
@@ -328,15 +449,20 @@ export async function applyWritingChange(
     } catch (error) { throw await journalFailure(access, record, error) }
   }
   record.writing = false
-  await saveRecord(access, record)
+  try {
+    await saveRecord(access, record)
+  } catch {
+    record.message = record.message ?? '写入已落盘，记录保存未完成。'
+  }
   return { record, receipt: changeReceipt(record) }
 }
 
 async function journalFailure(access: WritingChangeAccess, record: StoredRecord, error: unknown): Promise<Error> {
   // Keep writing=true when a commit may have landed; get() recovers from file contents.
-  record.message = error instanceof Error ? error.message : String(error)
+  const detail = error instanceof Error ? error.message : String(error)
+  record.message = detail
   try { await saveRecord({ ...access, files: { ...access.files, signal: undefined } }, record) } catch { /* the pre-write journal remains the recovery source */ }
-  return error instanceof Error ? error : new WritingChangeError(String(error), 'IO')
+  return new WritingChangeError(`写入未完成（记录 ${record.id}）。${detail}`, 'IO')
 }
 
 export async function undoWritingChange(
@@ -353,12 +479,13 @@ export async function undoWritingChange(
     const file = record.files[0]!
     const current = await optionalFile(access.files, file.path)
     if (!current) throw new WritingChangeError(`《${file.path}》已不存在，无法自动撤销。`, 'STALE')
-    if (current.text === file.after) {
-      await writeTextFile(access.files, file.path, file.before ?? '', current.version)
+    const edits = record.edits ?? []
+    if (fileMatchesAfter(file, current)) {
+      const restored = file.before !== null ? file.before : reverseEdits(current.text, edits)
+      await writeTextFile(access.files, file.path, restored, current.version)
     } else {
-      const edits = record.edits ?? []
-      const reversible = edits.map((edit) => ({ at: findUniqueIndex(current.text, edit.newText), edit }))
-      const applicable = reversible.filter((entry) => entry.at >= 0)
+      const located = edits.map((edit) => ({ at: locateReversible(current.text, edit), edit }))
+      const applicable = located.filter((entry) => entry.at >= 0)
         .map((entry) => ({ at: entry.at, end: entry.at + entry.edit.newText.length, edit: entry.edit }))
         .sort((a, b) => a.at - b.at)
       const skipped = edits.length - applicable.length

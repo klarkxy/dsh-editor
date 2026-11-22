@@ -1,7 +1,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { withWorkspaceWrite } from 'dsh-manuscript/host-api'
 import { WRITING_CHANGE_TOOL_NAME } from './change-contracts.ts'
-import { applyWritingChange, parseWritingChange, type WritingChangeAccess } from './writing-change.ts'
+import { applyWritingChange, draftGuardPaths, guardDrafts, parseWritingChange, type WritingChangeAccess } from './writing-change.ts'
 
 /** Direct write: execute performs the change inside the workspace write queue and returns a receipt. */
 export function createWritingChangeTool(resolve: (sessionId: string, signal: AbortSignal) => Promise<WritingChangeAccess>) {
@@ -64,7 +64,14 @@ export function createWritingChangeTool(resolve: (sessionId: string, signal: Abo
       const sessionId = exec.agent?.session?.id
       if (!sessionId) throw new Error('写作修改工具需要当前执行会话。')
       const access = await resolve(String(sessionId), exec.signal)
-      return withWorkspaceWrite(access.rootKey, async () => (await applyWritingChange(access, parseWritingChange(args))).receipt)
+      const input = parseWritingChange(args)
+      /* Poll drafts before taking the workspace write lock so the author's
+         save is not queued behind the partner's wait. Re-check inside the lock
+         without waiting. */
+      await guardDrafts(access, draftGuardPaths(input), {})
+      return withWorkspaceWrite(access.rootKey, async () => (
+        await applyWritingChange(access, input, { draftPollMs: 0, draftTimeoutMs: 0 })
+      ).receipt)
     },
   })
 }

@@ -11,6 +11,7 @@ export function Disclosure(props: {
   onOpenChange?(open: boolean): void
   children?: ReactNode
   className?: string
+  summaryTestId?: string
 }) {
   return (
     <CollapsiblePrimitive.Root
@@ -19,7 +20,7 @@ export function Disclosure(props: {
       defaultOpen={props.defaultOpen}
       onOpenChange={props.onOpenChange}
     >
-      <CollapsiblePrimitive.Trigger className="dsh-disclosure__summary">
+      <CollapsiblePrimitive.Trigger className="dsh-disclosure__summary" data-testid={props.summaryTestId}>
         <span className="dsh-disclosure__chevron"><ChevronRightIcon size="sm" /></span>
         {props.summary}
       </CollapsiblePrimitive.Trigger>

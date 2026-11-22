@@ -20,6 +20,7 @@ import {
 import {
   answerApproval,
   answerQuestions,
+  isLegacyProposalResult,
   type ChatRow,
   type PendingInteraction,
   type QuestionAnswerItem,
@@ -32,6 +33,7 @@ import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { Disclosure } from '../ui/disclosure.tsx'
 import { t, type Locale } from '../i18n/index.ts'
 import { WritingChangeCard } from './chat-writing-change.tsx'
+import { LegacyProposalCard } from './chat-proposal.tsx'
 import { displayTreeFileName } from '../project-files.ts'
 import type { ShellContext } from './shared.ts'
 
@@ -420,6 +422,13 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
       receipt={row.writingChange}
       live={props.enter}
       messageCardContext={props.messageCardContext} />
+  );
+  if (isLegacyProposalResult(row.result)) return (
+    <LegacyProposalCard
+      ctx={props.ctx}
+      sessionId={props.sessionId}
+      proposal={row.result.proposal}
+      receiptId={row.result.receiptId} />
   );
   const registered = row.toolName ? props.messageCards?.get(row.toolName) : undefined
   const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: props.messageCardContext })

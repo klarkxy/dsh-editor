@@ -5,9 +5,24 @@ export const WRITING_CHANGE_MARKER = 'dsh-editor.writing-change'
 
 export type WritingChangeKind = 'edit' | 'create' | 'split' | 'merge' | 'renames'
 export type WritingChangeStatus = 'applied' | 'undone'
-export type WritingChangeEdit = { oldText: string; newText: string }
+export type WritingChangeEdit = {
+  oldText: string
+  newText: string
+  /** Inclusive start of `newText` in the post-write file; omitted on the tool input. */
+  afterStart?: number
+  afterEnd?: number
+  /** Surrounding snapshot of the post-write file, used to map the range after later edits. */
+  prefix?: string
+  suffix?: string
+}
 export type WritingChangeRename = { from: string; to: string }
-export type WritingChangeFile = { path: string; before: string | null; after: string | null }
+export type WritingChangeFile = {
+  path: string
+  before: string | null
+  after: string | null
+  beforeHash?: string
+  afterHash?: string
+}
 
 export type WritingChangeReceipt = {
   marker: typeof WRITING_CHANGE_MARKER

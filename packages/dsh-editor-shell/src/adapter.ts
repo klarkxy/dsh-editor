@@ -16,7 +16,7 @@ import { AUTHOR_OBSERVE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
-import { parseWritingChangeReceipt, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from 'dsh-editor-workbench/contracts'
+import { parseWritingChangeReceipt, WRITING_CHANGE_MARKER, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 
 import { isNovelIndexJobPrompt } from './novel-index.ts'
@@ -29,6 +29,14 @@ export type AuthorProposal = ProposalMarker | WritingProposalV2
 
 export function parseAuthorProposal(text: string): AuthorProposal | undefined {
   return parseWritingProposalMarker(text) ?? parseProposalMarker(text)
+}
+
+export type LegacyProposalResult = { proposal: AuthorProposal; receiptId: string }
+
+export function isLegacyProposalResult(value: unknown): value is LegacyProposalResult {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as { proposal?: { marker?: unknown }; receiptId?: unknown }
+  return typeof entry.receiptId === 'string' && entry.proposal?.marker === 'dsh-editor.proposal'
 }
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list', AUTHOR_OBSERVE_TOOL_NAME])
@@ -171,10 +179,25 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   if (writingChange) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: writingChange.summary, toolName, result: writingChange, writingChange }
   }
-  /* 旧版提案行只读展示：不再调用任何 prepare/apply 端点，也不带操作。 */
+  if (name === WRITING_CHANGE_TOOL_NAME && node.isError) {
+    const recovered = body.match(/记录 ([a-f0-9]{32})/)
+    if (recovered) {
+      const stub: WritingChangeReceipt = {
+        marker: WRITING_CHANGE_MARKER, version: 1, id: recovered[1]!,
+        kind: 'edit', summary: t('adapter.changeRecover'), status: 'applied',
+        paths: [], count: 0, message: body.split('\n').map((line) => line.trim()).find(Boolean),
+      }
+      return { id: `tool-result:${node.seq}`, role: 'tool', text: stub.summary, toolName, result: stub, writingChange: stub }
+    }
+  }
+  /* 旧版提案行只读展示：不再调用任何 prepare/apply 端点。回执查询区分当时已写入与从未写入。 */
   const proposal = name === 'novel_propose' || name === WRITING_PROPOSE_TOOL_NAME ? parseAuthorProposal(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: t('adapter.legacyProposal'), toolName }
+    return {
+      id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary,
+      detail: t('adapter.legacyProposal'), toolName,
+      result: { proposal, receiptId: `tool-result:${node.seq}` },
+    }
   }
   const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
   if (memoryUpdate) {

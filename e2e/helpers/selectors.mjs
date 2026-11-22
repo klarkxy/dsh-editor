@@ -241,6 +241,8 @@ export const S = Object.freeze({
   changeCardUndone: '[data-testid="dsh-chat-writing-change"].undone',
   changeLocate: '[data-testid="dsh-change-locate"]',
   changeUndo: '[data-testid="dsh-change-undo"]',
+  changeDiffSummary: '[data-testid="dsh-change-diff-summary"]',
+  changeHunks: '[data-testid="dsh-proposal-hunks"]',
   proposalHunkAdd: '.proposal-hunk-line.is-add',
   proposalHunkDel: '.proposal-hunk-line.is-del',
   proposalHunkGap: '.proposal-hunk-gap',

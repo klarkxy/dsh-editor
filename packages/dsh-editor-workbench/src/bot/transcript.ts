@@ -1,4 +1,5 @@
 import { BOT_INIT_SENTINEL } from '../contracts/channel.ts'
+import { parseWritingChangeReceipt, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from '../writing/change-contracts.ts'
 
 /** Structural check mirroring dsh-compaction's COMPACT_CHECKPOINT_MARKER — avoids a runtime package dep. */
 function isCompactCheckpointSource(source: unknown): boolean {
@@ -7,7 +8,13 @@ function isCompactCheckpointSource(source: unknown): boolean {
 
 export { BOT_INIT_SENTINEL }
 
-export type BotHistoryRow = { seq: number; role: 'user' | 'assistant'; text: string; time: number }
+export type BotHistoryRow = {
+  seq: number
+  role: 'user' | 'assistant' | 'tool'
+  text: string
+  time: number
+  writingChange?: WritingChangeReceipt
+}
 
 /** Shared CJK-aware estimator used by the handoff pipeline and tail budgets. */
 export function estimateTokens(text: string): number {
@@ -64,6 +71,34 @@ export function transcriptRows(events: readonly SessionEventLike[]): BotHistoryR
     }
   }
   return rows
+}
+
+function writingChangeFromEvent(event: SessionEventLike): WritingChangeReceipt | undefined {
+  const data = event.data
+  if (!data || typeof data !== 'object') return undefined
+  const record = data as Record<string, unknown>
+  const name = typeof record['name'] === 'string' ? record['name']
+    : typeof record['toolName'] === 'string' ? record['toolName']
+      : (record['call'] && typeof record['call'] === 'object' && typeof (record['call'] as { name?: unknown }).name === 'string'
+        ? (record['call'] as { name: string }).name : undefined)
+  if (name !== undefined && name !== WRITING_CHANGE_TOOL_NAME) return undefined
+  const text = typeof record['content'] === 'string' ? record['content'] : textBlocks(data)
+  return parseWritingChangeReceipt(text)
+}
+
+/** Author-facing history: transcript rows plus verified writing_change receipts.
+ *  Handoff/recall keep using transcriptRows so summaries stay text-only. */
+export function transcriptDisplayRows(events: readonly SessionEventLike[]): BotHistoryRow[] {
+  const rows = transcriptRows(events)
+  const extras: BotHistoryRow[] = []
+  for (const event of events) {
+    if (event.type !== 'tool/result' && event.type !== 'tool-result') continue
+    const receipt = writingChangeFromEvent(event)
+    if (!receipt) continue
+    extras.push({ seq: event.seq, role: 'tool', text: receipt.summary, time: eventTime(event), writingChange: receipt })
+  }
+  if (extras.length === 0) return rows
+  return [...rows, ...extras].sort((a, b) => a.seq - b.seq)
 }
 
 /** Whole exchanges: an author message and everything until the next author message, newest first. */

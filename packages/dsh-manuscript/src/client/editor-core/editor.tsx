@@ -7,6 +7,7 @@ import { EditorView } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
 import { openFindPanel, openReplacePanel, revealEditorRange } from './search.ts'
 import { rebaseExternal } from './external-sync.ts'
+import { fromEditorLf, toEditorChanges, toEditorLf } from './editor-newlines.ts'
 import { externalSync, setAgentChangesEffect } from './codemirror.ts'
 import { selectParagraphInView } from './paragraph-selection.ts'
 import { EditorChrome } from './editor-chrome.tsx'
@@ -705,20 +706,20 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     const offset = paperOffsetRef.current
     const projectedMerged = paperProjection.project(current.path, rebase.merged)
     if (projectedMerged.offset !== offset) return 'unavailable'
-    const changes = rebase.changes.map((change) => ({ from: change.from - offset, to: change.to - offset, insert: change.insert }))
+    const changes = toEditorChanges(mine, rebase.changes, offset)
     const viewDoc = view.state.doc.toString()
-    if (viewDoc !== paperProjection.project(current.path, mine).text) return 'unavailable'
+    if (viewDoc !== toEditorLf(paperProjection.project(current.path, mine).text)) return 'unavailable'
     let simulated = viewDoc
     for (const change of [...changes].sort((a, b) => b.from - a.from)) {
       simulated = simulated.slice(0, change.from) + change.insert + simulated.slice(change.to)
     }
-    if (simulated !== projectedMerged.text) return 'unavailable'
+    if (simulated !== toEditorLf(projectedMerged.text)) return 'unavailable'
     view.dispatch({
       changes,
       annotations: externalSync.of(true),
-      effects: setAgentChangesEffect.of(rebase.highlights.map((r) => ({ from: r.from - offset, to: r.to - offset }))),
+      effects: setAgentChangesEffect.of(toEditorChanges(mine, rebase.highlights.map((r) => ({ from: r.from, to: r.to, insert: '' })), offset).map((r) => ({ from: r.from, to: r.to }))),
     })
-    if (view.state.doc.toString() !== projectedMerged.text) return 'unavailable'
+    if (view.state.doc.toString() !== toEditorLf(projectedMerged.text)) return 'unavailable'
     const next = { ...current, text: diskText, version: diskVersion }
     docRef.current = next
     setDoc(next)
@@ -876,7 +877,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   })
   callbacksRef.current = {
     setTextFromPaper: (paper: string) => {
-      setText(paperProjection.replace(path, textRef.current, paper), true)
+      const originalPaper = paperProjection.project(path, textRef.current).text
+      setText(paperProjection.replace(path, textRef.current, fromEditorLf(paper, originalPaper)), true)
       setUserEditRevision((old) => old + 1)
       scheduleTextFlush()
     },

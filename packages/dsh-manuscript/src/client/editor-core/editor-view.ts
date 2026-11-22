@@ -7,6 +7,7 @@ import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, paperEscapePriori
 import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
 import { contextMenuSource, shouldPreserveSelectionOnContextMouseDown, type EditorContextMenuEvent } from './editor-clipboard.ts'
 import type { EditorCorePaperProjection, EditorCoreProps } from './editor-contracts.ts'
+import { toEditorLf } from './editor-newlines.ts'
 
 /** Stable dispatch from CodeMirror listeners to the current editor render. */
 export type PaperViewCallbacks = {
@@ -218,7 +219,7 @@ export function usePaperView({
     const generation = documentGenerationRef.current
     const changedDocument = syncedGenerationRef.current !== generation
     if (changedDocument) view.dispatch({ effects: writingCompartments.current.history.reconfigure([]) })
-    const target = paperProjection.project(path, textRef.current).text
+    const target = toEditorLf(paperProjection.project(path, textRef.current).text)
     const current = view.state.doc.toString()
     if (current !== target) {
       const pending = pendingCursorRef.current

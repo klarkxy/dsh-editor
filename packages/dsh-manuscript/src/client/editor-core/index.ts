@@ -59,6 +59,13 @@ export {
 export { openFindPanel, openReplacePanel } from './search.ts'
 export { diffText, rebaseExternal, type ExternalChange, type RebaseResult } from './external-sync.ts'
 export {
+  detectLineSeparator,
+  fromEditorLf,
+  toEditorChanges,
+  toEditorLf,
+  type EditorLineSeparator,
+} from './editor-newlines.ts'
+export {
   WRITING_PROPOSAL_BASIS_MAX,
   WRITING_PROPOSAL_LABEL_MAX_CHARS,
   WRITING_PROPOSAL_MARKER,

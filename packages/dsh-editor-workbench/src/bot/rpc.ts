@@ -4,7 +4,7 @@ import { listDir, readTextFile, type WorkspaceFileContext } from 'dsh-manuscript
 import type { WorkbenchHandlers, WorkbenchRequestContext } from '../rpc/types.ts'
 import { str } from '../rpc/types.ts'
 import { loadBotState, saveBotState, segmentOf, updateBotState, type BotRecap, type BotSegment, type BotState } from './state.ts'
-import { transcriptRows, type SessionEventLike } from './transcript.ts'
+import { transcriptDisplayRows, transcriptRows, type SessionEventLike } from './transcript.ts'
 import { buildHandoff } from './pipeline.ts'
 import { buildInitDigest, buildInitPrompt } from './digest.ts'
 import { summarizeSession } from './summary.ts'
@@ -231,7 +231,7 @@ export function botHandlers(ctx: Context, deps: BotRpcDeps): WorkbenchHandlers {
         const state = await loadBotState(root)
         if (!segmentOf(state, segmentSessionId)) throw new Error(`bot.history: ${segmentSessionId} is not a segment of this work`)
         try {
-          const rows = transcriptRows(await deps.readEvents(segmentSessionId))
+          const rows = transcriptDisplayRows(await deps.readEvents(segmentSessionId))
           return { rows: rows.slice(-400) }
         } catch (error) {
           if (isMissingSessionError(error)) return { rows: [], missing: true }

@@ -40,7 +40,7 @@ const baseReceipt = {
 const record = {
   receipt: baseReceipt,
   files: [{ path, before: '旧句。', after: '新句。' }],
-  edits: [{ oldText: '旧句。', newText: '新句。' }],
+  edits: [{ oldText: '旧句。', newText: '新句。', afterStart: 0, afterEnd: 3 }],
 }
 const appliedPaths = []
 const moved = []
@@ -67,7 +67,7 @@ const messageCardContext = {
   sessionId: 'fixture-session', locale: 'zh',
   onApplied: p => appliedPaths.push(p),
   onMoved: (from, to) => moved.push([from, to]),
-  onLocate: (p, excerpt) => located.push([p, excerpt]),
+  onLocate: (p, excerpt, start) => located.push([p, excerpt, start]),
   refresh: () => {},
   note: () => {},
 }
@@ -122,10 +122,10 @@ try {
     assert.match(await page.locator(S.changeCard).innerText(), /已写入/)
     // 定位：调用 onLocate 带上目标路径与第一处新文本。
     await page.getByRole('button', { name: '定位', exact: true }).click()
-    assert.deepEqual(await page.evaluate(() => window.probe.located), [['正文/001.md', '新句。']])
+    assert.deepEqual(await page.evaluate(() => window.probe.located), [['正文/001.md', '新句。', 0]])
     // 查看改动：disclosure 展开渲染 diff。
-    await page.locator(`${S.changeCard} .dsh-disclosure__summary`).click()
-    assert.ok(await page.locator(`${S.changeCard} .proposal-hunks`).count() >= 1)
+    await page.locator(S.changeDiffSummary).click()
+    assert.ok(await page.locator(S.changeHunks).count() >= 1)
     // 撤销成功：状态翻转为已撤销，消息可见，路径刷新。
     await page.getByRole('button', { name: '撤销', exact: true }).click()
     await page.locator(S.changeCardUndone).waitFor()
@@ -136,8 +136,8 @@ try {
     // applied 展开「查看改动」后的元素截图。
     await page.goto(`${origin}/?mode=applied&theme=${theme}`)
     await page.locator(S.changeCard).waitFor()
-    await page.locator(`${S.changeCard} .dsh-disclosure__summary`).click()
-    await page.locator(`${S.changeCard} .proposal-hunks`).waitFor()
+    await page.locator(S.changeDiffSummary).click()
+    await page.locator(S.changeHunks).waitFor()
     await page.locator(S.changeCard).screenshot({ path: resolve(output, `applied-expanded-${theme}.png`) })
     // 撤销被拒：错误以可见文本呈现，卡保持 applied。
     await page.goto(`${origin}/?mode=undo-refused&theme=${theme}`)

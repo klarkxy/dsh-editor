@@ -89,7 +89,7 @@ export function WritingChangeCard(props: {
   const locate = () => {
     const target = files.find((file) => file.after !== null)?.path ?? receipt.paths[0]
     if (!target) return
-    props.messageCardContext.onLocate?.(target, edits?.[0]?.newText ?? '')
+    props.messageCardContext.onLocate?.(target, edits?.[0]?.newText ?? '', edits?.[0]?.afterStart)
   }
 
   const headline = receipt.kind === 'edit'
@@ -136,7 +136,7 @@ export function WritingChangeCard(props: {
         {status === 'undone' ? <SuccessMark /> : null}
         {note}
       </Text> : null}
-      <Disclosure className="writing-change-diff" summary={t('chat.changeViewDiff')}>
+      <Disclosure className="writing-change-diff" summary={t('chat.changeViewDiff')} summaryTestId="dsh-change-diff-summary">
         <Flex direction="column" gap="3">
           {files.map((file) => <section key={file.path} className="writing-change-file">
             <Text size="1" color="gray">
