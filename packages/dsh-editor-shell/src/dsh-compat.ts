@@ -179,6 +179,13 @@ export type AccountView = {
   attempt: AccountSignInAttempt | null
 }
 
+/* rc.5 account/watch 的流元素是事件壳：真正的快照在 `state` 里,
+   `type` 区分回放快照与凭据变更(消费侧只需要 `state`)。 */
+export type AccountUpdate = {
+  type: 'snapshot' | 'credentials-changed'
+  state: AccountView
+}
+
 export type AccountProfileView = {
   id: string | null
   name: string | null
@@ -265,8 +272,8 @@ export type EditorRemote = {
     signOut(client: AccountClientMetadata): Promise<RpcResult<AccountView>>
     getProfile(client: AccountClientMetadata): Promise<RpcResult<AccountProfileResult | null>>
     hasRunningAccountTasks(): Promise<RpcResult<boolean>>
-    /** Streams the full state once, then every change; ends/errors on carrier loss. */
-    watch(signal?: AbortSignal): AsyncIterable<AccountView> & { dispose(): void }
+    /** Streams `{type, state}` events: the full state once, then every change; ends/errors on carrier loss. */
+    watch(signal?: AbortSignal): AsyncIterable<AccountUpdate> & { dispose(): void }
   }
 }
 

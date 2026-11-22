@@ -161,7 +161,7 @@ try {
     ['@deepseek-ai/dsh-client-ui-shortcuts', true],
     ['@deepseek-ai/dsh-client-resources', true],
     ['@deepseek-ai/dsh-client-ui-sidebar-documentpreview', true],
-    ['@deepseek-ai/dsh-office-to-pdf', true],
+    ['@deepseek-ai/dsh-office-kit', true],
     ['@deepseek-ai/dsh-mcp-resources', false],
   ]
   report.capabilities = []

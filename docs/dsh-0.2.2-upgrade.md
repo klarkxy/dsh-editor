@@ -120,7 +120,16 @@ plugin-fast-adapt 的 `run.mjs` 对全部 11 个 `packages/*` 与 `apps/desktop`
 - **working-directory-tool-removed（2 处）**、**cordis-loader-entry-validation（1 处）**、**ptc-tool-result-inspection（2 处）**：仓内无 `tool-working-directory` 行、无 `applyEntryPatches` / `EntryTree` 使用，命中的是自有 `tool.output.render` 测试辅助——误报。
 - apps/desktop 仅 1 条 medium 命中（`profile.ts` 的 `PEER_PACKAGES` 列表泛词匹配 `dsh-llm`）——误报。
 
-扫描环境说明：各报告内 "tsconfig 假绿" 与冒烟阻断是扫描器在未构建状态解析 workspace paths、无法加载同级 workspace 依赖所致，仓库自身 `pnpm typecheck`、`pnpm build` 通过；`panel-base` 首次扫描因子进程 spawn 未给带空格的 node 路径加引号而失败，改用短路径 `C:\PROGRA~1\nodejs\node.exe` 重跑完成。签名差分因无 rc.1 基线跳过，rc.5 签名已留存供下次差分。日志：`.dev/upgrade-025/scan-*.log`。
+扫描环境说明：各报告内 "tsconfig 假绿" 与冒烟阻断是扫描器在未构建状态解析 workspace paths、无法加载同级 workspace 依赖所致，仓库自身 `pnpm typecheck`、`pnpm build` 通过；`panel-base` 首次扫描因子进程 spawn 未给带空格的 node 路径加引号而失败，改用短路径 `C:\PROGR~1\nodejs\node.exe` 重跑完成。签名差分因无 rc.1 基线跳过，rc.5 签名已留存供下次差分。日志：`.dev/upgrade-025/scan-*.log`。
+
+### 审查补修（rc.5）
+
+评审补查发现的四处遗漏，均已修复：
+
+- **account/watch 流元素形状**：rc.5 的 `dsh-deepseek-account` 把 `watch` / `watchState` 流元素从 `AccountView` 快照改为 `AccountUpdate` 事件（`{ type: 'snapshot' | 'credentials-changed', state: AccountView }`，见制品 `lib/types/types.d.ts`）。`dsh-compat.ts` 的类型与 `settings-models-account.tsx` 的消费循环按新形状解包 `event.state`；`getState()` 仍直接返回快照不变。升级指南扫描未扫出的原因：指南规则按已知破坏性变更模式匹配（`ctx.forge`、`retain` 参数等），deepseek-account 远程流的契约变化没有对应条目，且我方 `watch` 适配层形状与上游同名 API 近似，泛词分诊无法识别，属制品级类型差分才能发现的变化。
+- **e2e/official-plugins.mjs**：能力清单断言的 `dsh-office-to-pdf` 已在上游被 `dsh-office-kit` 组合替代，断言改为 `dsh-office-kit` 恰好一条且启用。
+- **e2e/settings-lifecycle.mjs**：rc.5 把 `removeOwnedStyles` / `claimStyles` 压成单行，原依赖缩进换行的提取正则失配。改为按函数名定位后花括号配平提取（跳过字符串字面量），并增加显式断言：提取不到或内容不像预期 helper 时直接失败，不再静默跳过。
+- **历史文档版本号还原**：升级脚本机械改写把 `docs/redesign/acceptance.md`（验收截图环境）与 `docs/redesign/decision.md`（视觉基准决策）里的历史版本 `0.2.2-rc.1` 改成 rc.5，按 `4adfd23` 原文还原；`scripts/upgrade-dsh.mjs` 的 `SKIP_REWRITE_PREFIXES` 增加 `docs/redesign/`。`docs/` 全量复查确认其余 rc.1→rc.5 改写均为现行钉住版本声明（architecture、ai-plugins-implementation、diagrams、ui-design），保留。
 
 ### 上游新增 / 移除行（rc.5）
 
