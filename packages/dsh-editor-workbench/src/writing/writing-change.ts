@@ -112,20 +112,14 @@ function locateReversible(current: string, edit: WritingChangeEdit): number {
   }
   const prefix = edit.prefix ?? ''
   const suffix = edit.suffix ?? ''
-  const needles = [prefix + edit.newText + suffix]
-  if (suffix) needles.push(edit.newText + suffix)
-  if (prefix) needles.push(prefix + edit.newText)
-  const seen = new Set<string>()
-  for (const needle of needles) {
-    if (!needle || needle === edit.newText || seen.has(needle)) continue
-    seen.add(needle)
-    const at = findUniqueIndex(current, needle)
-    if (at < 0) continue
-    const inner = needle.indexOf(edit.newText)
-    if (inner < 0) continue
-    return at + inner
-  }
-  return -1
+  /* Both sides required: one-sided unique search of newText+suffix or
+     prefix+newText can match a later author copy. Inner offset is prefix
+     length so a prefix that already contains newText cannot shift the span. */
+  if (!prefix || !suffix) return -1
+  const needle = prefix + edit.newText + suffix
+  const at = findUniqueIndex(current, needle)
+  if (at < 0) return -1
+  return at + prefix.length
 }
 
 function reverseEdits(current: string, edits: readonly WritingChangeEdit[]): string {

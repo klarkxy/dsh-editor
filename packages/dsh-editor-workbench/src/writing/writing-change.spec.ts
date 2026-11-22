@@ -224,11 +224,13 @@ describe('writing_change direct writes', () => {
       kind: 'edit', path: '正文/001.md', summary: 's',
       edits: [{ oldText: '第一句', newText: '第一句改' }, { oldText: '最后一句', newText: '最后一句改' }],
     })
-    await fs.writeFile(path.join(root, '正文', '001.md'), '作者重写了开头。中间句。最后一句改。')
+    /* Same-length rewrite of the first span keeps the later after-range valid,
+       so undo skips the rewritten region and still reverses the untouched one. */
+    await fs.writeFile(path.join(root, '正文', '001.md'), '作者改写。中间句。最后一句改。')
     const partial = await undoWritingChange(access(), again.receipt.id)
     expect(partial.receipt.status).toBe('undone')
     expect(partial.receipt.message).toContain('1 处')
-    expect(await text('正文/001.md')).toBe('作者重写了开头。中间句。最后一句。')
+    expect(await text('正文/001.md')).toBe('作者改写。中间句。最后一句。')
   })
 
   it('refuses edit undo when nothing is reversible and refuses create undo after modification', async () => {
@@ -340,6 +342,31 @@ describe('writing_change review follow-ups', () => {
     await fs.writeFile(path.join(root, '正文', '001.md'), rewritten)
     await expect(undoWritingChange(access(), receipt.id)).rejects.toMatchObject({ code: 'BLOCKED' })
     expect(await text('正文/001.md')).toBe(rewritten)
+  })
+
+  it('does not undo a later copy when the original was at the start of a short file', async () => {
+    await fs.writeFile(path.join(root, '正文', '001.md'), '他住在北门。')
+    const { receipt } = await applyWritingChange(access(), parseWritingChange({
+      kind: 'edit', path: '正文/001.md', summary: '改门',
+      edits: [{ oldText: '他住在北门', newText: '他住在南门' }],
+    }))
+    const rewritten = '他搬去了城外。\n\n他住在南门。'
+    await fs.writeFile(path.join(root, '正文', '001.md'), rewritten)
+    await expect(undoWritingChange(access(), receipt.id)).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await text('正文/001.md')).toBe(rewritten)
+  })
+
+  it('undoes the partner span when the recorded prefix already contains the new text', async () => {
+    await fs.writeFile(path.join(root, '正文', '001.md'), '南门街，他住在北门。')
+    const { receipt } = await applyWritingChange(access(), parseWritingChange({
+      kind: 'edit', path: '正文/001.md', summary: '改门',
+      edits: [{ oldText: '北门', newText: '南门' }],
+    }))
+    const rewritten = '序。\n\n南门街，他住在南门。'
+    await fs.writeFile(path.join(root, '正文', '001.md'), rewritten)
+    const undone = await undoWritingChange(access(), receipt.id)
+    expect(undone.receipt.status).toBe('undone')
+    expect(await text('正文/001.md')).toBe('序。\n\n南门街，他住在北门。')
   })
 
   it('journals a one-sentence edit on a normally editable long manuscript', async () => {
