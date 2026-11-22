@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createModelsCatalog, factsFor, indexFromPayload, resolveShellHome, type CatalogIndex } from './models-catalog.ts'
 
@@ -297,9 +298,9 @@ describe('models.catalog.lookup', () => {
 describe('resolveShellHome', () => {
   it('prefers DSH_HOME, then the profile layout, then the user home', () => {
     expect(resolveShellHome({ DSH_HOME: ' /data/dsh ' } as NodeJS.ProcessEnv, [], '/u', undefined)).toBe('/data/dsh')
-    const moduleUrl = 'file:///D:/data/home/profiles/dsh-editor/bundled-packages/node_modules/dsh-editor-shell/lib/index.js'
-    const home = resolveShellHome({} as NodeJS.ProcessEnv, [], '/u', moduleUrl)
-    expect(home.replace(/\\/g, '/')).toBe('D:/data/home')
+    const root = resolve('/data/home')
+    const moduleUrl = pathToFileURL(join(root, 'profiles', 'dsh-editor', 'bundled-packages', 'node_modules', 'dsh-editor-shell', 'lib', 'index.js')).href
+    expect(resolveShellHome({} as NodeJS.ProcessEnv, [], '/u', moduleUrl)).toBe(root)
     expect(resolveShellHome({} as NodeJS.ProcessEnv, [], '/u', undefined)).toBe(join('/u', '.dsh-editor'))
   })
 })
