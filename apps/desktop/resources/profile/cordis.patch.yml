@@ -114,3 +114,29 @@
 # Editor owns layout and implements the official public layout contract.
 - id: ui-layout
   disabled: true
+
+# DSH 0.2.2-rc.5 adds agent-team coordination: a shared task registry, the
+# team delegation tools, and the team sidebar UI. The Editor offers no
+# subagent or team work (ui-subagent is off), so the writing partner must not
+# receive team tools.
+- id: agent-team
+  disabled: true
+- id: tool-agent-team
+  disabled: true
+- id: ui-agent-team
+  disabled: true
+# Account notifications mount into the official shell chrome the editor
+# replaces.
+- id: ui-account-notifications
+  disabled: true
+# The writing partner's skill surface keeps only writing-related skills;
+# office-kit stays for document preview support.
+- id: skill-office
+  disabled: true
+# The writing partner never runs shell commands or subagents (tool-bash,
+# tool-pwsh and the subagent surface are off), so their settings cards are
+# hidden; ui-settings-agent-loop and ui-settings-web-search stay.
+- id: ui-settings-shell
+  disabled: true
+- id: ui-settings-subagent
+  disabled: true

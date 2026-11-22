@@ -45,7 +45,7 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
   ])
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
     format: 1, platform: `${process.platform}-${process.arch}`,
-    node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
+    node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.5', ...dsh }, profile,
   }))
   return { root, resources }
 }
@@ -235,7 +235,7 @@ describe('persistent packaged runtime cache', () => {
     expect(identity).toEqual({
       algorithm: PROFILE_DEPLOY_ALGORITHM,
       profileSha256: identity.profileSha256,
-      dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
+      dsh: '@deepseek-ai/dsh@0.2.2-rc.5',
       nodePath: 'n',
       cliPath: 'c',
     })
@@ -256,7 +256,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: 'unsupported-platform', node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
+      format: 1, platform: 'unsupported-platform', node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.5', ...dsh }, profile,
     }))
     await expect(materializePackagedRuntime(join(root, 'home'), resources)).rejects.toThrow('unsupported identity')
   })
@@ -269,7 +269,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
+      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.5', ...dsh }, profile,
     }))
     const runtime = await materializePackagedRuntime(home, resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-two')
@@ -288,7 +288,7 @@ describe('persistent packaged runtime cache', () => {
         treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
       ])
       await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.1', ...dsh }, profile,
+        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.2-rc.5', ...dsh }, profile,
       }))
 
       const committed = await materializePackagedRuntime(home, resources)

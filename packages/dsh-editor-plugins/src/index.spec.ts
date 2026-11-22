@@ -205,17 +205,20 @@ describe('local distribution discovery', () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for empty local query') }
     const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { paths, fetch }))
-    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-sample-alpha', 'dsh-editor-sample-beta', '@klarkxy/dsh-web-search-manager'])
-    expect(listings[0]).toMatchObject({
+    // 推荐在前、本地随附在后；web-search-manager 已有本地随附条目，推荐去重保留本地。
+    expect(listings.map((row) => row.packageName)).toEqual(['@klarkxy/dsh-zhihu', 'dsh-editor-sample-alpha', 'dsh-editor-sample-beta', '@klarkxy/dsh-web-search-manager'])
+    expect(listings[0]).toMatchObject({ source: 'recommended', spec: 'npm:@klarkxy/dsh-zhihu', url: 'https://klarkxy.github.io/dsh-plugins/plugins/zhihu/' })
+    expect(listings.filter((row) => row.packageName === '@klarkxy/dsh-web-search-manager')).toHaveLength(1)
+    expect(listings[1]).toMatchObject({
       source: 'local',
       title: '示例资料甲',
       packageName: 'dsh-editor-sample-alpha',
       description: '示例列表与引用',
     })
-    expect(String(listings[0]?.spec)).toMatch(/^link:/)
-    expect(String(listings[0]?.spec).replaceAll('\\', '/')).toContain('/bundled-packages/node_modules/dsh-editor-sample-alpha')
-    expect(listings[0]).not.toHaveProperty('enabled')
-    expect(listings[0]).not.toHaveProperty('installed')
+    expect(String(listings[1]?.spec)).toMatch(/^link:/)
+    expect(String(listings[1]?.spec).replaceAll('\\', '/')).toContain('/bundled-packages/node_modules/dsh-editor-sample-alpha')
+    expect(listings[1]).not.toHaveProperty('enabled')
+    expect(listings[1]).not.toHaveProperty('installed')
     expect(listings.some((row) => row.packageName === 'dsh-editor-cards' || row.packageName === 'dsh-editor-shell' || row.packageName === 'dsh-editor-profile-config' || row.packageName === '@klarkxy/dsh-memory')).toBe(false)
   })
 
@@ -276,7 +279,7 @@ describe('local distribution discovery', () => {
       paths,
       fetch: async () => { throw new Error('network must not run for empty local query') },
     }))
-    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-sample-alpha'])
+    expect(listings.map((row) => row.packageName)).toEqual(['@klarkxy/dsh-web-search-manager', '@klarkxy/dsh-zhihu', 'dsh-editor-sample-alpha'])
     expect(listings.some((row) => row.packageName === 'wrong-id' || row.packageName === 'plain-lib' || row.packageName === 'escape-pkg')).toBe(false)
     expect(outside.replaceAll('\\', '/')).toContain('escape-pkg')
   })
@@ -298,5 +301,31 @@ describe('local distribution discovery', () => {
       fetch: async () => new Response('', { status: 403 }),
     })
     expect(denied).toMatchObject({ ok: false, error: { code: 'network' } })
+  })
+
+  it('matches a recommended plugin by keyword without any GitHub request', async () => {
+    const paths = await localFixture()
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '知乎' }, signal(), {
+      paths,
+      fetch: async () => { throw new Error('network must not run when a recommended plugin matches') },
+    }))
+    expect(listings).toEqual([expect.objectContaining({
+      source: 'recommended', packageName: '@klarkxy/dsh-zhihu', spec: 'npm:@klarkxy/dsh-zhihu',
+    })])
+  })
+
+  it('drops curated monorepos from GitHub discovery results', async () => {
+    const paths = await localFixture()
+    const result = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
+      paths,
+      fetch: async () => new Response(JSON.stringify({
+        items: [
+          { full_name: 'klarkxy/dsh-plugins', description: '集合', stargazers_count: 9, html_url: 'https://github.com/klarkxy/dsh-plugins', topics: ['dsh-plugin'] },
+          { full_name: 'deepseek-ai/deepseek-harness', description: '内核', stargazers_count: 8, html_url: 'https://github.com/deepseek-ai/deepseek-harness', topics: ['dsh-plugin'] },
+          { full_name: 'acme/dsh-theme', description: '纸', stargazers_count: 3, html_url: 'https://github.com/acme/dsh-theme', topics: ['dsh-plugin'] },
+        ],
+      }), { status: 200 }),
+    })
+    expect(listingsOf(result)).toEqual([expect.objectContaining({ spec: 'github:acme/dsh-theme', stars: 3 })])
   })
 })

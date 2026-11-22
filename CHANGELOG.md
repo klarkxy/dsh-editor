@@ -4,6 +4,16 @@
 
 ## 未发布
 
+### 宿主升级
+
+- 捆绑运行时升级为 DSH `0.2.2-rc.5`；`zod` 钉住同步上游 `dsh-llm` 至 `4.6.6`，web 前端与语音输入补丁按 rc.5 制品重生成。
+- rc.5 新增上游行处置：`agent-team`、`tool-agent-team`、`ui-agent-team`、`ui-account-notifications`、`skill-office`、`ui-settings-shell`、`ui-settings-subagent` 在桌面 profile 中关闭；`mcp-manager`、`office-kit`、`workspace-dependencies` 及各项默认值跟随上游。
+
+### 插件策展
+
+- 「已安装」的 DSH 官方插件区只列 Editor 能用上的官方组合包，目前只有语音输入；作者已启用的其他官方包仍显示，便于关闭。
+- 「发现」页空搜索词时先列发行策展的推荐插件（网络搜索管理器、知乎），再列可重新添加的随附插件；关键词命中推荐或本机包时直接返回，不发 GitHub 请求；GitHub 结果过滤成员已被策展的 monorepo。
+
 ## 0.5.2 - 2026-11-14
 
 ### 发行检查修复

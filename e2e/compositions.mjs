@@ -29,9 +29,9 @@ for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) 
   }
 }
 
-resolveDshInstallation('0.2.2-rc.1')
+resolveDshInstallation('0.2.2-rc.5')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.2-rc.1')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.2-rc.5')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 let browser

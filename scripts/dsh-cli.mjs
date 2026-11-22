@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const EXPECTED_DSH_VERSION = '0.2.2-rc.1'
+export const EXPECTED_DSH_VERSION = '0.2.2-rc.5'
 
 function candidatePackageRoots() {
   const configuredCli = process.env.DSH_CLI_PATH?.trim()
