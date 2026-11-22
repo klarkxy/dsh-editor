@@ -13,6 +13,7 @@ import {
   errorMessage,
   isStaleFailure,
   partialApplyDetails,
+  safeRpcCall,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
@@ -33,7 +34,7 @@ import {
   type ProposalPrepared,
   type WorkbenchPrepareResponse,
 } from '../model/chat-proposal.ts'
-import type { ProposalBoard, ProposalCardStatus } from '../model/proposal-board.ts'
+type ProposalCardStatus = 'checking' | 'ready' | 'applying' | 'applied' | 'undoing' | 'undone' | 'expired' | 'ignored' | 'deferred'
 import { ProposalDiffView } from './proposal-diff-view.tsx'
 
 export function ProposalCard(props: {
@@ -42,12 +43,6 @@ export function ProposalCard(props: {
   proposal: AuthorProposal
   receiptId?: string
   onApplied(path: string): void
-  /* 会话提案板：挂上后 pill 计数、滚动定位与「全部应用」都看得见这张卡。 */
-  board?: ProposalBoard
-  boardId?: string
-  boardTurnKey?: number
-  /* 首个待处理卡收到的批量入口；只有同回合全部核对安全时父级才传。 */
-  applyAll?: { count: number; busy: boolean; run(): void }
 }) {
   const [prepared, setPrepared] = useState<ProposalPrepared | null>(null)
   const [appliedVersion, setAppliedVersion] = useState('')
@@ -264,28 +259,6 @@ export function ProposalCard(props: {
       setNote(t('chat.undoFailed'))
     }
   }
-
-  /* 提案板登记：status 读同步提交的 statusRef（不是等渲染的 React state），
-     元素/apply 走 ref；state 每变一次 notify 一次，pill 与「全部应用」实时跟随。 */
-  const cardRef = useRef<HTMLElement | null>(null)
-  const applyRef = useRef(apply)
-  applyRef.current = apply
-  const board = props.board
-  const boardId = props.boardId
-  const boardTurnKey = props.boardTurnKey
-  useEffect(() => {
-    if (!board || !boardId) return
-    return board.register({
-      id: boardId,
-      turnKey: boardTurnKey ?? -1,
-      status: () => statusRef.current,
-      element: () => cardRef.current,
-      apply: () => applyRef.current(),
-    })
-  }, [board, boardId, boardTurnKey])
-  useEffect(() => {
-    board?.notify()
-  }, [board, state])
 
   /* 头部右侧的标识:renames 展示"N 个文件",其它仍展示 path(已经在 kind 上 narrow 过)。 */
   const settled = state === 'applied' || state === 'ignored' || state === 'deferred' || state === 'undone'
@@ -536,14 +509,6 @@ export function ProposalCard(props: {
         {/* 主操作组弹性占满一行：ghost「稍后处理」能并排行尾就右对齐，
             放不下则整个落到下一行左对齐，不产生右飘孤儿按钮。 */}
         <Flex className="proposal-actions__main" gap="2" wrap="wrap">
-          {/* 同回合全部核对安全时，首个待处理卡操作行头部给「全部应用」批量入口。 */}
-          {state === 'ready' && props.applyAll ? <Button
-            type="button"
-            variant="secondary"
-            disabled={props.applyAll.busy}
-            onClick={props.applyAll.run}>
-            {t('chat.applyAll', { count: props.applyAll.count })}
-          </Button> : null}
           {state === 'ready' ? <Button type="button" variant="primary" onClick={() => void apply()}>
             {t('chat.applyChanges')}
           </Button> : null}
@@ -604,8 +569,7 @@ export function ProposalCard(props: {
         className={`proposal-card ${state} proposal-card-settled`}
         size="2"
         aria-label={t('chat.fileProposal')}
-        data-proposal-id={boardId}
-        ref={cardRef}>
+>
         <Disclosure
           className="proposal-settled"
           summary={<Flex className="proposal-settled__row" align="center" gap="2" minWidth="0">
@@ -627,8 +591,7 @@ export function ProposalCard(props: {
       className={`proposal-card ${state}`}
       size="2"
       aria-label={t('chat.fileProposal')}
-      data-proposal-id={boardId}
-      ref={cardRef}>
+>
       <Flex asChild align="start" direction="column" gap="1" mb="3">
         <header>
           {metaBlock}
@@ -641,4 +604,38 @@ export function ProposalCard(props: {
   );
 }
 
-/** author_observe 的作者确认卡。确认后由 Shell 把 observation 作为新一行追加进 authorMemory。 */
+/** 旧版提案只读：按当时审批回执区分「已写入 / 已撤销 / 从未写入」，不能再应用。 */
+export function LegacyProposalCard(props: {
+  ctx: ShellContext
+  sessionId: string
+  proposal: AuthorProposal
+  receiptId: string
+}) {
+  const [detail, setDetail] = useState(t('adapter.legacyProposal'))
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const result = await safeRpcCall<{ receipt: { state: 'applied' | 'undone' } | null }>(() => props.ctx.connection.rpc.call('/manuscript', 'proposal.receipt', {
+        sessionId: props.sessionId,
+        ...props.proposal,
+        receiptId: props.receiptId,
+      }))
+      if (!live) return
+      const state = result.ok ? result.value.receipt?.state : undefined
+      setDetail(state === 'applied' ? t('adapter.legacyProposalApplied')
+        : state === 'undone' ? t('adapter.legacyProposalUndone')
+          : t('adapter.legacyProposal'))
+    })()
+    return () => { live = false }
+  }, [props.sessionId, props.receiptId])
+  return (
+    <article className="proposal-card legacy" data-testid="dsh-chat-legacy-proposal" aria-label={t('adapter.legacyProposal')}>
+      <Text size="2" as="p">
+        {props.proposal.summary}
+      </Text>
+      <Text size="1" color="gray" mt="1" as="p">
+        {detail}
+      </Text>
+    </article>
+  )
+}

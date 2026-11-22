@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { WRITING_PROPOSE_TOOL_NAME } from 'dsh-manuscript/host-api'
+import { WRITING_CHANGE_TOOL_NAME } from '../contracts/writing-change.ts'
 import { AUTHOR_OBSERVE_TOOL_NAME } from '../memory/author-memory.ts'
 import { MEMORY_UPDATE_TOOL_NAME } from '../memory/memory-tool.ts'
 import { installNovelMemoryTool } from '../tools/novel-tools.ts'
@@ -21,10 +21,10 @@ function registrationCtx(extra: Record<string, unknown> = {}) {
 }
 
 describe('workbench tool isolation', () => {
-  it('generic apply (writing / article / technical) registers writing_propose and author_observe only', () => {
+  it('generic apply (writing / article / technical) registers writing_change and author_observe only', () => {
     const { ctx, names } = registrationCtx()
     apply(ctx)
-    expect(names()).toEqual([WRITING_PROPOSE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME, 'conversation_search', 'conversation_read', 'conversation_wrap_up'])
+    expect(names()).toEqual([WRITING_CHANGE_TOOL_NAME, AUTHOR_OBSERVE_TOOL_NAME, 'conversation_search', 'conversation_read', 'conversation_wrap_up'])
     expect(names().some((name) => name.startsWith('novel_'))).toBe(false)
   })
 
@@ -41,7 +41,7 @@ describe('workbench tool isolation', () => {
     installNovelMemoryTool(ctx)
     expect(names().filter((name) => name === AUTHOR_OBSERVE_TOOL_NAME)).toHaveLength(1)
     expect(names()).toEqual([
-      WRITING_PROPOSE_TOOL_NAME,
+      WRITING_CHANGE_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
       'conversation_search',
       'conversation_read',

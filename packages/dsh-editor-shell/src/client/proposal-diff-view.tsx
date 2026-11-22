@@ -11,7 +11,7 @@ export function ProposalDiffView(props: { before: string; after: string }) {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   const expand = (index: number) => setExpanded((current) => new Set(current).add(index))
   return (
-    <div className="proposal-hunks" role="group" aria-label={t('chat.proposalDiff')}>
+    <div className="proposal-hunks" data-testid="dsh-proposal-hunks" role="group" aria-label={t('chat.proposalDiff')}>
       {rows.map((row, index) => {
         if (row.kind === 'gap') {
           if (expanded.has(index)) {

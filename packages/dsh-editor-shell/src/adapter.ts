@@ -16,6 +16,7 @@ import { AUTHOR_OBSERVE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
+import { parseWritingChangeReceipt, WRITING_CHANGE_MARKER, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 
 import { isNovelIndexJobPrompt } from './novel-index.ts'
@@ -28,6 +29,14 @@ export type AuthorProposal = ProposalMarker | WritingProposalV2
 
 export function parseAuthorProposal(text: string): AuthorProposal | undefined {
   return parseWritingProposalMarker(text) ?? parseProposalMarker(text)
+}
+
+export type LegacyProposalResult = { proposal: AuthorProposal; receiptId: string }
+
+export function isLegacyProposalResult(value: unknown): value is LegacyProposalResult {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as { proposal?: { marker?: unknown }; receiptId?: unknown }
+  return typeof entry.receiptId === 'string' && entry.proposal?.marker === 'dsh-editor.proposal'
 }
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list', AUTHOR_OBSERVE_TOOL_NAME])
@@ -50,7 +59,8 @@ export type ChatRow = {
   recovered?: boolean
   /** Author-readable cause of a failed tool call, shown above the verbatim body. */
   reason?: string
-  proposal?: AuthorProposal
+  /** `writing_change` 直接写入回执；渲染为可撤销的写入卡。 */
+  writingChange?: WritingChangeReceipt
   /** `node.call.name` when present; Chat looks up plugin message cards by this key. */
   toolName?: string
   /** Payload for a registered message card. Today: the parsed `novel_memory_update` receipt. */
@@ -161,29 +171,33 @@ export function splitAssistantContent(blocks: readonly AssistantBlock[] | readon
   return { thinking: thinkingParts.join('\n'), text: textParts.join('\n') }
 }
 
-/** 区分不同 kind 的提案,以便聊天行展示对应的"提案"标签文案。renames 不带 path 字段,需要在使用前 narrow。 */
-function proposalDetailText(proposal: AuthorProposal): string {
-  switch (proposal.kind) {
-    case 'split': return t('adapter.splitProposal')
-    case 'merge': return t('adapter.mergeProposal')
-    case 'renames': return t('adapter.renamesProposal')
-    case 'edit':
-    case 'create':
-      return t('adapter.editProposal')
-    case 'chapter_plan':
-      return t('adapter.chapterPlanProposal')
-    case 'chapter_summary':
-      return t('adapter.chapterSummaryProposal')
-  }
-}
-
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
   const body = blocksText(node.content)
   const name = node.call?.name ?? t('adapter.toolFallback', { id: node.callId })
   const toolName = node.call?.name
+  const writingChange = name === WRITING_CHANGE_TOOL_NAME ? parseWritingChangeReceipt(body) : undefined
+  if (writingChange) {
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: writingChange.summary, toolName, result: writingChange, writingChange }
+  }
+  if (name === WRITING_CHANGE_TOOL_NAME && node.isError) {
+    const recovered = body.match(/记录 ([a-f0-9]{32})/)
+    if (recovered) {
+      const stub: WritingChangeReceipt = {
+        marker: WRITING_CHANGE_MARKER, version: 1, id: recovered[1]!,
+        kind: 'edit', summary: t('adapter.changeRecover'), status: 'applied',
+        paths: [], count: 0, message: body.split('\n').map((line) => line.trim()).find(Boolean),
+      }
+      return { id: `tool-result:${node.seq}`, role: 'tool', text: stub.summary, toolName, result: stub, writingChange: stub }
+    }
+  }
+  /* 旧版提案行只读展示：不再调用任何 prepare/apply 端点。回执查询区分当时已写入与从未写入。 */
   const proposal = name === 'novel_propose' || name === WRITING_PROPOSE_TOOL_NAME ? parseAuthorProposal(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal, toolName }
+    return {
+      id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary,
+      detail: t('adapter.legacyProposal'), toolName,
+      result: { proposal, receiptId: `tool-result:${node.seq}` },
+    }
   }
   const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
   if (memoryUpdate) {

@@ -1,10 +1,10 @@
 import type { BotCheckResult, BotRolloverReason, BotStateView } from 'dsh-editor-workbench/contracts'
 import type { t as Translate } from '../i18n/index.ts'
 
-export type BotGuard = { running: boolean; rolling: boolean; pendingInteractions: boolean; pendingProposals: boolean }
+export type BotGuard = { running: boolean; rolling: boolean; pendingInteractions: boolean }
 
 export function rolloverGuardBlocked(guard: BotGuard): boolean {
-  return guard.running || guard.rolling || guard.pendingInteractions || guard.pendingProposals
+  return guard.running || guard.rolling || guard.pendingInteractions
 }
 
 /** Reasons a submit should roll over first, in fixed priority order. */

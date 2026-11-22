@@ -68,7 +68,6 @@ export function useBotConversation({
   workspaceIdFor,
   running,
   pendingCount,
-  pendingProposals,
   botSettings,
 }: {
   ctx: ShellContext
@@ -77,7 +76,6 @@ export function useBotConversation({
   workspaceIdFor(sessionId: SessionId): string | undefined
   running: boolean
   pendingCount: number
-  pendingProposals: boolean
   botSettings: { idleRecapMinutes: number; cacheTtlMinutes: number }
 }): BotConversationState {
   const sessionId = session?.sessionId as SessionId | undefined
@@ -93,8 +91,8 @@ export function useBotConversation({
   const lastActivity = useRef<number | undefined>()
   const lastKnownSeq = useRef<number | undefined>()
   const wasRunning = useRef(false)
-  const guardRef = useRef({ running, pendingCount, pendingProposals })
-  guardRef.current = { running, pendingCount, pendingProposals }
+  const guardRef = useRef({ running, pendingCount })
+  guardRef.current = { running, pendingCount }
   const loadedSegments = useRef(new Set<string>())
 
   const refresh = useCallback(async () => {
@@ -148,7 +146,7 @@ export function useBotConversation({
 
   const guard = (): BotGuard => {
     const inputs = guardRef.current
-    return { running: inputs.running, rolling: rollingRef.current, pendingInteractions: inputs.pendingCount > 0, pendingProposals: inputs.pendingProposals }
+    return { running: inputs.running, rolling: rollingRef.current, pendingInteractions: inputs.pendingCount > 0 }
   }
 
   const checkNow = useCallback(async (): Promise<BotCheckResult | undefined> => {
@@ -224,7 +222,7 @@ export function useBotConversation({
       void rollover(reason)
     }
     wasRunning.current = running
-  }, [running, pendingCount, pendingProposals, onTurnEnded, rollover])
+  }, [running, pendingCount, onTurnEnded, rollover])
 
   /* Idle recap tick (60 s): bot.check reads the whole session log and meters
      tokens, so the tick skips the RPC unless the activity baseline still needs

@@ -609,3 +609,49 @@ export const ghostField = StateField.define<DecorationSet>({
   },
   provide: (field) => EditorView.decorations.from(field),
 })
+
+/** Ranges (paper offsets) inserted by the latest external sync, for highlight. */
+export const setAgentChangesEffect = StateEffect.define<readonly { from: number; to: number }[]>()
+
+const agentChangeMark = Decoration.mark({ class: 'cm-agent-change' })
+
+/**
+ * Marks the text an agent wrote via syncFromDisk. The whole set is replaced by
+ * the next sync and cleared by any document switch; a range is dropped as soon
+ * as an author edit touches it.
+ */
+export const agentChangesField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setAgentChangesEffect)) {
+        return effect.value.length
+          ? Decoration.set(
+            effect.value.filter((r) => r.to > r.from).map((r) => agentChangeMark.range(r.from, r.to)),
+            true,
+          )
+          : Decoration.none
+      }
+    }
+    if (!tr.docChanged) return decorations
+    const changed: Array<{ from: number; to: number }> = []
+    tr.changes.iterChangedRanges((fromA, toA) => { changed.push({ from: fromA, to: toA }) })
+    const kept: Array<{ from: number; to: number }> = []
+    const it = decorations.iter()
+    while (it.value) {
+      const markFrom = it.from
+      const markTo = it.to
+      const touched = changed.some((c) => (c.from === c.to
+        ? c.from > markFrom && c.from < markTo
+        : c.from < markTo && c.to > markFrom))
+      if (!touched) {
+        const from = tr.changes.mapPos(markFrom, 1)
+        const to = tr.changes.mapPos(markTo, -1)
+        if (to > from) kept.push({ from, to })
+      }
+      it.next()
+    }
+    return kept.length ? Decoration.set(kept.map((r) => agentChangeMark.range(r.from, r.to)), true) : Decoration.none
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})

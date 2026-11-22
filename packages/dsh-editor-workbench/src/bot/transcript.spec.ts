@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOT_INIT_SENTINEL, estimateTokens, formatExchangeRows, transcriptExchanges, transcriptRows, type SessionEventLike } from './transcript.ts'
+import { BOT_INIT_SENTINEL, estimateTokens, formatExchangeRows, transcriptDisplayRows, transcriptExchanges, transcriptRows, type SessionEventLike } from './transcript.ts'
 
 function user(seq: number, text: string, extra?: Partial<SessionEventLike>): SessionEventLike {
   return { seq, type: 'user/message', time: seq * 10, data: { source: { kind: 'user' }, content: [{ type: 'text', text }] }, ...extra }
@@ -42,6 +42,25 @@ describe('transcriptRows', () => {
     ]
     const rows = transcriptRows(events)
     expect(rows.map((row) => row.seq)).toEqual([0, 3])
+  })
+})
+
+describe('transcriptDisplayRows', () => {
+  it('keeps verified writing_change receipts after compaction without changing the text projection', () => {
+    const receipt = {
+      marker: 'dsh-editor.writing-change', version: 1, id: 'a'.repeat(32),
+      kind: 'edit', summary: '改了一句', status: 'applied', paths: ['正文/001.md'], count: 1,
+    }
+    const events: SessionEventLike[] = [
+      user(0, '润色这章'),
+      assistant(1, '已改。'),
+      { seq: 2, type: 'tool/result', time: 20, data: { name: 'writing_change', content: JSON.stringify(receipt) } },
+      { seq: 3, type: 'user/message', data: { source: { kind: 'compact-checkpoint', compactionId: 'c1' }, content: [{ type: 'text', text: 'checkpoint' }] } } as SessionEventLike,
+    ]
+    expect(transcriptRows(events).map((row) => row.seq)).toEqual([0, 1])
+    const display = transcriptDisplayRows(events)
+    expect(display.map((row) => row.seq)).toEqual([0, 1, 2])
+    expect(display[2]).toMatchObject({ role: 'tool', text: '改了一句', writingChange: { id: 'a'.repeat(32), status: 'applied' } })
   })
 })
 

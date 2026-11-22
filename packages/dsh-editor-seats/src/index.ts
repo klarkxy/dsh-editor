@@ -226,6 +226,14 @@ export type ShellMessageCardContext = {
   locale: ShellLocale
   /** After a plugin-confirmed write: refresh tree/content and navigate when safe. */
   onApplied(path: string): void
+  /**
+   * Optional: a written path was moved or archived away. The shell refreshes
+   * the tree and opens `to` when the editor is clean; a dirty editor keeps its
+   * buffer and the existing missing-file handling takes over.
+   */
+  onMoved?(from: string, to: string): void
+  /** Optional: open `path` and reveal the first occurrence of `excerpt` in the open editor text. */
+  onLocate?(path: string, excerpt: string, start?: number): void
   /** Ask the Shell to reload tree glyphs, the open document, or the cached overview. */
   refresh(scope: 'tree' | 'content' | 'overview'): void
   /** Show a short status line in the Shell chrome (Chat composer note today). */

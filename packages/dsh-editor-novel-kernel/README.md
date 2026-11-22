@@ -4,7 +4,7 @@
 
 设置页另有一个「小说工具」功能入口（package.json 的 `dshEditor.entries`）。该入口被宿主锁定、只显示「核心」标记，不能直接开关；内核随会话 preset 装载。
 
-内核只注册两件工具，没有 Cordis 命令。`novel_knowledge` 读取随包知识卡；`novel_memory_update` 直接维护根 `AGENTS.md`、`人物卡/` 与 `世界书/`，写入即生效。正文与大纲的修改不在本包，由工作台的 `writing_propose` 先预览再由作者采用。[知识卡](resources/novel-knowledge/)是搭档读取的运行时材料，[出处](resources/novel-knowledge/SOURCES.md)随包保留。
+内核只注册两件工具，没有 Cordis 命令。`novel_knowledge` 读取随包知识卡；`novel_memory_update` 直接维护根 `AGENTS.md`、`人物卡/` 与 `世界书/`，写入即生效。正文与大纲的修改不在本包，由工作台的 `writing_change` 直接写入，作者可在对话中撤销。[知识卡](resources/novel-knowledge/)是搭档读取的运行时材料，[出处](resources/novel-knowledge/SOURCES.md)随包保留。
 
 ## 装载
 

@@ -3,7 +3,7 @@ import type { ShellMessageCardRegistry } from '../seats.ts'
 import { t } from '../i18n/index.ts'
 
 export function isChatStepRow(row: ChatRow, cards?: ShellMessageCardRegistry) {
-  if (row.proposal) return false
+  if (row.writingChange) return false
   if (row.toolName && cards?.get(row.toolName)) return false
   if (row.role === 'thinking') return true
   return row.role === 'tool' && Boolean(row.error || row.content)

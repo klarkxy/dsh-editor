@@ -2,11 +2,12 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { externalSync, ghostField, livePreviewExtension, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
+import { agentChangesField, externalSync, ghostField, livePreviewExtension, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
 import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, paperEscapePriority, paperSearch } from './search.ts'
 import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
 import { contextMenuSource, shouldPreserveSelectionOnContextMouseDown, type EditorContextMenuEvent } from './editor-clipboard.ts'
 import type { EditorCorePaperProjection, EditorCoreProps } from './editor-contracts.ts'
+import { toEditorLf } from './editor-newlines.ts'
 
 /** Stable dispatch from CodeMirror listeners to the current editor render. */
 export type PaperViewCallbacks = {
@@ -84,6 +85,7 @@ export function usePaperView({
           paperTheme,
           writingCompartments.current.livePreview.of(livePreviewExtension({ centerSectionMarks })),
           ghostField,
+          agentChangesField,
           paperSearch(),
           writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
           writingCompartments.current.focusParagraph.of(focusParagraphExtension(focusParagraph)),
@@ -217,7 +219,7 @@ export function usePaperView({
     const generation = documentGenerationRef.current
     const changedDocument = syncedGenerationRef.current !== generation
     if (changedDocument) view.dispatch({ effects: writingCompartments.current.history.reconfigure([]) })
-    const target = paperProjection.project(path, textRef.current).text
+    const target = toEditorLf(paperProjection.project(path, textRef.current).text)
     const current = view.state.doc.toString()
     if (current !== target) {
       const pending = pendingCursorRef.current

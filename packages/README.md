@@ -11,7 +11,7 @@
 | [dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 由当前 Agent 记录和更新需求，不额外调用模型；npm 包名 `@klarkxy/dsh-mood` |
 | [dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与独立开关的 Agent 检查点；npm 包名 `@klarkxy/dsh-recap` |
 | [dsh-editor-shell](dsh-editor-shell/README.md) | 桌面写作界面 |
-| [dsh-editor-workbench](dsh-editor-workbench/README.md) | 作品管理与写作提案 |
+| [dsh-editor-workbench](dsh-editor-workbench/README.md) | 作品管理与写作修改 |
 | [dsh-editor-plugins](dsh-editor-plugins/README.md) | 发现搜索；安装清单由官方管理器负责 |
 | [dsh-editor-novel-kernel](dsh-editor-novel-kernel/README.md) | 小说知识与资料维护工具 |
 | [dsh-editor-cards](dsh-editor-cards/README.md) | 人物卡与世界书目录快捷入口 |

@@ -14,7 +14,8 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 - 导入：`project.importProbe` / `importApply` / `importCleanup`
 - 快照与回滚：`snapshot.list` / `create` / `rollback` / `restoreProbe` / `restoreApply` / `restoreCleanup`
 - 归档：`archive.list` / `apply` / `restore`
-- 提案：`proposal.prepare` / `apply`（支持 create、章节计划/小结、拆分、合并、批量改名与写作 V2 提案）
+- 提案：`proposal.prepare` / `apply`（作者主动发起的章节拆分/合并等预览流程）
+- 写入记录：`writing.change.get` / `writing.change.undo`（写作搭档直接写入的查询与撤销）
 
 `project.homeDirectory` 只读返回实际新作品根目录，不创建文件，也不接受客户端指定根目录。
 
@@ -22,7 +23,7 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 
 ## 写作工具（editor-workbench-tools）
 
-独立 entry「写作工具」（跟随「助手」功能开关），注册 `writing_propose`（写作提案）与 `author_observe`（作者侧写观察）两个通用写作工具，并按权限边界禁用继承自宿主的编码工具：`write` / `edit` / `pwsh` / `bash` / `shell` / `str_replace` / `NotebookEdit`（src/tools.ts）。小说专有的 `novel_knowledge` 与 `novel_memory_update` 由 novel-kernel 另行挂载（后者经 `installNovelMemoryTool`）。
+独立 entry「写作工具」（跟随「助手」功能开关），注册 `writing_change`（写作修改，直接写入并在对话留可撤销记录）与 `author_observe`（作者侧写观察）两个通用写作工具，并按权限边界禁用继承自宿主的编码工具：`write` / `edit` / `pwsh` / `bash` / `shell` / `str_replace` / `NotebookEdit`（src/tools.ts）。小说专有的 `novel_knowledge` 与 `novel_memory_update` 由 novel-kernel 另行挂载（后者经 `installNovelMemoryTool`）。
 
 `author_observe` 通过现有 `editorWritingPreferences.remember` Host 服务保存侧写，不依赖聊天界面的挂载。V2 工具结果区分追加与已存在，写入失败或容量不足不会返回成功。V1 历史结果保留读取兼容，但不重放写入；现有侧写内容沿用。
 
@@ -32,4 +33,4 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 - `./contracts`：RPC 通道名、端点与提案负载类型（浏览器侧面板共用）。
 - `./tools`：写作工具 entry 的注册与继承工具禁用逻辑。
 
-操作见[使用指南](../../docs/user-guide.md#管理作品)。接口见 [src/contracts.ts](src/contracts.ts)，写入权限复用 [dsh-manuscript](../dsh-manuscript/README.md)；新增写作工具也须遵守[作者确认边界](../../docs/product-principles.md#作者决定内容)。
+操作见[使用指南](../../docs/user-guide.md#管理作品)。接口见 [src/contracts.ts](src/contracts.ts)，写入权限复用 [dsh-manuscript](../dsh-manuscript/README.md)；新增写作工具也须遵守[作者决定内容](../../docs/product-principles.md#作者决定内容)的边界。

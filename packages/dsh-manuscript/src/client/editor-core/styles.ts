@@ -214,6 +214,9 @@ ${surfaceTokenAliases}
 .manuscript-paper-textarea .cm-searchMatch {
   background: var(--dsh-ui-warning-soft);
 }
+.manuscript-paper-textarea .cm-agent-change {
+  background: var(--dsh-ui-accent-soft);
+}
 .manuscript-paper-textarea .cm-searchMatch-selected {
   background: var(--dsh-ui-warning-soft);
 }

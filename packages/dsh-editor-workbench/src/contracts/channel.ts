@@ -1,5 +1,6 @@
 import type { ChapterStateFields } from '../proposals/chapter-meta.ts'
 import type { MemoryChange, MemoryChangeSummary, MemoryUpdateReceipt } from './memory.ts'
+import type { WritingChangeGetResponse, WritingChangeReceipt } from './writing-change.ts'
 import type {
   ProgressHistory,
   ProgressRecordResult,
@@ -53,6 +54,8 @@ export type WorkbenchEndpoint =
   | 'archive.restore'
   | 'proposal.prepare'
   | 'proposal.apply'
+  | 'writing.change.get'
+  | 'writing.change.undo'
   | 'entry.copy'
   | 'entry.move'
   | 'entry.delete'
@@ -116,6 +119,8 @@ export type WorkbenchRequestMap = {
   'archive.restore': { sessionId: string; archiveId: string; expectedVersion?: string }
   'proposal.prepare': { sessionId: string; proposal: ProposalPayload }
   'proposal.apply': { sessionId: string; proposal: ProposalPayload; expectedVersions?: Record<string, string> }
+  'writing.change.get': { sessionId: string; id: string }
+  'writing.change.undo': { sessionId: string; id: string }
   'entry.copy': { sessionId: string; path: string; targetDir: string }
   'entry.move': { sessionId: string; path: string; targetDir: string }
   'entry.delete': { sessionId: string; path: string }
@@ -163,6 +168,8 @@ export type WorkbenchResponseMap = {
   'archive.restore': ArchiveResponse
   'proposal.prepare': { create?: ProposalCreatePlan; chapterMeta?: ProposalChapterMetaPlan; split?: ProposalSplitPlan; merge?: ProposalMergePlan; renames?: ProposalRenamesPlan }
   'proposal.apply': ProposalApplyResult | ProposalFileApplied
+  'writing.change.get': WritingChangeGetResponse
+  'writing.change.undo': WritingChangeReceipt
   'entry.copy': { path: string }
   'entry.move': { path: string }
   'entry.delete': { path: string }
@@ -200,7 +207,13 @@ export type BotCheckResult = {
   promptChanged: boolean
   wrapUpRequested: boolean
 }
-export type BotHistoryRow = { seq: number; role: 'user' | 'assistant'; text: string; time: number }
+export type BotHistoryRow = {
+  seq: number
+  role: 'user' | 'assistant' | 'tool'
+  text: string
+  time: number
+  writingChange?: WritingChangeReceipt
+}
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
 export type WorkbenchRpcError = (

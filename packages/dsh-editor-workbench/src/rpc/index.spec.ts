@@ -22,6 +22,7 @@ const PREVIOUS_MUTATIONS = [
   'snapshot.restoreApply',
   'snapshot.restoreCleanup',
   'structure.groupCreate',
+  'writing.change.undo',
   'directory.create',
   'file.rename',
   'file.moveManuscript',

@@ -2,8 +2,7 @@ import { Fragment, type MutableRefObject, type ReactNode, type RefObject } from 
 import { Box, Button, Flex, ScrollArea, Text } from '../ui/index.ts'
 import { Notice } from '../ui/index.ts'
 import { loadOlder, WRITING_PROPOSE_TOOL_NAME, type PendingInteraction, type partialView } from '../adapter.ts'
-import { ChatProposalPill, ProposalBoardScope } from './chat-proposal-board.tsx'
-import type { ProposalBoard } from '../model/proposal-board.ts'
+import { WRITING_CHANGE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import type { ChatTranscript, SessionFace, SessionLifecycle } from '../dsh-compat.ts'
 import type { ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext, ShellMessageCardRegistry } from '../seats.ts'
@@ -49,9 +48,6 @@ type ChatHistoryProps = {
   empty?: ReactNode
   /** 之前对话段的只读拼接内容（换段标记与回顾），由 Chat 传入。 */
   stitched?: ReactNode
-  /* 会话提案板：Chat 持有实例，这里读状态渲染粘性条，按行下发登记与批量入口。 */
-  board: ProposalBoard
-  proposalTurnKeys: ReadonlyMap<string, number>
 }
 
 /** Render the transcript without owning its subscription or scroll-follow lifetime. */
@@ -59,7 +55,7 @@ export function ChatHistory({
   ctx, session, locale, hidden, renderSlot, snapshot, historyRef, bottomPinnedRef, historyBlocks,
   messageCards, messageCardTick, messageCardContext, handleApplied, isNewMessage, partial,
   hasPartial, visibleCalls, queuedSubmissions, pendingItems, outgoing, outgoingIsCanonical,
-  hasTurnError, empty, stitched, board, proposalTurnKeys,
+  hasTurnError, empty, stitched,
 }: ChatHistoryProps) {
   const liveOpen = snapshot.running
   const liveSteps = <Fragment>
@@ -67,7 +63,7 @@ export function ChatHistory({
       key={`running:${call.callId}`}
       className="tool"
       busy
-      label={call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')} />)}
+      label={call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === WRITING_CHANGE_TOOL_NAME ? t('chat.changingFile') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')} />)}
     {partial.thinking ? <ChatStepItem
       key="partial-thinking"
       className="thinking"
@@ -89,9 +85,6 @@ export function ChatHistory({
           bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
         }}>
         <Flex direction="column" gap="3" p="3" minWidth="0" width="100%" flexGrow="1">
-          <ProposalBoardScope board={board} turnKeys={proposalTurnKeys}>
-            {/* 粘性条与提案行的批量入口都读 ProposalBoardContext。 */}
-            <ChatProposalPill historyRef={historyRef} />
           {stitched}
           {empty}
           {snapshot.hasMore ? <Button
@@ -208,7 +201,6 @@ export function ChatHistory({
           <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} onApplied={handleApplied} />
           {snapshot.openState === 'error' ? <Notice tone="danger" title={t('chat.connectionInterrupted')} /> : null}
           {snapshot.promptError && !hasTurnError ? <Notice tone="danger" title={t('chat.requestFailed')} /> : null}
-          </ProposalBoardScope>
         </Flex>
       </ScrollArea>
     </Box>

@@ -176,6 +176,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
   onConfigure(): void
   onDraftDirtyChange(dirty: boolean): void
   onWritten?(path: string): void
+  onMoved?(from: string, to: string): void
+  onLocate?(path: string, excerpt: string, start?: number): void
   onApplied(path: string): void
   onHide?(): void
   rewriteRequest?: { id: number; text: string; workspaceId: WorkspaceId }
@@ -196,6 +198,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
         onConfigure={props.onConfigure}
         onDraftDirtyChange={props.onDraftDirtyChange}
         onWritten={props.onWritten}
+        onMoved={props.onMoved}
+        onLocate={props.onLocate}
         onApplied={props.onApplied}
         onHide={props.onHide}
         rewriteRequest={props.rewriteRequest}

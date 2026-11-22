@@ -6,6 +6,9 @@ import { EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
 import { openFindPanel, openReplacePanel, revealEditorRange } from './search.ts'
+import { rebaseExternal } from './external-sync.ts'
+import { fromEditorLf, toEditorChanges, toEditorLf } from './editor-newlines.ts'
+import { externalSync, setAgentChangesEffect } from './codemirror.ts'
 import { selectParagraphInView } from './paragraph-selection.ts'
 import { EditorChrome } from './editor-chrome.tsx'
 import { useEditorCommands } from './editor-commands.ts'
@@ -15,7 +18,7 @@ import { countWords } from '../../text-stats.ts'
 import { defaultFimPayload, extractText } from './completion-payload.ts'
 import type {
   EditorCoreDraft, EditorCoreDraftBackup, EditorCoreHandle, EditorCorePaperProjection,
-  EditorCoreProps, EditorCoreRpc, EditorCoreStatus,
+  EditorCoreProps, EditorCoreRpc, EditorCoreStatus, EditorCoreSyncResult,
 } from './editor-contracts.ts'
 import {
   isEditorTargetCurrent,
@@ -72,7 +75,7 @@ export {
 } from './completion-preference.ts'
 
 export type {
-  EditorCoreRpc, EditorCoreHandle, EditorCoreDraftBackup, EditorCoreDraft,
+  EditorCoreRpc, EditorCoreHandle, EditorCoreSyncResult, EditorCoreDraftBackup, EditorCoreDraft,
   EditorCorePaperProjection, EditorCoreTypography, EditorCoreProps, EditorCoreStatus,
   EditorCoreSlot, FimPayloadInput,
 } from './editor-contracts.ts'
@@ -661,12 +664,81 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return save()
   }, [liveTarget, paperProjection, setText, save, report])
 
+  /* 磁盘同步：写作助手直接写入后由宿主触发，不整文替换、不重置滚动/选区/撤销历史。
+     干净缓冲区直接套用磁盘差异；作者已有未保存改动时只在不相交时合并，重叠进入
+     既有冲突态。隐藏投影前缀（世界书头）一旦涉及即回退 unavailable，交给全量重载。 */
+  const syncFromDisk = useCallback(async (): Promise<EditorCoreSyncResult> => {
+    const view = viewRef.current
+    const current = docRef.current
+    if (!view || !current || !isDocumentReady()) return 'unavailable'
+    if (conflictRef.current) return 'conflict'
+    const composingDeadline = Date.now() + 5_000
+    while (view.composing) {
+      if (Date.now() > composingDeadline || !isDocumentReady()) return 'unavailable'
+      await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, 50) })
+    }
+    const generation = documentGenerationRef.current
+    const readResult = await rpc.call('/manuscript', 'file.read', { sessionId: current.sessionId, path: current.path }).catch((error: unknown) => ({
+      ok: false,
+      error: { message: error instanceof Error ? error.message : String(error) },
+    })) as RpcResult<{ text: string; version: string }>
+    if (!readResult.ok || !isDocumentReady() || documentGenerationRef.current !== generation || docRef.current !== current) return 'unavailable'
+    const diskText = readResult.value.text
+    const diskVersion = readResult.value.version
+    if (diskVersion === current.version && diskText === current.text) return 'unchanged'
+    if (view.composing) return 'unavailable'
+    if (diskText === current.text) {
+      /* 仅版本号变化：只更新基线，缓冲区与脏标记保持不变。 */
+      const next = { ...current, version: diskVersion }
+      docRef.current = next
+      setDoc(next)
+      return 'unchanged'
+    }
+    const base = current.text
+    const mine = textRef.current
+    const rebase = rebaseExternal(base, mine, diskText, { protectedPrefix: paperOffsetRef.current })
+    if (rebase.kind === 'conflict') {
+      setConflict(true)
+      reportError('磁盘文件已变化；草稿已保留，请另存或手动合并。')
+      return 'conflict'
+    }
+    if (rebase.kind === 'unavailable') return 'unavailable'
+    const offset = paperOffsetRef.current
+    const projectedMerged = paperProjection.project(current.path, rebase.merged)
+    if (projectedMerged.offset !== offset) return 'unavailable'
+    const changes = toEditorChanges(mine, rebase.changes, offset)
+    const viewDoc = view.state.doc.toString()
+    if (viewDoc !== toEditorLf(paperProjection.project(current.path, mine).text)) return 'unavailable'
+    let simulated = viewDoc
+    for (const change of [...changes].sort((a, b) => b.from - a.from)) {
+      simulated = simulated.slice(0, change.from) + change.insert + simulated.slice(change.to)
+    }
+    if (simulated !== toEditorLf(projectedMerged.text)) return 'unavailable'
+    view.dispatch({
+      changes,
+      annotations: externalSync.of(true),
+      effects: setAgentChangesEffect.of(toEditorChanges(mine, rebase.highlights.map((r) => ({ from: r.from, to: r.to, insert: '' })), offset).map((r) => ({ from: r.from, to: r.to }))),
+    })
+    if (view.state.doc.toString() !== toEditorLf(projectedMerged.text)) return 'unavailable'
+    const next = { ...current, text: diskText, version: diskVersion }
+    docRef.current = next
+    setDoc(next)
+    textRef.current = rebase.merged
+    revisionRef.current += 1
+    setRevision(revisionRef.current)
+    setTextState(rebase.merged)
+    draftBaseRef.current = null
+    clearGhost()
+    return mine === base ? 'updated' : 'merged'
+  }, [rpc, paperProjection, isDocumentReady, clearGhost, reportError])
+
   // Imperative handle via callback ref.
   useEffect(() => {
     if (!onHandle) return
     const handle: EditorCoreHandle = {
       save,
       saveMetadataText,
+      syncFromDisk,
       discard,
       cancelPendingDraftSync,
       isDirty: () => isDirty(docRef.current, textRef.current),
@@ -805,7 +877,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   })
   callbacksRef.current = {
     setTextFromPaper: (paper: string) => {
-      setText(paperProjection.replace(path, textRef.current, paper), true)
+      const originalPaper = paperProjection.project(path, textRef.current).text
+      setText(paperProjection.replace(path, textRef.current, fromEditorLf(paper, originalPaper)), true)
       setUserEditRevision((old) => old + 1)
       scheduleTextFlush()
     },

@@ -117,7 +117,7 @@ export function isWritingProposalGeneratedPath(path: string): boolean {
   ).includes(part.toLocaleLowerCase()))
 }
 
-function visibleTargetPath(value: unknown): string {
+export function visibleTargetPath(value: unknown): string {
   const path = projectRelativePath(value)
   if (hasHiddenSegment(path)) {
     throw new WritingProposalError('proposals cannot target hidden path segments', 'INVALID')

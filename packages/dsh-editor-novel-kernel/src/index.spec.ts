@@ -11,7 +11,7 @@ import {
 } from './index.ts'
 
 const NOVEL_MEMORY_UPDATE_TOOL_NAME = 'novel_memory_update'
-const WRITING_PROPOSE_TOOL_NAME = 'writing_propose'
+const WRITING_CHANGE_TOOL_NAME = 'writing_change'
 const REMOVED_TOOL_NAMES = [
   'novel_propose',
   'novel_index_write',
@@ -58,7 +58,7 @@ describe('novel-kernel Host entry', () => {
     const { ctx, names } = registrationHost()
     applyWorkbenchTools(ctx)
     expect(names()).toEqual([
-      WRITING_PROPOSE_TOOL_NAME,
+      WRITING_CHANGE_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
       'conversation_search',
       'conversation_read',
@@ -72,7 +72,7 @@ describe('novel-kernel Host entry', () => {
     applyWorkbenchTools(ctx)
     apply(ctx, { mode: NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE })
     expect(names()).toEqual([
-      WRITING_PROPOSE_TOOL_NAME,
+      WRITING_CHANGE_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
       'conversation_search',
       'conversation_read',

@@ -65,6 +65,21 @@ export {
   type WorkbenchRpcResult,
 } from './contracts/channel.ts'
 
+export {
+  WRITING_CHANGE_MARKER,
+  WRITING_CHANGE_TOOL_NAME,
+  isWritingChangeReceipt,
+  parseWritingChangeReceipt,
+  type WritingChangeEdit,
+  type WritingChangeFile,
+  type WritingChangeGetResponse,
+  type WritingChangeKind,
+  type WritingChangeReceipt,
+  type WritingChangeRecord,
+  type WritingChangeRename,
+  type WritingChangeStatus,
+} from './contracts/writing-change.ts'
+
 export type {
   ChapterSummary,
   OutlineSummary,
