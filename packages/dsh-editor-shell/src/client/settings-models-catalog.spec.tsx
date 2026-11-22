@@ -413,6 +413,12 @@ describe('models.dev autofill', () => {
     releases[1]!(catalogOk({ b: { contextWindow: 2 } }))
     await settle()
     expect(busy).toHaveBeenLastCalledWith(false)
+    /* Overlapping completions apply onto refs.latest; the later onChange must
+       keep the earlier row's catalog fill instead of a stale snapshot. */
+    expect(form.models()).toEqual([
+      { id: 'a', contextWindow: 1 },
+      { id: 'b', contextWindow: 2 },
+    ])
   })
 
   it('clears auto-written fields when the id changes, keeps author edits, and refills for the new id', async () => {
