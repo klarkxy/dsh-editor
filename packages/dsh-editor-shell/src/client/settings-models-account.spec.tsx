@@ -401,6 +401,14 @@ describe('useDeepseekAccount + account row controls', () => {
       timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
     })
 
+    // rc.5 凭据移除走 credentials-changed;同一挂载实例消费 event.state 后
+    // 立刻回到登录入口,不必重开设置页。
+    stream.push(update(view('signed-out'), 'credentials-changed'))
+    await tick()
+    const afterSignOut = render(() => Harness({ ctx }))
+    expect(byTestId(afterSignOut, 'dsh-models-account-signout')).toBeUndefined()
+    expect(byTestId(afterSignOut, 'dsh-models-account-signin')).toBeTruthy()
+
     // The account row head swaps the API-key 编辑 button for account controls.
     // RowHead has a different hook graph than Harness, so it gets a fresh slot
     // table rather than sharing the harness's.
@@ -433,26 +441,6 @@ describe('useDeepseekAccount + account row controls', () => {
     expect(byTestId(head, 'dsh-models-account-signout')).toBeTruthy()
     expect(nodes(head, (node) => node.props['aria-label'] === '编辑 DeepSeek Account')).toHaveLength(0)
     expect(nodes(head, (node) => node.props.onClick === onEdit)).toHaveLength(0)
-  })
-
-  it('退出后 credentials-changed 事件切回未登录，重新显示登录入口', async () => {
-    const stream = makeStream()
-    const remote = makeRemote(stream)
-    const ctx = makeCtx(remote)
-    render(() => Harness({ ctx }))
-    await tick()
-    stream.push(update(view('credential-stored')))
-    await tick()
-    let tree = render(() => Harness({ ctx }))
-    expect(byTestId(tree, 'dsh-models-account-signout')).toBeTruthy()
-    expect(byTestId(tree, 'dsh-models-account-signin')).toBeUndefined()
-
-    // rc.5 凭据移除走 credentials-changed 事件;消费侧取 state 后即回到未登录。
-    stream.push(update(view('signed-out'), 'credentials-changed'))
-    await tick()
-    tree = render(() => Harness({ ctx }))
-    expect(byTestId(tree, 'dsh-models-account-signout')).toBeUndefined()
-    expect(byTestId(tree, 'dsh-models-account-signin')).toBeTruthy()
   })
 
   it('without remote.account the row degrades to a muted note and no buttons', async () => {

@@ -8,6 +8,7 @@
 
 - 捆绑运行时升级为 DSH `0.2.2-rc.5`；`zod` 钉住同步上游 `dsh-llm` 至 `4.6.6`，web 前端与语音输入补丁按 rc.5 制品重生成。
 - rc.5 新增上游行处置：`agent-team`、`tool-agent-team`、`ui-agent-team`、`ui-account-notifications`、`skill-office` 在桌面 profile 中关闭；`mcp-manager`、`office-kit`、`workspace-dependencies` 及各项默认值跟随上游。
+- 模型设置的 DeepSeek 退出登录：单元测试改为真实点击「退出登录」并确认，再消费 `credentials-changed`；新增 Playwright 夹具 `e2e/account-logout.mjs` 覆盖同一路径。Electron 窗口验收见升级审计清单。
 
 ## 0.5.2 - 2026-11-14
 
