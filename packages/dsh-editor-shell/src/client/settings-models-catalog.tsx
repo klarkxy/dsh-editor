@@ -233,7 +233,11 @@ export function ModelListEditor(props: {
       notes[index] = stale ? note + t.autofillStale : note
     }
     if (Object.keys(fills).length > 0) {
-      onChange(latest.map((model, index) => (fills[index] !== undefined ? { ...model, ...fills[index] } : model)))
+      /* 立刻写回 refs.latest：重叠的 lookup 在同一轮完成时叠在已补全的草稿上，
+         后到的 onChange 不会用过期快照盖掉先补上的行。 */
+      const next = latest.map((model, index) => (fills[index] !== undefined ? { ...model, ...fills[index] } : model))
+      refs.latest = next
+      onChange(next)
       // 记录每个字段的自动写入值;作者改 ID 时把没被手改的自动值清回去。
       for (const [indexText, fill] of Object.entries(fills)) {
         const proven = refs.provenance.get(Number(indexText)) ?? new Map<string, unknown>()
