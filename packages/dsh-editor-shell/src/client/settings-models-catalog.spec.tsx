@@ -373,11 +373,11 @@ describe('models.dev autofill', () => {
     await settle()
     pressButton(form.render(), text().candidateAdopt)
     await settle()
-    expect(call).toHaveBeenCalledTimes(3)
+    // 第二批失败后不再打第三批,避免连续叠网络超时。
+    expect(call).toHaveBeenCalledTimes(2)
     const models = form.models()
     expect(models.slice(0, 200).every((model) => model['contextWindow'] === 1)).toBe(true)
-    expect(models.slice(200, 400).every((model) => model['contextWindow'] === undefined)).toBe(true)
-    expect(models.slice(400).every((model) => model['contextWindow'] === 1)).toBe(true)
+    expect(models.slice(200).every((model) => model['contextWindow'] === undefined)).toBe(true)
   })
 
   it('reports catalog busy to the card while a lookup is in flight', async () => {
@@ -390,6 +390,27 @@ describe('models.dev autofill', () => {
     await settle()
     expect(busy).toHaveBeenLastCalledWith(true)
     release(catalogOk({ m: { contextWindow: 1 } }))
+    await settle()
+    expect(busy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('keeps save gated until every overlapping lookup settles', async () => {
+    const releases: Array<(value: unknown) => void> = []
+    const call = vi.fn(() => new Promise((resolve) => { releases.push(resolve) }))
+    const busy = vi.fn()
+    const form = editor([{ id: 'a' }, { id: 'b' }], { call, onBusyChange: busy })
+    typeValue(field(form.render(), `${text().modelId} 1`), 'a')
+    ;(field(form.render(), `${text().modelId} 1`).props['onBlur'] as () => void)()
+    await settle()
+    typeValue(field(form.render(), `${text().modelId} 2`), 'b')
+    ;(field(form.render(), `${text().modelId} 2`).props['onBlur'] as () => void)()
+    await settle()
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(busy).toHaveBeenLastCalledWith(true)
+    releases[0]!(catalogOk({ a: { contextWindow: 1 } }))
+    await settle()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    releases[1]!(catalogOk({ b: { contextWindow: 2 } }))
     await settle()
     expect(busy).toHaveBeenLastCalledWith(false)
   })
@@ -416,13 +437,38 @@ describe('models.dev autofill', () => {
     typeValue(field(form.render(), `${text().modelContext} 1`), '42')
 
     typeValue(field(form.render(), `${text().modelId} 1`), 'model-b')
-    // 仍等于自动值的 input / maxTokens 被清掉;手改的 contextWindow 留下。
-    expect(form.models()).toEqual([{ id: 'model-b', contextWindow: 42 }])
+    // 键入过程中仍保留自动写入值;失焦且 id 确实变了才清。
+    expect(form.models()).toEqual([{ id: 'model-b', contextWindow: 42, input: ['text'], maxTokens: 50 }])
 
     ;(field(form.render(), `${text().modelId} 1`).props['onBlur'] as () => void)()
     await settle()
     // 新 id 的补全照跑:空位补齐,手改的 contextWindow 仍不被覆盖。
     expect(form.models()).toEqual([{ id: 'model-b', contextWindow: 42, maxTokens: 88 }])
+  })
+
+  it('keeps autofilled params when the id is typed away and back before blur', async () => {
+    const discover = vi.fn(async () => ({
+      ok: true,
+      value: [{ id: 'vision-m', contextWindow: 100, inputModalities: ['text', 'image'] }],
+    }))
+    const call = vi.fn(async () => catalogOk({
+      'vision-m': { maxTokens: 50 },
+    }))
+    const form = editor([], { call, discover })
+    pressButton(form.render(), text().fetchModels)
+    await settle()
+    pressButton(form.render(), text().candidateAdopt)
+    await settle()
+    expect(form.models()).toEqual([{ id: 'vision-m', contextWindow: 100, input: ['text', 'image'], maxTokens: 50 }])
+    expect(call).toHaveBeenCalledTimes(1)
+
+    typeValue(field(form.render(), `${text().modelId} 1`), 'vision-mx')
+    expect(form.models()).toEqual([{ id: 'vision-mx', contextWindow: 100, input: ['text', 'image'], maxTokens: 50 }])
+    typeValue(field(form.render(), `${text().modelId} 1`), 'vision-m')
+    ;(field(form.render(), `${text().modelId} 1`).props['onBlur'] as () => void)()
+    await settle()
+    expect(call).toHaveBeenCalledTimes(1)
+    expect(form.models()).toEqual([{ id: 'vision-m', contextWindow: 100, input: ['text', 'image'], maxTokens: 50 }])
   })
 })
 

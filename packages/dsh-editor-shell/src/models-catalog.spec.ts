@@ -295,6 +295,49 @@ describe('models.catalog.lookup', () => {
     })
   })
 
+  it('does not refetch within the fetch timeout after a failed refresh', async () => {
+    const fetcher = vi.fn(async () => { throw new Error('offline') })
+    const { catalog, advance } = catalogFixture({ fetcher: fetcher as unknown as typeof fetch })
+    expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({ ok: false, error: { code: 'network' } })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(await catalog.handle({ ids: ['m2'] })).toMatchObject({ ok: false, error: { code: 'network' } })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    advance(15_000 + 1)
+    expect(await catalog.handle({ ids: ['m3'] })).toMatchObject({ ok: false, error: { code: 'network' } })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses the last refresh failure as stale cache until the fetch timeout elapses', async () => {
+    const dir = specDir()
+    const cacheFile = join(dir, 'models-dev-index.json')
+    const index: CatalogIndex = { acme: { m1: { contextWindow: 100 } } }
+    await writeFile(cacheFile, JSON.stringify({ fetchedAt: new Date(500).toISOString(), index }))
+    let clock = 500 + 24 * 60 * 60 * 1000 + 1
+    const fetcher = vi.fn(async () => { throw new Error('offline') })
+    const catalog = createModelsCatalog({
+      fetcher: fetcher as unknown as typeof fetch,
+      cacheFile,
+      now: () => clock,
+    })
+    expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({
+      ok: true,
+      value: { stale: true, models: { m1: { contextWindow: 100 } } },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    clock += 1
+    expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({
+      ok: true,
+      value: { stale: true, models: { m1: { contextWindow: 100 } } },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    clock += 15_000
+    expect(await catalog.handle({ ids: ['m1'] })).toMatchObject({
+      ok: true,
+      value: { stale: true, models: { m1: { contextWindow: 100 } } },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects responses beyond the size bound', async () => {
     const fetcher = vi.fn(async () => new Response('x'.repeat(64), { headers: { 'content-length': '64' } }))
     const catalog = createModelsCatalog({
