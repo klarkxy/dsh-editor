@@ -259,11 +259,11 @@ async function ownershipFixture() {
   await writeFile(join(template, 'cordis.patch.yml'), '[]\n')
   await mkdir(join(runtime, '@deepseek-ai', 'dsh-tools'), { recursive: true })
   await mkdir(join(runtime, '@deepseek-ai', 'dsh-llm'), { recursive: true })
-  await writeFile(join(runtimeRoot, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.2-rc.1' }))
+  await writeFile(join(runtimeRoot, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.2-rc.5' }))
   const identity: ProfileDeployIdentity = {
     algorithm: PROFILE_DEPLOY_ALGORITHM,
     profileSha256: 'sha-ownership',
-    dsh: '@deepseek-ai/dsh@0.2.2-rc.1',
+    dsh: '@deepseek-ai/dsh@0.2.2-rc.5',
     nodePath: join(home, 'node.exe'),
     cliPath: join(runtimeRoot, 'dsh', 'lib', 'bin.js'),
   }

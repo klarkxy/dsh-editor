@@ -6,7 +6,7 @@
 
 视觉基准是本仓库自有的「原稿」设计系统（`DESIGN_SYSTEM_ID = 'dsh-yuangao'`），不再适配上游界面。数值的唯一来源是 `packages/dsh-editor-shell/src/design-system/tokens.ts`；本文不另抄一份色表。
 
-上游归属不变：内置 DSH 固定为 `0.2.2-rc.1`，官方插件制品按其自有界面运行，适配过的上游代码保留 MIT 声明于 `packages/dsh-editor-shell/resources/third-party/deepseek-harness-MIT.txt`；更早的 Kimi Web 声明在同目录 `kimi-web-MIT.txt`。DSH 的名称、美术与身份归 DSH 所有；不复制上游字体文件。
+上游归属不变：内置 DSH 固定为 `0.2.2-rc.5`，官方插件制品按其自有界面运行，适配过的上游代码保留 MIT 声明于 `packages/dsh-editor-shell/resources/third-party/deepseek-harness-MIT.txt`；更早的 Kimi Web 声明在同目录 `kimi-web-MIT.txt`。DSH 的名称、美术与身份归 DSH 所有；不复制上游字体文件。
 
 不变边界：React / Electron / CodeMirror、DSH 的会话/模型/审批/权限权威、稿纸的作者排版（字体、字号、行距、纸宽）都不随本系统改变。本系统只是界面层，不是引擎替换或前端分叉。
 
