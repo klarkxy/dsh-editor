@@ -29,6 +29,7 @@ function routeOptions(route: WritingModelRoute | undefined, catalog: CatalogMode
 export function WritingModelRoutesView(props: {
   snapshot: SettingsScopeSnapshot<WritingPreferences>; catalog: CatalogModelOption[]; writable: boolean
   saving?: boolean; failure?: string; chatOnly?: boolean
+  optimistic?: { field: WritingModelField; route: WritingModelRoute | undefined; revision: number | undefined }
   onSave(field: WritingModelField, route: WritingModelRoute | undefined): void
   onRetry?(): void
 }): ReactNode {
@@ -36,7 +37,7 @@ export function WritingModelRoutesView(props: {
   const disabled = !props.writable || props.snapshot.status !== 'ready' || props.snapshot.writable === false || props.saving === true
   return <>
     {WRITING_PURPOSES.filter(row => !props.chatOnly || row.field === 'chatModel').map(row => {
-      const route = normalizeWritingModelRoute(props.snapshot.value?.[row.field])
+      const route = props.optimistic?.field === row.field ? props.optimistic.route : normalizeWritingModelRoute(props.snapshot.value?.[row.field])
       const label = t(row.label)
       const fallback = row.field === 'chatModel' ? (zh ? 'DSH 默认模型' : 'DSH default model') : t('models.followChat')
       const options = routeOptions(route, props.catalog, fallback)
@@ -75,6 +76,8 @@ export function WritingModelRoutes(props: {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState('')
+  /* 保存刚开始就把所选路由挂上,scope 快照带着新 revision 回来后再撤掉乐观值。 */
+  const [optimistic, setOptimistic] = useState<{ field: WritingModelField; route: WritingModelRoute | undefined; revision: number | undefined } | undefined>(undefined)
   const pending = useRef(false)
   const failedWrite = useRef<{ field: WritingModelField; route: WritingModelRoute | undefined }>()
   const generation = useRef(0)
@@ -84,8 +87,12 @@ export function WritingModelRoutes(props: {
     failedWrite.current = undefined
     setSaving(false)
     setFailure('')
+    setOptimistic(undefined)
     return () => { generation.current++ }
   }, [props.scope])
+  useEffect(() => {
+    setOptimistic(current => current && snapshot.revision !== undefined && current.revision !== snapshot.revision ? undefined : current)
+  }, [snapshot])
   const save = async (field: WritingModelField, route: WritingModelRoute | undefined) => {
     if (pending.current) return
     pending.current = true
@@ -93,16 +100,18 @@ export function WritingModelRoutes(props: {
     setSaving(true)
     setFailure('')
     failedWrite.current = undefined
+    setOptimistic({ field, route, revision: snapshot.revision })
     try { await saveWritingModelRoute(props.scope, field, route) }
     catch (error) {
       if (ticket === generation.current) {
         failedWrite.current = { field, route }
         setFailure(error instanceof Error ? error.message : String(error))
+        setOptimistic(undefined)
       }
     }
     finally { if (ticket === generation.current) { pending.current = false; setSaving(false) } }
   }
-  return <WritingModelRoutesView snapshot={snapshot} catalog={props.catalog} writable={props.writable} saving={saving} failure={failure}
+  return <WritingModelRoutesView snapshot={snapshot} catalog={props.catalog} writable={props.writable} saving={saving} failure={failure} optimistic={optimistic}
     chatOnly={props.showSharedPurposes === false} onSave={(field, route) => { void save(field, route) }} onRetry={failedWrite.current ? () => {
       const failed = failedWrite.current
       if (failed) void save(failed.field, failed.route)

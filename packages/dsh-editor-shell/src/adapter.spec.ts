@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, isLegacyProposalResult, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, isLegacyProposalResult, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, stop, toolResultRow, turnFailureCopy, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -295,5 +295,39 @@ describe('DSH snapshot adapter', () => {
       content: [{ type: 'text', text: 'x'.repeat(1300) }], isError: false, subCalls: [],
     } as never)
     expect(long).toMatchObject({ text: '操作已完成', detail: '工具 long' })
+  })
+})
+
+describe('turnFailureCopy', () => {
+  it('names the cause for every mapped failure group', () => {
+    expect(turnFailureCopy('INVALID_CREDENTIAL', 'bad key')).toEqual({ text: '模型服务拒绝了这次请求：API 密钥缺失或无效。到「设置 → 模型」检查这个接口的密钥。' })
+    expect(turnFailureCopy('ACCOUNT_SIGNED_OUT', '')).toEqual({ text: '需要登录 DeepSeek 账号。到「设置 → 模型」登录后重试。' })
+    expect(turnFailureCopy('QUOTA', '')).toEqual({ text: '模型额度已用完。充值后重试，或到「设置 → 模型」换一个模型。' })
+    expect(turnFailureCopy('RATE_LIMIT', 'slow down')).toEqual({ text: '请求太频繁，模型服务暂时拒绝了。稍等一会儿再试。' })
+    expect(turnFailureCopy('TRANSPORT', 'econnrefused')).toEqual({ text: '连不上模型服务。检查网络和接口地址后重试。' })
+    expect(turnFailureCopy('SERVER', '')).toEqual({ text: '模型服务出错了，稍后再试。' })
+    expect(turnFailureCopy('UNKNOWN_MODEL', '')).toEqual({ text: '找不到所选的模型。到「设置 → 模型」重新选择对话模型。' })
+    expect(turnFailureCopy('CONTEXT_WINDOW_EXCEEDED', '')).toEqual({ text: '这次请求超出了模型能处理的长度，请重试。' })
+    expect(turnFailureCopy('CONTENT_REFUSED', '')).toEqual({ text: '模型拒绝回答这次请求。换个说法再试。' })
+    expect(turnFailureCopy('INTERRUPTED', '')).toEqual({ text: '这次请求还没完成，后台服务就退出了，请重试。' })
+  })
+  it('classifies HTTP status codes by range', () => {
+    expect(turnFailureCopy('HTTP_503', 'overloaded')).toEqual({ text: '模型服务出错了，稍后再试。' })
+    expect(turnFailureCopy('HTTP_404', '')).toEqual({ text: '找不到所选的模型。到「设置 → 模型」重新选择对话模型。' })
+  })
+  it('never leaks a detail for mapped codes even when the node carries a message', () => {
+    expect(turnFailureCopy('AUTH', '')).toEqual({ text: '模型服务拒绝了这次请求：API 密钥缺失或无效。到「设置 → 模型」检查这个接口的密钥。' })
+    expect(turnFailureCopy('MISSING_CREDENTIAL', 'some detail')).toEqual({ text: '模型服务拒绝了这次请求：API 密钥缺失或无效。到「设置 → 模型」检查这个接口的密钥。' })
+  })
+  it('keeps the sanitized message as detail for unmapped codes', () => {
+    expect(turnFailureCopy('HTTP_418', ' teapot ')).toEqual({ text: '写作助手未能完成这次请求，请重试。', detail: 'teapot' })
+    expect(turnFailureCopy('WEIRD_CODE', '')).toEqual({ text: '写作助手未能完成这次请求，请重试。', detail: 'WEIRD_CODE' })
+  })
+  it('truncates long messages and falls back to no detail', () => {
+    const copy = turnFailureCopy(undefined, 'x'.repeat(400))
+    expect(copy.text).toBe('写作助手未能完成这次请求，请重试。')
+    expect(copy.detail).toBe('x'.repeat(299) + '…')
+    expect(turnFailureCopy(undefined, '   ')).toEqual({ text: '写作助手未能完成这次请求，请重试。' })
+    expect(turnFailureCopy(undefined, undefined)).toEqual({ text: '写作助手未能完成这次请求，请重试。' })
   })
 })

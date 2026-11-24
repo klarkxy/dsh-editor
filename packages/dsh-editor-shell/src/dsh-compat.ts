@@ -80,7 +80,7 @@ export type ConversationNode =
   | { kind: 'user' | 'steering'; seq: number; content: readonly unknown[] }
   | { kind: 'assistant'; seq: number; blocks: readonly AssistantBlock[]; interrupted?: true }
   | { kind: 'tool-result'; seq: number; callId: string; call: { name: string; argsRaw?: string } | null; content: readonly unknown[]; isError?: boolean }
-  | { kind: 'turn-error'; seq: number }
+  | { kind: 'turn-error'; seq: number; message?: string; code?: string }
   | { kind: 'model-retry'; seq: number }
   | { kind: string; seq: number; [key: string]: unknown }
 

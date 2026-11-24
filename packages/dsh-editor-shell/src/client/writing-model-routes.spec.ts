@@ -71,6 +71,16 @@ describe('native writing routes', () => {
     expect(html).toContain('missing · saved')
     expect(html).toContain('Think Off')
   })
+  it('shows the optimistic route on the target field before the snapshot catches up', () => {
+    const html = render(createElement(WritingModelRoutesView, {
+      snapshot: fixture().scope.getSnapshot(), catalog, writable: true, onSave: () => {},
+      optimistic: { field: 'chatModel', route: { provider: 'p', model: 'a', reasoningEffort: 'high' }, revision: 7 },
+    }))
+    const chatField = html.match(/aria-label="对话模型"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? ''
+    expect(chatField).toContain('Provider · Alpha')
+    expect(html.match(/aria-label="补全模型"[^>]*>[\s\S]*?<\/button>/)?.[0]).toContain('跟随当前对话')
+    expect(html).toContain('思考 高')
+  })
   it('disables loading controls and gives a visible unavailable or save error', () => {
     const html = render(createElement(WritingModelRoutesView, { snapshot: { status: 'loading', value: undefined }, catalog, writable: true, onSave: () => {} }))
     const controls = html.match(/<button[^>]*role="combobox"[^>]*>/g) ?? []
