@@ -510,19 +510,6 @@ export function CustomProviderCard(props: {
     setSaving(true)
     setFailure(undefined)
     try {
-      const latest = await readLatestState(!credentialStored)
-      let route = pinnedRoute !== undefined && (!latest.liveTaken.includes(pinnedRoute) || credentialStored)
-        ? pinnedRoute
-        : deriveRoute(normalized, latest.allTaken)
-      if (pinnedRoute === undefined || (!credentialStored && latest.liveTaken.includes(pinnedRoute))) {
-        const blocked = new Set(latest.allTaken)
-        while (latest.explicitUsedRefs.has(deriveKeyRef(route))) {
-          blocked.add(route)
-          route = deriveRoute(normalized, [...blocked])
-        }
-      }
-      if (route !== pinnedRoute) setPinnedRoute(route)
-
       const discoveredModels = candidates === undefined
         ? []
         : candidates.filter((candidate) => picked.has(candidate.id)).map((candidate) => {
@@ -543,15 +530,41 @@ export function CustomProviderCard(props: {
         : []
       let models: Record<string, unknown>[] = [...discoveredModels, ...manualAdditions]
       const ids = models.map((model) => model['id'] as string)
+      const catalogRoute = pinnedRoute ?? deriveRoute(normalized, taken)
       /* models.dev 补空字段;查询失败或查不到就静默沿用发现结果。 */
       try {
-        const answer = await lookupCatalogFacts(ctx, route, ids)
+        const answer = await lookupCatalogFacts(ctx, catalogRoute, ids)
         models = models.map((model) => {
           const facts = answer.facts[model['id'] as string]
           if (facts === undefined) return model
           return { ...model, ...catalogFill(model, 'pi-ai', protocol, facts).patch }
         })
       } catch { /* 补全失败不挡保存 */ }
+
+      /* 读取最新已占路由放在 catalog 查询之后,避免长达 15s 的查询窗口内发生并发写入或覆盖保留密钥。 */
+      const latest = await readLatestState(!credentialStored)
+      let route = pinnedRoute !== undefined && (!latest.liveTaken.includes(pinnedRoute) || credentialStored)
+        ? pinnedRoute
+        : deriveRoute(normalized, latest.allTaken)
+      if (pinnedRoute === undefined || (!credentialStored && latest.liveTaken.includes(pinnedRoute))) {
+        const blocked = new Set(latest.allTaken)
+        for (;;) {
+          const candidateRef = deriveKeyRef(route)
+          let refInVault = false
+          if (!latest.explicitUsedRefs.has(candidateRef) && typeof ctx.remote.credentials.describe === 'function') {
+            try {
+              const described = await ctx.remote.credentials.describe([candidateRef])
+              if (described.ok && described.value[candidateRef]?.configured === true) refInVault = true
+            } catch { /* 忽略预检失败 */ }
+          }
+          if (!latest.explicitUsedRefs.has(candidateRef) && !refInVault) break
+          blocked.add(route)
+          const next = deriveRoute(normalized, [...blocked])
+          if (next === route) break
+          route = next
+        }
+      }
+      if (route !== pinnedRoute) setPinnedRoute(route)
       const name = displayName.trim() || defaultName(normalized) || route
       const keyRef = deriveKeyRef(route)
       let keyExistedBefore = false

@@ -689,11 +689,17 @@ describe('normalizeBaseURL', () => {
   it('wraps schemeless bare IPv6 hosts in brackets without double-wrapping', () => {
     expect(normalizeBaseURL('::1/v1')).toBe('http://[::1]/v1')
     expect(normalizeBaseURL('::1:11434/v1')).toBe('http://[::1]:11434/v1')
+    expect(normalizeBaseURL('::1:3425/v1')).toBe('http://[::1]:3425/v1')
+    expect(normalizeBaseURL('::1:8080/v1')).toBe('http://[::1]:8080/v1')
     expect(normalizeBaseURL('[::1]/v1')).toBe('http://[::1]/v1')
     expect(normalizeBaseURL('[::1]:11434/v1')).toBe('http://[::1]:11434/v1')
     expect(normalizeBaseURL('2001:db8::1/v1')).toBe('https://[2001:db8::1]/v1')
+    expect(normalizeBaseURL('2001:db8::1:8080/v1')).toBe('https://[2001:db8::1:8080]/v1')
+    expect(normalizeBaseURL('/v1')).toBe('')
+    expect(normalizeBaseURL('https://models')).toBe('https://models')
     expect(() => new URL(normalizeBaseURL('::1/v1'))).not.toThrow()
     expect(() => new URL(normalizeBaseURL('::1:11434/v1'))).not.toThrow()
+    expect(() => new URL(normalizeBaseURL('::1:3425/v1'))).not.toThrow()
   })
 
   it('strips /v1/messages, /messages, and trailing /v1 for anthropic-messages while keeping /v1 for OpenAI-compatible protocols', () => {
@@ -737,7 +743,9 @@ describe('isLoopbackHost and isValidEndpointBaseURL', () => {
     expect(isValidEndpointBaseURL('http://')).toBe(false)
     expect(isValidEndpointBaseURL('ftp://example.com/v1')).toBe(false)
     expect(isValidEndpointBaseURL('not a url')).toBe(false)
+    expect(isValidEndpointBaseURL('/v1')).toBe(false)
     expect(isValidEndpointBaseURL('::1/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('::1:3425/v1')).toBe(true)
     expect(isValidEndpointBaseURL('::1:11434/v1')).toBe(true)
     expect(isValidEndpointBaseURL('api.anthropic.com/v1', 'anthropic-messages')).toBe(true)
   })

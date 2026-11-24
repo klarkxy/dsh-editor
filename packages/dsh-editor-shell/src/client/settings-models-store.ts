@@ -521,10 +521,13 @@ function parseSchemelessAuthority(url: string): { host: string; authorityWithRes
   if (first === -1) return { host: head, authorityWithRest: url }
   const second = head.indexOf(':', first + 1)
   if (second === -1) return { host: head.slice(0, first), authorityWithRest: url }
-  if (isValidIpv6Literal(head)) return { host: head, authorityWithRest: `[${head}]${rest}` }
   const last = head.lastIndexOf(':')
   const addr = head.slice(0, last)
   const port = head.slice(last + 1)
+  if (/^\d+$/.test(port) && Number(port) >= 1 && Number(port) <= 65535 && isValidIpv6Literal(addr) && isLoopbackHost(addr)) {
+    return { host: addr, authorityWithRest: `[${addr}]:${port}${rest}` }
+  }
+  if (isValidIpv6Literal(head)) return { host: head, authorityWithRest: `[${head}]${rest}` }
   if (/^\d+$/.test(port) && Number(port) >= 1 && Number(port) <= 65535 && isValidIpv6Literal(addr)) {
     return { host: addr, authorityWithRest: `[${addr}]:${port}${rest}` }
   }
@@ -544,20 +547,28 @@ export function normalizeBaseURL(raw: string, protocol?: string): string {
   let url = raw.trim()
   if (url === '') return ''
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
+    if (url.startsWith('/')) return ''
     const { host, authorityWithRest } = parseSchemelessAuthority(url)
     url = `${isLoopbackHost(host) ? 'http' : 'https'}://${authorityWithRest}`
   }
-  url = url.replace(/\/+$/, '')
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return url.replace(/\/+$/, '')
+  }
+  if (!parsed.host) return url.replace(/\/+$/, '')
+  let pathname = parsed.pathname.replace(/\/+$/, '')
   for (;;) {
-    const lower = url.toLowerCase()
+    const lower = pathname.toLowerCase()
     const suffix = LISTING_PATH_SUFFIXES.find((tail) => lower.endsWith(tail))
     if (suffix === undefined) break
-    url = url.slice(0, url.length - suffix.length).replace(/\/+$/, '')
+    pathname = pathname.slice(0, pathname.length - suffix.length).replace(/\/+$/, '')
   }
-  if (protocol === 'anthropic-messages' && url.toLowerCase().endsWith('/v1')) {
-    url = url.slice(0, url.length - '/v1'.length).replace(/\/+$/, '')
+  if (protocol === 'anthropic-messages' && pathname.toLowerCase().endsWith('/v1')) {
+    pathname = pathname.slice(0, pathname.length - '/v1'.length).replace(/\/+$/, '')
   }
-  return url
+  return `${parsed.protocol}//${parsed.host}${pathname}${parsed.search}${parsed.hash}`
 }
 
 /**

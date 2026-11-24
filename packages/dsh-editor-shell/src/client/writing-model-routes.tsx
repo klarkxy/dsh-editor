@@ -116,19 +116,25 @@ export function WritingModelRoutes(props: {
     setSaving(true)
     setFailure('')
     failedWrite.current = undefined
-    setOptimistic({ field, route, revision: snapshot.revision })
+    const nextOptimistic = { field, route, revision: snapshot.revision }
+    setOptimistic(nextOptimistic)
+    let failed = false
     try { await saveWritingModelRoute(props.scope, field, route) }
     catch (error) {
+      failed = true
       if (ticket === generation.current) {
         failedWrite.current = { field, route }
         setFailure(error instanceof Error ? error.message : String(error))
+        setOptimistic(undefined)
       }
     }
     finally {
       if (ticket === generation.current) {
         pending.current = false
         setSaving(false)
-        setOptimistic(undefined)
+        if (!failed && shouldClearOptimisticRoute(nextOptimistic, props.scope.getSnapshot())) {
+          setOptimistic(undefined)
+        }
       }
     }
   }

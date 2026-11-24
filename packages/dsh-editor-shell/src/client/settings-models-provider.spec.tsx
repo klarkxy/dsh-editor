@@ -476,4 +476,44 @@ describe('add endpoint card', () => {
     const models = (harness.mutate.mock.calls[0]![1] as { value: { models: Record<string, unknown>[] } }[])[0]!.value.models
     expect(models[0]).toEqual({ id: 'vision-custom', name: 'Vision Custom', input: ['text', 'image'] })
   })
+
+  it('re-reads latest state after lookupCatalogFacts and avoids overwriting retained or concurrent credentials', async () => {
+    /* 1) lookupCatalogFacts 期间另一窗口率先保存了 local:跳过 local 并改存 local-2,不碰 LOCAL_API_KEY。 */
+    const liveSnapshot: { revision: number; providers: Record<string, unknown> } = { revision: 0, providers: {} }
+    let deferredLookup!: (v: unknown) => void
+    const harness = card({
+      taken: [],
+      liveSnapshot,
+      lookup: new Promise((resolve) => { deferredLookup = resolve }),
+    })
+    await connect(harness, '127.0.0.1:8001/v1', 'sk-new')
+    clickButton(harness.render(), t('common.save'))
+    await settle()
+    expect(harness.rpcCall).toHaveBeenCalledTimes(1)
+    expect(harness.setCredential).not.toHaveBeenCalled()
+
+    liveSnapshot.revision = 1
+    liveSnapshot.providers = { local: { apiKeyEnv: 'LOCAL_API_KEY' } }
+    deferredLookup({ ok: true, value: { fetchedAt: '', stale: false, models: {} } })
+    await settle()
+    expect(harness.setCredential).toHaveBeenCalledTimes(1)
+    expect(harness.setCredential).toHaveBeenCalledWith('LOCAL_2_API_KEY', 'sk-new')
+    const [, ops] = harness.mutate.mock.calls[0]!
+    expect((ops as { path: string[] }[])[0]!.path).toEqual(['providers', 'local-2'])
+
+    /* 2) 删除旧配置但保留了 LOCAL_API_KEY:新增同域免密钥服务时不覆盖原凭据。 */
+    const retained = card({
+      taken: [],
+      describeCredentials: (refs: string[]) => ({
+        ok: true,
+        value: refs.includes('LOCAL_API_KEY') ? { LOCAL_API_KEY: { configured: true } } : {},
+      }),
+    })
+    await connect(retained, '127.0.0.1:8001/v1', '')
+    clickButton(retained.render(), t('common.save'))
+    await settle()
+    expect(retained.setCredential).toHaveBeenCalledWith('LOCAL_2_API_KEY', 'no-key')
+    const [, retainedOps] = retained.mutate.mock.calls[0]!
+    expect((retainedOps as { path: string[] }[])[0]!.path).toEqual(['providers', 'local-2'])
+  })
 })
