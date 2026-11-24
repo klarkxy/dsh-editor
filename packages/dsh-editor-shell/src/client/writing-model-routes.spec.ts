@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { DEFAULT_WRITING_PREFERENCES, type WritingPreferences } from '../writing-settings.tsx'
 import { resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { WritingModelRoutesView } from './writing-model-routes.tsx'
+import { shouldClearOptimisticRoute, WritingModelRoutesView } from './writing-model-routes.tsx'
 import { carriedReasoningEffort, firstUsableCatalogModel, mergeCatalogOptions, parseRouteKey, routeKey, saveWritingModelRoute, type CatalogModelOption } from '../model/writing-model-routes.ts'
 
 afterEach(resetLocaleForTests)
@@ -71,6 +71,16 @@ describe('native writing routes', () => {
     expect(html).toContain('missing · saved')
     expect(html).toContain('Think Off')
   })
+  it('shows the optimistic route on the target field before the snapshot catches up', () => {
+    const html = render(createElement(WritingModelRoutesView, {
+      snapshot: fixture().scope.getSnapshot(), catalog, writable: true, onSave: () => {},
+      optimistic: { field: 'chatModel', route: { provider: 'p', model: 'a', reasoningEffort: 'high' }, revision: 7 },
+    }))
+    const chatField = html.match(/aria-label="对话模型"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? ''
+    expect(chatField).toContain('Provider · Alpha')
+    expect(html.match(/aria-label="补全模型"[^>]*>[\s\S]*?<\/button>/)?.[0]).toContain('跟随当前对话')
+    expect(html).toContain('思考 高')
+  })
   it('disables loading controls and gives a visible unavailable or save error', () => {
     const html = render(createElement(WritingModelRoutesView, { snapshot: { status: 'loading', value: undefined }, catalog, writable: true, onSave: () => {} }))
     const controls = html.match(/<button[^>]*role="combobox"[^>]*>/g) ?? []
@@ -79,5 +89,12 @@ describe('native writing routes', () => {
     const failed = render(createElement(WritingModelRoutesView, { snapshot: fixture().scope.getSnapshot(), catalog, writable: true, failure: 'revision conflict', onSave: () => {} }))
     expect(failed).toContain('role="alert"')
     expect(failed).toContain('revision conflict')
+  })
+  it('clears optimistic state on revision bump or when snapshot already matches the target route', () => {
+    const target = { provider: 'p', model: 'a', reasoningEffort: 'high' }
+    const pending = { field: 'chatModel' as const, route: target, revision: 7 }
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: DEFAULT_WRITING_PREFERENCES, revision: 7, writable: true })).toBe(false)
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: DEFAULT_WRITING_PREFERENCES, revision: 8, writable: true })).toBe(true)
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: { ...DEFAULT_WRITING_PREFERENCES, chatModel: target }, revision: 7, writable: true })).toBe(true)
   })
 })

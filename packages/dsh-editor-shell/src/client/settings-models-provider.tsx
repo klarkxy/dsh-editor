@@ -1,17 +1,17 @@
 /** Provider drafts and credential submission stay local to each editing card. */
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Flex, Input, Notice, Text } from '../ui/index.ts'
-import type { CredentialView, SettingsNamespaceView, SettingsPathOpView } from '../dsh-compat.ts'
-import { apiKeyFailure, deriveKeyRef, layoutOf, modelDrafts, pathOps, protocolChoices, providerIdOf, refFor, routeFailure, validateModels, type ProviderRow } from './settings-models-store.ts'
+import { Badge, Box, Button, Checkbox, Flex, Input, Notice, Text } from '../ui/index.ts'
+import type { CredentialView, DiscoveredModelView, SettingsNamespaceView, SettingsPathOpView } from '../dsh-compat.ts'
+import { apiKeyFailure, catalogFill, deriveDisplayName, deriveKeyRef, deriveRoute, discoveryFailureKind, isValidEndpointBaseURL, layoutOf, modelDrafts, NO_KEY_PLACEHOLDER, normalizeBaseURL, parseModelIds, pathOps, protocolChoices, protocolOrder, providerIdOf, refFor, validateModels, type ProviderRow } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ActivityDots } from './ui/index.ts'
 
 import type { SettingsSchemaService, ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
-import { failureMessage, modelFailureLabel, targetLabel, text } from './settings-models-copy.ts'
+import { failureMessage, modelFailureLabel, protocolLabel, targetLabel, text } from './settings-models-copy.ts'
 import type { ModelsStore as Store } from './settings-models-state.ts'
-import { ModelListEditor } from './settings-models-catalog.tsx'
+import { ModelListEditor, lookupCatalogFacts } from './settings-models-catalog.tsx'
 
 /* A loose draft object we hand to the editor. The store layer accepts plain
    records only, so the editor serializes its working copy through this type. */
@@ -127,9 +127,7 @@ export function ProviderEditor(props: {
     ? text().apiKeyPlaceholderLocked
     : keyState?.configured === true
       ? text().apiKeyPlaceholderStored
-      : isPiAi
-        ? t('models.keyEnv')
-        : text().apiKeyPlaceholder
+      : text().apiKeyPlaceholder
 
   const setModelsRef = setModels
 
@@ -213,11 +211,6 @@ export function ProviderEditor(props: {
         <Text size="2" weight="medium" className="models-editor-title">
           {targetLabel(row)}
         </Text>
-        {targetLabel(row) !== providerIdOf(row.entry)
-          ? <Text size="1" color="gray" className="models-editor-route">
-          {providerIdOf(row.entry)}
-        </Text>
-          : null}
       </Flex>}
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
@@ -280,7 +273,7 @@ export function ProviderEditor(props: {
               value={stringAt(draft, 'api') ?? ''}
               options={[
                 { value: '', label: text().protocolUnset },
-                ...protocols.map<SelectOption>((value) => ({ value, label: value })),
+                ...protocolOrder(protocols).map<SelectOption>((value) => ({ value, label: protocolLabel(value) })),
               ]}
               onChange={(value) => setField('api', value)}
               disabled={readOnly || busy}
@@ -338,132 +331,356 @@ export function ProviderEditor(props: {
   );
 }
 
-/* The custom-provider creation card. A separate component so the create
-   card and the edit card never share state; each owns one keyDraft and
-   one model list, both gone the moment either card closes. */
+/* 添加接口卡。面向不懂配置的作者:只问 API 地址、密钥、协议,连接后由
+   端点与 models.dev 给出模型及参数,不需要手填模型 id 或容量。连接失败
+   或端点不返回列表时提供手填模型名称的兜底。 */
 export function CustomProviderCard(props: {
   ctx: ShellContext
   store: Store
   protocols: string[]
   taken: string[]
   readOnly: boolean
-  onClose(changed: boolean): void
+  onClose(changed: boolean, note?: string): void
 }): ReactNode {
   const { ctx, store, protocols, taken, readOnly, onClose } = props
   const piAiNamespace = ctx.configForms.describe().getSnapshot().view?.namespaces.find((view) => view.ns === 'llm-pi-ai')
   const revision = piAiNamespace?.revision ?? 0
-  const [route, setRoute] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const ordered = protocolOrder(protocols)
   const [baseURL, setBaseURL] = useState('')
-  const [protocol, setProtocol] = useState<string>(protocols[0] ?? '')
   const [keyDraft, setKeyDraft] = useState('')
-  const [models, setModels] = useState<Record<string, unknown>[]>([])
-  const [busy, setBusy] = useState(false)
-  /* models.dev 补全还在进行时禁掉创建:点快了会漏掉查询结果。 */
-  const [catalogBusy, setCatalogBusy] = useState(false)
+  const [protocol, setProtocol] = useState<string>(ordered[0] ?? '')
+  const [displayName, setDisplayName] = useState('')
+  const [candidates, setCandidates] = useState<DiscoveredModelView[] | undefined>(undefined)
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const [filter, setFilter] = useState('')
+  /* 连接失败或端点返回空列表后给出手动兜底输入。 */
+  const [manual, setManual] = useState(false)
+  const [manualIds, setManualIds] = useState('')
+  const [manualFocus] = useState(() => ({ pending: false }))
+  const [connecting, setConnecting] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
-  const [committed, setCommitted] = useState(false)
+  /* 首次保存前钉住路由:成功后重试必须沿用同一路由,而不是按已变新的
+     taken 重新派生。credentialStored/profileStored 让重试从失败的步骤续跑。 */
+  const [pinnedRoute, setPinnedRoute] = useState<string | undefined>(undefined)
+  const [credentialStored, setCredentialStored] = useState(false)
+  const [profileStored, setProfileStored] = useState(false)
 
-  const routeInvalid = routeFailure(route, taken)
-  const modelFailure = validateModels(models)
   const keyFailure = apiKeyFailure(keyDraft)
   const keyValue = keyDraft.trim()
-  const ready =
-    route.length > 0 &&
-    routeInvalid === undefined &&
-    baseURL.trim().length > 0 &&
-    models.length > 0 &&
-    modelFailure === undefined &&
-    keyFailure === undefined
+  const baseUrlValid = isValidEndpointBaseURL(baseURL, protocol)
+  const connectionValid = baseUrlValid && keyFailure === undefined && (ordered.length === 0 || protocol.trim() !== '')
+  const busy = connecting || saving
+  /* 本机/局域网地址没有可读的站名;显示名退到带端口的本地化文案。 */
+  const defaultName = (normalized: string): string => {
+    const name = deriveDisplayName(normalized)
+    if (name !== undefined) return name
+    let port = ''
+    try { port = new URL(normalized).port } catch { /* 解析不出就按无端口 */ }
+    return port === '' ? text().localServiceNoPort : text().localService(port)
+  }
+  const filtered = candidates === undefined ? [] : candidates.filter((candidate) => {
+    const needle = filter.trim().toLowerCase()
+    if (needle === '') return true
+    const name = typeof candidate.name === 'string' ? candidate.name : ''
+    return candidate.id.toLowerCase().includes(needle) || name.toLowerCase().includes(needle)
+  })
+  const manualList = parseModelIds(manualIds)
+  const extraManualIds = manual ? manualList.filter((id) => candidates === undefined || !picked.has(id)) : []
+  const pickedCount = (candidates === undefined ? 0 : picked.size) + extraManualIds.length
 
-  const submit = async (): Promise<void> => {
-    if (readOnly || !ready || catalogBusy) return
-    setBusy(true)
+  /* 改连接三件套就作废已取回的清单:候选属于旧的地址/密钥/协议组合。 */
+  const dropCandidates = (): void => {
+    if (candidates === undefined) return
+    setCandidates(undefined)
+    setPicked(new Set())
+    setFilter('')
+    setManual(false)
+  }
+  const editConnection = (setter: (value: string) => void) => (value: string): void => {
+    setter(value)
+    dropCandidates()
     setFailure(undefined)
-    try {
-      const keyRef = deriveKeyRef(route)
-      const storesKey = keyValue.length > 0
-      if (!committed) {
-        const profile: Record<string, unknown> = {
-          api: protocol,
-          baseURL,
-          models: models.map((model) => ({ ...model })),
-          cacheRetention: 'long',
+    setPinnedRoute(undefined)
+    setCredentialStored(false)
+    setProfileStored(false)
+  }
+
+  const showFailure = (message: string, code?: string): void => {
+    switch (discoveryFailureKind(message, code)) {
+      case 'key': setFailure(text().connectKey); break
+      case 'address': setFailure(text().connectAddress); break
+      case 'network': setFailure(text().connectNetwork); break
+      case 'unsupported': setFailure(text().fetchUnsupported); break
+      default: setFailure(text().connectFailed(message))
+    }
+    setManual(true)
+  }
+
+  const readLatestState = async (refreshRemote: boolean): Promise<{
+    revision: number
+    liveTaken: string[]
+    allTaken: string[]
+    explicitUsedRefs: Set<string>
+  }> => {
+    const liveSet = new Set<string>()
+    const explicitUsedRefs = new Set<string>()
+    const collectProvidersMap = (nsView: SettingsNamespaceView | undefined) => {
+      for (const layer of [nsView?.user, nsView?.value]) {
+        if (!layer || typeof layer !== 'object' || Array.isArray(layer)) continue
+        const providers = (layer as Record<string, unknown>)['providers']
+        if (!providers || typeof providers !== 'object' || Array.isArray(providers)) continue
+        for (const [id, entry] of Object.entries(providers as Record<string, unknown>)) {
+          liveSet.add(id)
+          if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+            const env = (entry as Record<string, unknown>)['apiKeyEnv']
+            explicitUsedRefs.add(typeof env === 'string' && env.length > 0 ? env : deriveKeyRef(id))
+          }
         }
-        if (displayName.trim().length > 0) profile['displayName'] = displayName.trim()
-        if (storesKey) profile['apiKeyEnv'] = keyRef
-        const response = await ctx.remote.settings.mutate(
-          'llm-pi-ai',
-          [{ op: 'set', path: ['providers', route], value: profile }],
-          revision,
-        )
-        const result = response
-        if (!result.ok) {
-          if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
-          else setFailure(failureMessage(result))
-          return
-        }
-        store.acceptNamespaceView(result.value)
-        setCommitted(true)
       }
-      if (storesKey) {
-        const response = await ctx.remote.credentials.set(deriveKeyRef(route), keyValue)
-        const result = response
-        if (!result.ok) {
-          setFailure(failureMessage(result))
-          return
-        }
+    }
+    const snap = typeof store.getSnapshot === 'function' ? store.getSnapshot() : undefined
+    if (snap) {
+      for (const row of snap.rows) {
+        const id = providerIdOf(row.entry)
+        liveSet.add(id)
+        explicitUsedRefs.add(row.apiKeyEnv ?? deriveKeyRef(id))
       }
-      onClose(true)
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(false)
+      collectProvidersMap(snap.namespaces.get('llm-pi-ai'))
+    }
+    const describeNs = ctx.configForms.describe().getSnapshot().view?.namespaces.find((view) => view.ns === 'llm-pi-ai')
+    collectProvidersMap(describeNs)
+    if (refreshRemote && typeof ctx.remote.llm?.listConfigurableProviders === 'function') {
+      try {
+        const listed = await ctx.remote.llm.listConfigurableProviders()
+        if (listed.ok) {
+          for (const entry of listed.value) {
+            const id = providerIdOf(entry)
+            liveSet.add(id)
+          }
+        }
+      } catch { /* 刷新失败仍沿用本地已知快照 */ }
+    }
+    const allTaken = [...new Set([...taken, ...liveSet])]
+    return {
+      revision: describeNs?.revision ?? revision,
+      liveTaken: [...liveSet],
+      allTaken,
+      explicitUsedRefs,
     }
   }
 
+  const connect = async (): Promise<void> => {
+    if (readOnly || busy || !connectionValid) return
+    const normalized = normalizeBaseURL(baseURL, protocol)
+    setBaseURL(normalized)
+    setConnecting(true)
+    setFailure(undefined)
+    try {
+      const response = await ctx.remote.llm.discoverModels('llm-pi-ai', {
+        baseURL: normalized,
+        api: protocol,
+        ...(keyValue.length > 0 ? { apiKey: keyValue } : {}),
+      })
+      const result = response
+      if (!result.ok) {
+        showFailure(result.error?.message ?? '', result.error?.code)
+        return
+      }
+      if (!Array.isArray(result.value) || result.value.length === 0) {
+        setFailure(text().connectAddress)
+        setManual(true)
+        return
+      }
+      setCandidates(result.value)
+      setPicked(result.value.length <= 20 ? new Set(result.value.map((candidate) => candidate.id)) : new Set())
+      setManual(false)
+      setDisplayName((current) => (current.trim() === '' ? defaultName(normalized) : current))
+    } catch (error) {
+      const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : undefined
+      showFailure(error instanceof Error ? error.message : String(error), code)
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const save = async (): Promise<void> => {
+    if (readOnly || busy || !connectionValid || pickedCount === 0) return
+    const normalized = normalizeBaseURL(baseURL, protocol)
+    setSaving(true)
+    setFailure(undefined)
+    try {
+      const discoveredModels = candidates === undefined
+        ? []
+        : candidates.filter((candidate) => picked.has(candidate.id)).map((candidate) => {
+            const model: Record<string, unknown> = { id: candidate.id }
+            if (typeof candidate.name === 'string' && candidate.name !== candidate.id) model['name'] = candidate.name
+            if (typeof candidate.contextWindow === 'number') model['contextWindow'] = candidate.contextWindow
+            if (typeof candidate.maxTokens === 'number') model['maxTokens'] = candidate.maxTokens
+            const input = candidate['inputModalities']
+            if (Array.isArray(input)) {
+              const kinds = input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image')
+              if (kinds.length > 0) model['input'] = kinds
+            }
+            return model
+          })
+      const seenIds = new Set(discoveredModels.map((model) => model['id'] as string))
+      const manualAdditions = manual
+        ? manualList.filter((id) => !seenIds.has(id)).map((id) => ({ id }))
+        : []
+      let models: Record<string, unknown>[] = [...discoveredModels, ...manualAdditions]
+      const ids = models.map((model) => model['id'] as string)
+      const catalogRoute = pinnedRoute ?? deriveRoute(normalized, taken)
+      /* models.dev 补空字段;查询失败或查不到就静默沿用发现结果。 */
+      try {
+        const answer = await lookupCatalogFacts(ctx, catalogRoute, ids)
+        models = models.map((model) => {
+          const facts = answer.facts[model['id'] as string]
+          if (facts === undefined) return model
+          return { ...model, ...catalogFill(model, 'pi-ai', protocol, facts).patch }
+        })
+      } catch { /* 补全失败不挡保存 */ }
+
+      /* 读取最新已占路由放在 catalog 查询之后,避免长达 15s 的查询窗口内发生并发写入或覆盖保留密钥。 */
+      const latest = await readLatestState(!credentialStored)
+      let route = pinnedRoute !== undefined && (!latest.liveTaken.includes(pinnedRoute) || credentialStored)
+        ? pinnedRoute
+        : deriveRoute(normalized, latest.allTaken)
+      if (pinnedRoute === undefined || (!credentialStored && latest.liveTaken.includes(pinnedRoute))) {
+        const blocked = new Set(latest.allTaken)
+        for (;;) {
+          const candidateRef = deriveKeyRef(route)
+          let refInVault = false
+          if (!latest.explicitUsedRefs.has(candidateRef) && typeof ctx.remote.credentials.describe === 'function') {
+            try {
+              const described = await ctx.remote.credentials.describe([candidateRef])
+              if (described.ok && described.value[candidateRef]?.configured === true) refInVault = true
+            } catch { /* 忽略预检失败 */ }
+          }
+          if (!latest.explicitUsedRefs.has(candidateRef) && !refInVault) break
+          blocked.add(route)
+          const next = deriveRoute(normalized, [...blocked])
+          if (next === route) break
+          route = next
+        }
+      }
+      if (route !== pinnedRoute) setPinnedRoute(route)
+      const name = displayName.trim() || defaultName(normalized) || route
+      const keyRef = deriveKeyRef(route)
+      let keyExistedBefore = false
+      let wroteCredentialNow = false
+      /* 密钥先写:settings.mutate 触发 settings/document-updated,模型目录随
+         之刷新;密钥必须在此之前落库,否则目录把这条路由看成缺凭据。 */
+      if (!credentialStored) {
+        if (typeof ctx.remote.credentials.describe === 'function') {
+          try {
+            const described = await ctx.remote.credentials.describe([keyRef])
+            if (described.ok && described.value[keyRef]?.configured === true) {
+              keyExistedBefore = true
+            }
+          } catch { /* 忽略预检失败 */ }
+        }
+        const credential = await ctx.remote.credentials.set(keyRef, keyValue.length > 0 ? keyValue : NO_KEY_PLACEHOLDER)
+        if (!credential.ok) {
+          setFailure(failureMessage(credential))
+          return
+        }
+        wroteCredentialNow = true
+        setCredentialStored(true)
+      }
+      if (!profileStored) {
+        const profile: Record<string, unknown> = {
+          api: protocol,
+          baseURL: normalized,
+          models,
+          cacheRetention: 'long',
+          displayName: name,
+          apiKeyEnv: keyRef,
+        }
+        const response = await ctx.remote.settings.mutate(
+          'llm-pi-ai',
+          [{ op: 'set', path: ['providers', route], value: profile }],
+          latest.revision,
+        )
+        const result = response
+        if (!result.ok) {
+          if (result.error?.code === 'settings-conflict') {
+            if (typeof store.load === 'function') {
+              await store.load().catch(() => undefined)
+            }
+            const after = await readLatestState(true)
+            if (after.allTaken.includes(route)) {
+              if (wroteCredentialNow && !keyExistedBefore && !after.explicitUsedRefs.has(keyRef) && typeof ctx.remote.credentials.unset === 'function') {
+                await ctx.remote.credentials.unset(keyRef).catch(() => undefined)
+              }
+              setPinnedRoute(undefined)
+              setCredentialStored(false)
+            }
+            setFailure(text().conflict)
+          } else {
+            setFailure(failureMessage(result))
+          }
+          return
+        }
+        store.acceptNamespaceView(result.value)
+        setProfileStored(true)
+      }
+      onClose(true, text().addedNote(name, ids.length))
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const togglePick = (id: string): void => {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const filteredPicked = filtered.length > 0 && filtered.every((candidate) => picked.has(candidate.id))
+  const toggleFiltered = (): void => {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (filteredPicked) for (const candidate of filtered) next.delete(candidate.id)
+      else for (const candidate of filtered) next.add(candidate.id)
+      return next
+    })
+  }
+  const many = candidates !== undefined && candidates.length > 20
+  const manualInputBlock = (
+    <Flex direction="column" gap="2" className="models-field" minWidth="0">
+      <Text size="2" weight="medium" className="models-field-label">
+        {text().manualModels}
+      </Text>
+      <Input
+        ref={(node) => {
+          if (node && manualFocus.pending) {
+            manualFocus.pending = false
+            node.focus()
+          }
+        }}
+        type="text"
+        className="models-input"
+        value={manualIds}
+        aria-label={text().manualModels}
+        disabled={readOnly || busy}
+        onChange={setManualIds} />
+      <Text size="1" color="gray" className="models-hint">
+        {text().manualModelsHint}
+      </Text>
+    </Flex>
+  )
+
   return (
-    <Box className="models-editor">
+    <Box className="models-editor" data-testid="dsh-models-add-endpoint">
       <Flex className="models-editor-header" align="baseline" gap="2">
         <Text size="2" weight="medium" className="models-editor-title">
-          {t('models.customProvider')}
+          {text().addEndpoint}
         </Text>
-      </Flex>
-      <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="2" weight="medium" className="models-field-label">
-          {text().customRoute}
-        </Text>
-        <Input
-          type="text"
-          className="models-input"
-          value={route}
-          placeholder="acme-gateway"
-          aria-label={text().customRoute}
-          aria-invalid={routeInvalid !== undefined}
-          disabled={readOnly || busy || committed}
-          onChange={setRoute} />
-      </Flex>
-      {routeInvalid !== undefined
-        ? <Notice tone="danger" className="models-warning">
-        <>
-          {routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken}
-        </>
-      </Notice>
-        : <Text size="1" color="gray" className="models-hint">
-        {text().customRouteHint}
-      </Text>}
-      <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="2" weight="medium" className="models-field-label">
-          {text().displayName}
-        </Text>
-        <Input
-          type="text"
-          className="models-input"
-          value={displayName}
-          placeholder={route.length > 0 ? route : text().displayName}
-          aria-label={text().displayName}
-          disabled={readOnly || busy || committed}
-          onChange={setDisplayName} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
@@ -473,21 +690,13 @@ export function CustomProviderCard(props: {
           type="text"
           className="models-input"
           value={baseURL}
-          placeholder="https://gateway.example/v1"
+          placeholder="https://api.example.com/v1"
           aria-label={text().baseUrl}
-          disabled={readOnly || busy || committed}
-          onChange={setBaseURL} />
-      </Flex>
-      <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="2" weight="medium" className="models-field-label">
-          {text().protocol}
+          disabled={readOnly || busy}
+          onChange={editConnection(setBaseURL)} />
+        <Text size="1" color="gray" className="models-hint">
+          {text().baseUrlHint}
         </Text>
-        <Select
-          value={protocol}
-          options={protocols.map<SelectOption>((value) => ({ value, label: value }))}
-          onChange={setProtocol}
-          disabled={readOnly || busy || committed}
-          aria-label={text().protocol} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
@@ -502,46 +711,102 @@ export function CustomProviderCard(props: {
           aria-label={text().apiKey}
           aria-invalid={keyFailure !== undefined}
           disabled={readOnly || busy}
-          onChange={setKeyDraft} />
+          onChange={editConnection(setKeyDraft)} />
         {keyFailure === undefined
-          ? null
+          ? <Text size="1" color="gray" className="models-hint">
+            {text().keyHint}
+          </Text>
           : <Notice tone="danger" className="models-warning">
           <>
             {keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
           </>
         </Notice>}
       </Flex>
-      <ModelListEditor
-        ctx={ctx}
-        models={models}
-        settingsNs="llm-pi-ai"
-        provider={route}
-        baseURL={baseURL}
-        api={protocol}
-        apiKey={keyValue.length > 0 ? keyValue : undefined}
-        family="pi-ai"
-        catalogBacked={false}
-        disabled={readOnly || busy || committed}
-        onBusyChange={setCatalogBusy}
-        onChange={setModels}
-        t={text()} />
-      <Text size="1" color="gray" className="models-hint">
-        {baseURL.trim().length === 0 ? text().customNeedsBaseUrl
-          : models.length === 0 ? text().customNeedsModels
-            : null}
-      </Text>
-      {modelFailure !== undefined
-        ? <Notice tone="danger" className="models-warning">
-        <>
-          {text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))}
-        </>
-      </Notice>
-        : null}
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="2" weight="medium" className="models-field-label">
+          {text().protocol}
+        </Text>
+        <Select
+          value={protocol}
+          options={ordered.map<SelectOption>((value) => ({ value, label: protocolLabel(value) }))}
+          onChange={editConnection(setProtocol)}
+          disabled={readOnly || busy}
+          aria-label={text().protocol} />
+      </Flex>
       {failure !== undefined ? <Notice tone="danger" className="models-warning">
         <>
           {failure}
         </>
       </Notice> : null}
+      {manual && candidates === undefined ? manualInputBlock : null}
+      {candidates === undefined ? null : <Fragment>
+        <Text size="2" weight="medium" className="models-field-label">
+          {text().foundModels(candidates.length)}
+        </Text>
+        {many ? <Text size="1" color="gray" className="models-hint">
+          {text().manyModelsHint}
+        </Text> : null}
+        {candidates.length > 12 ? <Flex align="center" gap="2" className="models-pick-tools">
+          <Input
+            type="text"
+            className="models-input"
+            value={filter}
+            aria-label={text().filterModels}
+            disabled={readOnly || busy}
+            onChange={setFilter} />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="models-button"
+            disabled={readOnly || busy}
+            onClick={toggleFiltered}>
+            {filteredPicked ? text().candidateDeselectAll : text().candidateSelectAll}
+          </Button>
+        </Flex> : null}
+        <Flex asChild direction="column" gap="1" m="0" p="0">
+          <ul className="models-candidate-list models-pick-list">
+          {filtered.map((candidate) => <li key={candidate.id} className="models-candidate">
+            <Flex className="models-candidate-label" align="center" gap="2">
+              <Checkbox
+                id={`model-pick-${candidate.id}`}
+                checked={picked.has(candidate.id)}
+                disabled={readOnly || busy}
+                onCheckedChange={() => togglePick(candidate.id)} />
+              <Text as="label" htmlFor={`model-pick-${candidate.id}`} size="2" weight="medium" className="models-candidate-id">
+                {candidate.id}
+              </Text>
+              {typeof candidate.name === 'string' && candidate.name !== candidate.id ? <Badge tone="neutral" className="models-candidate-name">
+                {candidate.name}
+              </Badge> : null}
+            </Flex>
+          </li>)}
+          </ul>
+        </Flex>
+        {manual ? manualInputBlock : <Button
+          variant="ghost"
+          size="sm"
+          className="models-button models-manual-toggle"
+          disabled={readOnly || busy}
+          onClick={() => {
+            manualFocus.pending = true
+            setManual(true)
+          }}>
+          {text().manualMore}
+        </Button>}
+      </Fragment>}
+      {candidates !== undefined || manual ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="2" weight="medium" className="models-field-label">
+          {text().displayName}
+        </Text>
+        <Input
+          type="text"
+          className="models-input"
+          value={displayName}
+          placeholder={baseURL.trim() === '' ? text().displayName : defaultName(normalizeBaseURL(baseURL, protocol))}
+          aria-label={text().displayName}
+          disabled={readOnly || busy}
+          onChange={setDisplayName} />
+      </Flex> : null}
       <Flex className="models-editor-actions" gap="2" justify="end">
         <Button
           variant="secondary"
@@ -550,16 +815,47 @@ export function CustomProviderCard(props: {
           onClick={() => onClose(false)}>
           {text().cancel}
         </Button>
-        <Button
+        {candidates !== undefined ? <Button
           variant="primary"
           className="models-button models-button-primary"
-          disabled={readOnly || busy || catalogBusy || !ready}
-          onClick={() => void submit()}>
-          {busy ? <Fragment>
+          disabled={readOnly || busy || !connectionValid || pickedCount === 0}
+          onClick={() => void save()}>
+          {saving ? <Fragment>
             <ActivityDots />
-            {text().creating}
-          </Fragment> : text().createCustom}
-        </Button>
+            {text().saving}
+          </Fragment> : t('common.save')}
+        </Button> : <Fragment>
+          {/* 手动兜底仍留在连接步:连接是次要的重试入口,保存是主操作。 */}
+          {manual ? <Button
+            variant="secondary"
+            className="models-button"
+            disabled={readOnly || busy || !connectionValid}
+            onClick={() => void connect()}>
+            {connecting ? <Fragment>
+              <ActivityDots />
+              {text().connecting}
+            </Fragment> : text().connect}
+          </Button> : null}
+          {manual ? <Button
+            variant="primary"
+            className="models-button models-button-primary"
+            disabled={readOnly || busy || !connectionValid || pickedCount === 0}
+            onClick={() => void save()}>
+            {saving ? <Fragment>
+              <ActivityDots />
+              {text().saving}
+            </Fragment> : t('common.save')}
+          </Button> : <Button
+            variant="primary"
+            className="models-button models-button-primary"
+            disabled={readOnly || busy || !connectionValid}
+            onClick={() => void connect()}>
+            {connecting ? <Fragment>
+              <ActivityDots />
+              {text().connecting}
+            </Fragment> : text().connect}
+          </Button>}
+        </Fragment>}
       </Flex>
     </Box>
   );

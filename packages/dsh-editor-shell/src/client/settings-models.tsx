@@ -452,15 +452,23 @@ function Loaded(props: {
           protocols={protocols}
           taken={state.rows.map((row) => providerIdOf(row.entry))}
           readOnly={!writable}
-          onClose={(changed) => {
+          onClose={(changed, note) => {
             setSection((current) => ({
               ...current,
               declaring: false,
-              savedNote: changed ? text().saved : current.savedNote,
+              savedNote: changed ? note ?? text().saved : current.savedNote,
             }))
           }} />
       </Card>
           : <Flex className="models-add-actions" gap="2">
+        <Button
+          variant="primary"
+          className="models-button models-button-primary"
+          data-testid="dsh-models-add-endpoint-open"
+          disabled={!writable || protocols.length === 0}
+          onClick={() => setSection({ ...emptySectionState(), declaring: true })}>
+          {text().addEndpoint}
+        </Button>
         <Button
           variant="secondary"
           className="models-button"
@@ -471,13 +479,6 @@ function Loaded(props: {
             setSection({ ...emptySectionState(), editing: first, editingNamespace: state.namespaces.get(first.entry.settingsNs), adding: true })
           }}>
           {text().add}
-        </Button>
-        <Button
-          variant="secondary"
-          className="models-button"
-          disabled={!writable || protocols.length === 0}
-          onClick={() => setSection({ ...emptySectionState(), declaring: true })}>
-          {text().addCustom}
         </Button>
       </Flex>}
       <DeleteDialog

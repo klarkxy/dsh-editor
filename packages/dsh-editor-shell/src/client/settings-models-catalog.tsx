@@ -19,6 +19,28 @@ type LookupValue = { fetchedAt: string; stale: boolean; models: Record<string, C
 /* 宿主 `models.catalog.lookup` 的单批上限(入参 ids 去重后最多 200)。 */
 const LOOKUP_BATCH = 200
 
+export type CatalogLookupResult = {
+  facts: Record<string, CatalogFacts>
+  stale: boolean
+  /* 第一批失败的起始下标与错误信息;该批及其后的 id 都没有结果。 */
+  failure?: { start: number; message: string }
+}
+
+/* `models.catalog.lookup` 的分批调用,供模型编辑器的自动补全和「添加接口」
+   卡的保存前补全共用:顺序请求,结果合并返回。某一批失败后跳过剩余批次,
+   避免缓存刷新失败时连续叠 15s 超时。 */
+export async function lookupCatalogFacts(ctx: ShellContext, provider: string, ids: string[]): Promise<CatalogLookupResult> {
+  const facts: Record<string, CatalogFacts> = {}
+  let stale = false
+  for (let at = 0; at < ids.length; at += LOOKUP_BATCH) {
+    const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: ids.slice(at, at + LOOKUP_BATCH) }))
+    if (!result.ok) return { facts, stale, failure: { start: at, message: failureMessage(result) } }
+    stale = stale || result.value.stale === true
+    Object.assign(facts, result.value.models)
+  }
+  return { facts, stale }
+}
+
 /* JSON 值相等即可——来源记录里只有数字、字符串数组和 string|null 表。 */
 function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
@@ -187,26 +209,16 @@ export function ModelListEditor(props: {
       onBusyChange?.(next)
     }
     setLookupBusy(1)
-    /* 宿主每次最多查 200 个 id;分批顺序请求,结果合并后统一应用。
-       某一批网络失败后跳过剩余批次,避免缓存刷新失败时连续叠 15s 超时。 */
-    const batches: { index: number; id: string }[][] = []
-    for (let at = 0; at < targets.length; at += LOOKUP_BATCH) batches.push(targets.slice(at, at + LOOKUP_BATCH))
-    const merged: Record<string, CatalogFacts> = {}
-    let stale = false
     const notes: Record<number, string> = {}
+    let merged: Record<string, CatalogFacts> = {}
+    let stale = false
     try {
-      for (let at = 0; at < batches.length; at++) {
-        const batch = batches[at]!
-        const result = await safeRpcCall<LookupValue>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.catalog.lookup', { provider, ids: batch.map((target) => target.id) }))
-        if (!result.ok) {
-          if (announce) {
-            const message = failureMessage(result)
-            batches.slice(at).forEach((rest) => rest.forEach(({ index }) => { notes[index] = message }))
-          }
-          break
-        }
-        stale = stale || result.value.stale === true
-        Object.assign(merged, result.value.models)
+      const answer = await lookupCatalogFacts(ctx, provider, targets.map((target) => target.id))
+      merged = answer.facts
+      stale = answer.stale
+      if (announce) {
+        const failure = answer.failure
+        if (failure !== undefined) targets.slice(failure.start).forEach(({ index }) => { notes[index] = failure.message })
       }
     } finally {
       setLookupBusy(-1)

@@ -17,7 +17,7 @@ import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProp
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import { parseWritingChangeReceipt, WRITING_CHANGE_MARKER, WRITING_CHANGE_TOOL_NAME, type WritingChangeReceipt } from 'dsh-editor-workbench/contracts'
-import { t } from './i18n/index.ts'
+import { t, type MessageKey } from './i18n/index.ts'
 
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 import { BOT_INIT_SENTINEL } from 'dsh-editor-workbench/contracts'
@@ -66,6 +66,43 @@ export type ChatRow = {
   /** Payload for a registered message card. Today: the parsed `novel_memory_update` receipt. */
   result?: unknown
   projectContextReceipt?: ProjectContextReceiptBundle
+}
+
+/* 上游 TurnErrorNode 的 LlmError code → 面向作者的动作指引;没有归类的 code
+   保留通用文案,细节附上 sanitized message(截断)或 code 本身。 */
+const TURN_FAILURE_KEYS: Record<string, MessageKey> = {
+  MISSING_CREDENTIAL: 'chat.failure.credential',
+  INVALID_CREDENTIAL: 'chat.failure.credential',
+  AUTH: 'chat.failure.credential',
+  ACCOUNT_TOKEN_INVALID: 'chat.failure.signIn',
+  ACCOUNT_SIGN_IN_REQUIRED: 'chat.failure.signIn',
+  ACCOUNT_SIGNED_OUT: 'chat.failure.signIn',
+  QUOTA: 'chat.failure.quota',
+  ACCOUNT_QUOTA: 'chat.failure.quota',
+  RATE_LIMIT: 'chat.failure.rateLimit',
+  TRANSPORT: 'chat.failure.transport',
+  TIMEOUT: 'chat.failure.transport',
+  STREAM_CLOSED: 'chat.failure.transport',
+  SERVER: 'chat.failure.server',
+  UNKNOWN_MODEL: 'chat.failure.model',
+  MODEL_UNSUPPORTED: 'chat.failure.model',
+  HTTP_404: 'chat.failure.model',
+  CONTEXT_WINDOW_EXCEEDED: 'chat.failure.context',
+  CONTENT_REFUSED: 'chat.failure.refused',
+  INTERRUPTED: 'chat.failure.interrupted',
+}
+
+export function turnFailureCopy(code: string | undefined, message: string | undefined): { text: string; detail?: string } {
+  const key: MessageKey | undefined = code === undefined ? undefined
+    : TURN_FAILURE_KEYS[code] ?? (/^HTTP_5\d\d$/.test(code) ? 'chat.failure.server' : undefined)
+  if (key !== undefined) return { text: t(key) }
+  const trimmed = (message ?? '').trim()
+  return {
+    text: t('chat.requestFailed'),
+    ...(trimmed !== ''
+      ? { detail: trimmed.length > 300 ? `${trimmed.slice(0, 299)}…` : trimmed }
+      : code !== undefined ? { detail: code } : {}),
+  }
 }
 
 export type QuestionAnswerItem = { id: string; selected: string[]; custom?: string }
@@ -288,7 +325,13 @@ export function chatRows(snapshot: ChatTranscript): ChatRow[] {
       if (!tool || isHiddenToolResult(tool)) continue
       rows.push(toolResultRow(tool))
     }
-    else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: t('chat.requestFailed') })
+    else if (node.kind === 'turn-error') {
+      const copy = turnFailureCopy(
+        typeof node.code === 'string' ? node.code : undefined,
+        typeof node.message === 'string' ? node.message : undefined,
+      )
+      rows.push({ ...common, role: 'notice', text: copy.text, detail: copy.detail })
+    }
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
   }
   return markRecoveredToolErrors(rows)

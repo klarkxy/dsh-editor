@@ -92,7 +92,8 @@
     },
     "patchedDependencies": {
       "@deepseek-ai/dsh-web-frontend@0.2.2-rc.5": "patches/@deepseek-ai__dsh-web-frontend@0.2.2-rc.5.patch",
-      "@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.2-rc.5": "patches/@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.2-rc.5.patch"
+      "@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.2-rc.5": "patches/@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.2-rc.5.patch",
+      "@deepseek-ai/dsh-client-ui-settings-account@0.2.2-rc.5": "patches/@deepseek-ai__dsh-client-ui-settings-account@0.2.2-rc.5.patch"
     }
   },
   "devDependencies": {

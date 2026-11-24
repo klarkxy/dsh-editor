@@ -54,6 +54,9 @@ overrides:
   playwright: 1.62.1
 
 patchedDependencies:
+  '@deepseek-ai/dsh-client-ui-settings-account@0.2.2-rc.5':
+    hash: 3fdf48688e1f73c1d695eda876a612e0ce34e490a5da81d63a77382a10eba753
+    path: patches/@deepseek-ai__dsh-client-ui-settings-account@0.2.2-rc.5.patch
   '@deepseek-ai/dsh-experimental-client-ui-voice-input@0.2.2-rc.5':
     hash: 27411345e847f14a10e67d607b8c75e09a207d1cf2af7aaf736c8bf7ce6f0cdb
     path: patches/@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.2-rc.5.patch
@@ -8997,7 +9000,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
 
-  '@deepseek-ai/dsh-client-ui-settings-account@0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)':
+  '@deepseek-ai/dsh-client-ui-settings-account@0.2.2-rc.5(patch_hash=3fdf48688e1f73c1d695eda876a612e0ce34e490a5da81d63a77382a10eba753)(@deepseek-ai/cordis@4.1.0)':
     dependencies:
       '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
       '@deepseek-ai/schemastery': 3.19.0
@@ -11538,7 +11541,7 @@ snapshots:
       '@deepseek-ai/dsh-client-ui-secret-mask': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-session': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-settings': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
-      '@deepseek-ai/dsh-client-ui-settings-account': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
+      '@deepseek-ai/dsh-client-ui-settings-account': 0.2.2-rc.5(patch_hash=3fdf48688e1f73c1d695eda876a612e0ce34e490a5da81d63a77382a10eba753)(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-settings-agent-loop': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-settings-general': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-settings-models': 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)

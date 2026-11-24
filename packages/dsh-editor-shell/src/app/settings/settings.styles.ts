@@ -349,6 +349,9 @@ defineStyles('dsh.surfaces', 'dsh-settings-page', `
 .radix-themes .models-candidate-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; max-height: 360px; overflow: auto; border-top: 0.5px solid var(--dsh-ui-line); }
 .radix-themes .models-candidate-list .models-candidate { padding: var(--dsh-ui-space-2) var(--dsh-ui-space-1); background: transparent; border: 0; border-bottom: 0.5px solid var(--dsh-ui-line); border-radius: 0; box-shadow: none; }
 .radix-themes .models-candidate-dialog .models-candidate-label { display: flex; align-items: center; gap: var(--dsh-ui-space-2); }
+/* 「添加接口」卡的内联勾选清单复用候选列表规则:models-candidate-list 的
+   max-height 360px + overflow 是结构上限,长清单在卡内滚动而不是撑开设置页。 */
+.radix-themes .models-pick-list .models-candidate-label { display: flex; align-items: center; gap: var(--dsh-ui-space-2); }
 .radix-themes .models-loading { max-width: 480px; margin-top: 12px; }
 
 /* 用量分区：图表与日志行。 */

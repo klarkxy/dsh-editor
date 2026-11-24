@@ -41,10 +41,18 @@ const setPath = (value: unknown, path: string[], next: unknown): unknown => {
 }
 const schema = { getPath, hasPath: (value: unknown, path: string[]) => getPath(value, path) !== undefined, setPath,
   deletePath: (value: unknown, path: string[]): unknown => { const next = structuredClone(value) as Record<string, unknown>; const parent = getPath(next, path.slice(0, -1)) as Record<string, unknown>; delete parent[path.at(-1)!]; return next },
-  rehydrate: (value: unknown) => value, nodeAtPath: () => ({ type: 'object' }), validate: () => undefined }
+  rehydrate: (value: unknown) => value,
+  // 探针路由的 api 节点答一个 union,让 protocolChoices 拿到协议列表,
+  // 「添加接口」卡在夹具里可用;其余路径照旧答 object。
+  nodeAtPath: (_root: unknown, path?: string[]) => path?.at(-1) === 'api'
+    ? { type: 'union', list: [{ value: 'openai-completions' }, { value: 'anthropic-messages' }, { value: 'openai-responses' }, { value: 'google-generative-ai' }] }
+    : { type: 'object' },
+  validate: () => undefined }
 const ctx = { configForms: { describe: () => mirror }, settingsSchema: schema,
+  connection: { rpc: { call: async () => ({ ok: true, value: { fetchedAt: '', stale: false, models: {} } }) } },
   remote: { $on: (event: string, listener: () => void) => { const group = listeners.get(event) ?? new Set(); listeners.set(event, group); group.add(listener); return () => group.delete(listener) },
-    llm: { listConfigurableProviders: async () => { if (release) await new Promise<void>(resolve => { release = resolve }); if (fail) throw Error('Fixture refresh failed'); return { ok: true, value: providerVisible ? [{ id: 'fixture', provider: 'fixture', displayName: 'Fixture provider', settingsNs: namespace.ns, settingsPath: ['providers', 'fixture'], active: true, declared: true }] : [] } } },
+    llm: { listConfigurableProviders: async () => { if (release) await new Promise<void>(resolve => { release = resolve }); if (fail) throw Error('Fixture refresh failed'); return { ok: true, value: providerVisible ? [{ id: 'fixture', provider: 'fixture', displayName: 'Fixture provider', settingsNs: namespace.ns, settingsPath: ['providers', 'fixture'], active: true, declared: true }] : [] } },
+      discoverModels: async () => ({ ok: true, value: [{ id: 'fixture-alpha', name: 'Fixture Alpha' }, { id: 'fixture-beta' }, { id: 'fixture-gamma' }] }) },
     credentials: { describe: async () => ({ ok: true, value: { FIXTURE_API_KEY: { configured: true, writable: true } } }), set: async (...args: unknown[]) => { calls.push(['key', ...args]); return { ok: true } } },
     settings: { mutate: async (...args: unknown[]) => { calls.push(['settings', ...args]); return { ok: false, error: { code: 'settings-conflict', message: 'Fixture conflict' } } } },
     session: { modelCatalog: async () => ({ ok: true, value: catalog }), selectModel: async (value: typeof selection) => { calls.push(['select', value]); selection = value; return { ok: true, value: { selected: value } } } } },

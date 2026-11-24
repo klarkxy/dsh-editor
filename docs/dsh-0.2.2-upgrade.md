@@ -103,6 +103,7 @@
 | --- | --- | --- |
 | `@deepseek-ai__dsh-web-frontend@0.2.2-rc.5.patch` | 移植，目标资产改名 | Tag 等规则仍是 11px/17px 内联在新哈希资产 `index-CSAdOBx6.css`；补丁把全部两处提升为 12px/18px，意图不变。 |
 | `@deepseek-ai__dsh-experimental-client-ui-voice-input@0.2.2-rc.5.patch` | 移植，按新产物重写 hunk | rc.5 的 `lib/client.js` 是压缩产物，旧补丁上下文不可套用；按实际压缩字符串重建，意图不变：`wanted` 状态门控、`wanted && !document.hidden && !capture` 采集条件、effect 依赖加 `wanted`、「测试麦克风 / 停止测试」按钮与中英文案。`scripts/voice-input-patch.spec.mjs` 断言同步改为压缩产物形式并校验安装制品。 |
+| `@deepseek-ai__dsh-client-ui-settings-account@0.2.2-rc.5.patch` | 新增 | `DesktopOnboardingEntry` 在控制器 `loading` 且没有任何 onboarding 要展示时，仍渲染全工作台「正在加载设置…」遮罩并报 `visible=true`，每次启动都盖住工作区。补丁把 `visible` 改为只看 `displayed !== null`，`displayed === null` 直接 `return null`；真实 onboarding（`state.visible`）路径不变。`scripts/desktop-onboarding-patch.spec.mjs` 校验安装制品。 |
 
 ### 官方升级指南核对（rc.5）
 

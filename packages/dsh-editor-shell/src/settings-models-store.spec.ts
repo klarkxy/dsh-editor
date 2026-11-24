@@ -11,15 +11,24 @@ import {
   apiKeyEnvOf,
   apiKeyFailure,
   credentialDot,
+  deriveDisplayName,
   deriveKeyRef,
+  deriveRoute,
+  discoveryFailureKind,
   isAccountRow,
+  isLocalNetworkHost,
+  isLoopbackHost,
   isQuoted,
+  isValidEndpointBaseURL,
   joinProviderRows,
   layoutOf,
   modelDrafts,
   needsSetup,
+  normalizeBaseURL,
+  parseModelIds,
   pathOps,
   protocolChoices,
+  protocolOrder,
   providerUsable,
   reasoningChoiceOf,
   reasoningEffortsFor,
@@ -652,5 +661,206 @@ describe('routeFailure', () => {
 
   it('reports no failure for a well-formed, non-colliding route', () => {
     expect(routeFailure('acme-gateway', ['other-route'])).toBeUndefined()
+  })
+})
+
+describe('normalizeBaseURL', () => {
+  it('trims whitespace and returns an empty string for empty input', () => {
+    expect(normalizeBaseURL('   ')).toBe('')
+    expect(normalizeBaseURL('')).toBe('')
+  })
+
+  it('prepends http:// only for loopback hosts and https:// for public and LAN hosts', () => {
+    expect(normalizeBaseURL('api.moonshot.cn/v1')).toBe('https://api.moonshot.cn/v1')
+    expect(normalizeBaseURL('8.8.8.8/v1')).toBe('https://8.8.8.8/v1')
+    expect(normalizeBaseURL('127.0.0.1:3425/v1')).toBe('http://127.0.0.1:3425/v1')
+    expect(normalizeBaseURL('localhost:11434')).toBe('http://localhost:11434')
+    expect(normalizeBaseURL('192.168.1.5:8000/v1/chat/completions')).toBe('https://192.168.1.5:8000/v1')
+    expect(normalizeBaseURL('nas:8080/v1')).toBe('https://nas:8080/v1')
+  })
+
+  it('keeps an explicit scheme untouched, local or LAN host or not', () => {
+    expect(normalizeBaseURL('http://localhost:11434/')).toBe('http://localhost:11434')
+    expect(normalizeBaseURL('http://192.168.1.5:8000/v1')).toBe('http://192.168.1.5:8000/v1')
+    expect(normalizeBaseURL('https://127.0.0.1:3425')).toBe('https://127.0.0.1:3425')
+    expect(normalizeBaseURL('https://api.deepseek.com//')).toBe('https://api.deepseek.com')
+  })
+
+  it('wraps schemeless bare IPv6 hosts in brackets without double-wrapping', () => {
+    expect(normalizeBaseURL('::1/v1')).toBe('http://[::1]/v1')
+    expect(normalizeBaseURL('::1:11434/v1')).toBe('http://[::1]:11434/v1')
+    expect(normalizeBaseURL('::1:3425/v1')).toBe('http://[::1]:3425/v1')
+    expect(normalizeBaseURL('::1:8080/v1')).toBe('http://[::1]:8080/v1')
+    expect(normalizeBaseURL('[::1]/v1')).toBe('http://[::1]/v1')
+    expect(normalizeBaseURL('[::1]:11434/v1')).toBe('http://[::1]:11434/v1')
+    expect(normalizeBaseURL('2001:db8::1/v1')).toBe('https://[2001:db8::1]/v1')
+    expect(normalizeBaseURL('2001:db8::1:8080/v1')).toBe('https://[2001:db8::1:8080]/v1')
+    expect(normalizeBaseURL('/v1')).toBe('')
+    expect(normalizeBaseURL('https://models')).toBe('https://models')
+    expect(() => new URL(normalizeBaseURL('::1/v1'))).not.toThrow()
+    expect(() => new URL(normalizeBaseURL('::1:11434/v1'))).not.toThrow()
+    expect(() => new URL(normalizeBaseURL('::1:3425/v1'))).not.toThrow()
+  })
+
+  it('strips /v1/messages, /messages, and trailing /v1 for anthropic-messages while keeping /v1 for OpenAI-compatible protocols', () => {
+    expect(normalizeBaseURL('https://api.anthropic.com/v1/messages', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://api.anthropic.com/v1', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://api.anthropic.com/messages', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://gateway.example.com/anthropic/v1/messages', 'anthropic-messages')).toBe('https://gateway.example.com/anthropic')
+    expect(normalizeBaseURL('https://gateway.example.com/anthropic/v1/', 'anthropic-messages')).toBe('https://gateway.example.com/anthropic')
+    expect(normalizeBaseURL('https://api.moonshot.cn/v1/messages', 'openai-completions')).toBe('https://api.moonshot.cn/v1')
+    expect(normalizeBaseURL('https://api.moonshot.cn/v1/chat/completions', 'openai-completions')).toBe('https://api.moonshot.cn/v1')
+  })
+
+  it('strips a trailing API call path, repeatedly and case-insensitively', () => {
+    expect(normalizeBaseURL('api.moonshot.cn/v1/chat/completions')).toBe('https://api.moonshot.cn/v1')
+    expect(normalizeBaseURL('https://x.test/v1/Chat/Completions/')).toBe('https://x.test/v1')
+    expect(normalizeBaseURL('https://x.test/v1/models')).toBe('https://x.test/v1')
+    expect(normalizeBaseURL('https://x.test/v1/responses')).toBe('https://x.test/v1')
+    expect(normalizeBaseURL('https://x.test/v1/messages')).toBe('https://x.test/v1')
+    expect(normalizeBaseURL('https://x.test/v1/completions')).toBe('https://x.test/v1')
+    expect(normalizeBaseURL('https://x.test/v1/chat/completions/models')).toBe('https://x.test/v1')
+  })
+
+  it('keeps query strings untouched', () => {
+    expect(normalizeBaseURL('https://x.test/v1?key=1')).toBe('https://x.test/v1?key=1')
+  })
+})
+
+describe('isLoopbackHost and isValidEndpointBaseURL', () => {
+  it('recognizes only loopback hosts as loopback', () => {
+    for (const host of ['localhost', 'sub.localhost', '127.0.0.1', '127.55.0.9', '::1', '[::1]']) {
+      expect(isLoopbackHost(host), host).toBe(true)
+    }
+    for (const host of ['', '192.168.1.5', '10.0.0.1', '172.16.0.1', 'nas', 'nas.local', '8.8.8.8', 'api.moonshot.cn']) {
+      expect(isLoopbackHost(host), host).toBe(false)
+    }
+  })
+
+  it('validates HTTP(S) URLs with a non-empty host', () => {
+    expect(isValidEndpointBaseURL('')).toBe(false)
+    expect(isValidEndpointBaseURL('   ')).toBe(false)
+    expect(isValidEndpointBaseURL('http://')).toBe(false)
+    expect(isValidEndpointBaseURL('ftp://example.com/v1')).toBe(false)
+    expect(isValidEndpointBaseURL('not a url')).toBe(false)
+    expect(isValidEndpointBaseURL('/v1')).toBe(false)
+    expect(isValidEndpointBaseURL('::1/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('::1:3425/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('::1:11434/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('api.anthropic.com/v1', 'anthropic-messages')).toBe(true)
+  })
+})
+
+describe('deriveRoute', () => {
+  it('derives the base label from the host, dropping TLDs and second-level public suffixes', () => {
+    expect(deriveRoute('https://api.moonshot.cn/v1', [])).toBe('moonshot')
+    expect(deriveRoute('https://open.bigmodel.cn', [])).toBe('bigmodel')
+    expect(deriveRoute('https://api.deepseek.com', [])).toBe('deepseek')
+    expect(deriveRoute('https://foo.example.com.cn/v1', [])).toBe('example')
+  })
+
+  it('treats IP literals and single-label hosts as local', () => {
+    expect(deriveRoute('http://127.0.0.1:11434', [])).toBe('local')
+    expect(deriveRoute('http://[::1]:11434', [])).toBe('local')
+    expect(deriveRoute('http://localhost:11434', [])).toBe('local')
+  })
+
+  it('appends -2, -3, … until the route is free', () => {
+    expect(deriveRoute('https://api.moonshot.cn', ['moonshot'])).toBe('moonshot-2')
+    expect(deriveRoute('https://api.moonshot.cn', ['moonshot', 'moonshot-2'])).toBe('moonshot-3')
+    expect(deriveRoute('not a url', ['custom', 'custom-2'])).toBe('custom-3')
+  })
+
+  it('sanitizes the label into a legal route and falls back to custom', () => {
+    expect(deriveRoute('https://api_v2.example.com', [])).toBe('example')
+    expect(deriveRoute('https://my_gateway.com', [])).toBe('my-gateway')
+    expect(deriveRoute('https://9lives.com', [])).toBe('p-9lives')
+    expect(deriveRoute('not a url', [])).toBe('custom')
+    expect(ROUTE_PATTERN.test(deriveRoute('https://api.moonshot.cn', ['moonshot']))).toBe(true)
+    expect(ROUTE_PATTERN.test(deriveRoute('https://9lives.example.com', []))).toBe(true)
+  })
+})
+
+describe('deriveDisplayName', () => {
+  it('capitalizes the same base label deriveRoute uses', () => {
+    expect(deriveDisplayName('https://api.moonshot.cn/v1')).toBe('Moonshot')
+    expect(deriveDisplayName('https://open.bigmodel.cn')).toBe('Bigmodel')
+    expect(deriveDisplayName('https://api.deepseek.com')).toBe('Deepseek')
+  })
+
+  it('returns undefined for local and IP hosts so callers can substitute a localized label', () => {
+    expect(deriveDisplayName('http://localhost:11434')).toBeUndefined()
+    expect(deriveDisplayName('http://127.0.0.1:11434')).toBeUndefined()
+  })
+
+  it('falls back to a neutral name when nothing can be parsed', () => {
+    expect(deriveDisplayName('not a url')).toBe('Custom')
+  })
+})
+
+describe('isLocalNetworkHost', () => {
+  it('covers localhost names, single-label hosts and the v6 loopback', () => {
+    for (const host of ['localhost', 'printer.localhost', 'nas', 'nas.local', '::1', '[::1]']) {
+      expect(isLocalNetworkHost(host), host).toBe(true)
+    }
+  })
+
+  it('covers the private IPv4 ranges only', () => {
+    for (const host of ['127.0.0.1', '127.55.0.9', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.5', '169.254.0.1']) {
+      expect(isLocalNetworkHost(host), host).toBe(true)
+    }
+    for (const host of ['8.8.8.8', '172.15.0.1', '172.32.0.1', '192.167.0.1', '169.255.0.1', '11.0.0.1', 'api.moonshot.cn', 'example.com']) {
+      expect(isLocalNetworkHost(host), host).toBe(false)
+    }
+  })
+})
+
+describe('discoveryFailureKind', () => {
+  it('maps credential failures to key', () => {
+    expect(discoveryFailureKind('https://x answered 401; check the API key', 'DISCOVERY_FAILED')).toBe('key')
+    expect(discoveryFailureKind('https://x answered 403; check the API key')).toBe('key')
+    expect(discoveryFailureKind('whatever', 'INVALID_CREDENTIAL')).toBe('key')
+    expect(discoveryFailureKind("this provider's API key is blank; enter it on the Models page")).toBe('key')
+    expect(discoveryFailureKind('API key contains characters no HTTP header can carry')).toBe('key')
+  })
+
+  it('maps wrong-address responses to address', () => {
+    expect(discoveryFailureKind('https://x answered 404')).toBe('address')
+    expect(discoveryFailureKind('https://x did not answer with JSON')).toBe('address')
+    expect(discoveryFailureKind('the endpoint\'s model listing has neither a "data" array nor a "models" object')).toBe('address')
+    expect(discoveryFailureKind('the endpoint\'s model listing has no "models" array')).toBe('address')
+  })
+
+  it('maps unreachable endpoints to network', () => {
+    expect(discoveryFailureKind('could not reach https://x.test/v1')).toBe('network')
+  })
+
+  it('maps unreadable protocols to unsupported', () => {
+    expect(discoveryFailureKind('whatever', 'DISCOVERY_UNSUPPORTED')).toBe('unsupported')
+    expect(discoveryFailureKind('pi-ai protocol "x" has no model listing this build can read; enter this provider\'s models by hand')).toBe('unsupported')
+  })
+
+  it('falls back to other', () => {
+    expect(discoveryFailureKind('answered 500')).toBe('other')
+    expect(discoveryFailureKind('model discovery aborted by caller', 'ABORTED')).toBe('other')
+  })
+})
+
+describe('parseModelIds', () => {
+  it('splits on commas, whitespace, newlines and CJK separators, trimmed and deduped in order', () => {
+    expect(parseModelIds('a, b b')).toEqual(['a', 'b'])
+    expect(parseModelIds('a，b、c\nd  e')).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(parseModelIds('a, a ,b,a')).toEqual(['a', 'b'])
+    expect(parseModelIds('  ')).toEqual([])
+  })
+})
+
+describe('protocolOrder', () => {
+  it('puts openai-completions first and keeps the rest in order', () => {
+    expect(protocolOrder(['anthropic-messages', 'openai-completions', 'google-generative-ai']))
+      .toEqual(['openai-completions', 'anthropic-messages', 'google-generative-ai'])
+    expect(protocolOrder(['anthropic-messages', 'google-generative-ai']))
+      .toEqual(['anthropic-messages', 'google-generative-ai'])
+    expect(protocolOrder([])).toEqual([])
   })
 })

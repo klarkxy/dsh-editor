@@ -202,6 +202,8 @@ export const S = Object.freeze({
   modelsCustomizedSummary: '.models-customized summary',
   modelsEditor: '.models-editor',
   modelsAddCard: '.models-add-card',
+  modelsAddEndpoint: '[data-testid="dsh-models-add-endpoint"]',
+  modelsAddEndpointOpen: '[data-testid="dsh-models-add-endpoint-open"]',
   modelsAccountSignIn: '[data-testid="dsh-models-account-signin"]',
   modelsAccountSignOut: '[data-testid="dsh-models-account-signout"]',
   modelsAccountCancel: '[data-testid="dsh-models-account-cancel"]',

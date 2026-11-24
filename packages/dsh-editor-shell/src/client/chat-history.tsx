@@ -1,7 +1,7 @@
 import { Fragment, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import { Box, Button, Flex, ScrollArea, Text } from '../ui/index.ts'
 import { Notice } from '../ui/index.ts'
-import { loadOlder, WRITING_PROPOSE_TOOL_NAME, type PendingInteraction, type partialView } from '../adapter.ts'
+import { loadOlder, turnFailureCopy, WRITING_PROPOSE_TOOL_NAME, type PendingInteraction, type partialView } from '../adapter.ts'
 import { WRITING_CHANGE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import type { ChatTranscript, SessionFace, SessionLifecycle } from '../dsh-compat.ts'
 import type { ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
@@ -200,7 +200,10 @@ export function ChatHistory({
           {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
           <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} onApplied={handleApplied} />
           {snapshot.openState === 'error' ? <Notice tone="danger" title={t('chat.connectionInterrupted')} /> : null}
-          {snapshot.promptError && !hasTurnError ? <Notice tone="danger" title={t('chat.requestFailed')} /> : null}
+          {snapshot.promptError && !hasTurnError ? (() => {
+            const copy = turnFailureCopy(snapshot.promptError.error?.code, snapshot.promptError.error?.message)
+            return <Notice tone="danger" title={copy.text}>{copy.detail ?? null}</Notice>
+          })() : null}
         </Flex>
       </ScrollArea>
     </Box>
