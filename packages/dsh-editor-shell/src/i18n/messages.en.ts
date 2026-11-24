@@ -864,6 +864,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'models.connectFailed': 'Could not fetch models: {message}',
   'models.manualModels': 'Enter model names by hand',
   'models.manualModelsHint': 'Separate multiple ids with commas or spaces, e.g. deepseek-chat, deepseek-reasoner',
+  'models.manualMore': 'Missing a model? Add manually',
   'models.foundModels': 'Found {n} models',
   'models.filterModels': 'Filter models',
   'models.manyModelsHint': 'Many models — check the ones you need.',

@@ -68,6 +68,22 @@ export function WritingModelRoutesView(props: {
     </Notice> : null}
   </>
 }
+function writingRoutesEqual(a: WritingModelRoute | undefined, b: WritingModelRoute | undefined): boolean {
+  if (a === undefined && b === undefined) return true
+  if (a === undefined || b === undefined) return false
+  return a.provider === b.provider && a.model === b.model && (a.reasoningEffort ?? undefined) === (b.reasoningEffort ?? undefined)
+}
+
+export function shouldClearOptimisticRoute(
+  optimistic: { field: WritingModelField; route: WritingModelRoute | undefined; revision: number | undefined } | undefined,
+  snapshot: SettingsScopeSnapshot<WritingPreferences>,
+): boolean {
+  if (!optimistic) return false
+  if (snapshot.revision !== undefined && optimistic.revision !== snapshot.revision) return true
+  const latest = normalizeWritingModelRoute(snapshot.value?.[optimistic.field])
+  return writingRoutesEqual(latest, optimistic.route)
+}
+
 export function WritingModelRoutes(props: {
   connection?: ConnectionHandle; scope: SettingsScope<WritingPreferences>; catalog: CatalogModelOption[]; writable: boolean; showSharedPurposes?: boolean
 }): ReactNode {
@@ -91,7 +107,7 @@ export function WritingModelRoutes(props: {
     return () => { generation.current++ }
   }, [props.scope])
   useEffect(() => {
-    setOptimistic(current => current && snapshot.revision !== undefined && current.revision !== snapshot.revision ? undefined : current)
+    setOptimistic(current => (shouldClearOptimisticRoute(current, snapshot) ? undefined : current))
   }, [snapshot])
   const save = async (field: WritingModelField, route: WritingModelRoute | undefined) => {
     if (pending.current) return
@@ -106,10 +122,15 @@ export function WritingModelRoutes(props: {
       if (ticket === generation.current) {
         failedWrite.current = { field, route }
         setFailure(error instanceof Error ? error.message : String(error))
+      }
+    }
+    finally {
+      if (ticket === generation.current) {
+        pending.current = false
+        setSaving(false)
         setOptimistic(undefined)
       }
     }
-    finally { if (ticket === generation.current) { pending.current = false; setSaving(false) } }
   }
   return <WritingModelRoutesView snapshot={snapshot} catalog={props.catalog} writable={props.writable} saving={saving} failure={failure} optimistic={optimistic}
     chatOnly={props.showSharedPurposes === false} onSave={(field, route) => { void save(field, route) }} onRetry={failedWrite.current ? () => {

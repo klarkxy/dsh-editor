@@ -862,6 +862,7 @@ export const zh = {
   'models.connectFailed': '获取模型失败：{message}',
   'models.manualModels': '手动填写模型名称',
   'models.manualModelsHint': '多个用逗号或空格分隔，例如 deepseek-chat, deepseek-reasoner',
+  'models.manualMore': '没找到想要的模型？手动补充',
   'models.foundModels': '找到 {n} 个模型',
   'models.filterModels': '筛选模型',
   'models.manyModelsHint': '模型较多，勾选你要用的。',

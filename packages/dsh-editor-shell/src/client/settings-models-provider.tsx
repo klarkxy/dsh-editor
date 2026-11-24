@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Badge, Box, Button, Checkbox, Flex, Input, Notice, Text } from '../ui/index.ts'
 import type { CredentialView, DiscoveredModelView, SettingsNamespaceView, SettingsPathOpView } from '../dsh-compat.ts'
-import { apiKeyFailure, catalogFill, deriveDisplayName, deriveKeyRef, deriveRoute, discoveryFailureKind, layoutOf, modelDrafts, NO_KEY_PLACEHOLDER, normalizeBaseURL, parseModelIds, pathOps, protocolChoices, protocolOrder, providerIdOf, refFor, validateModels, type ProviderRow } from './settings-models-store.ts'
+import { apiKeyFailure, catalogFill, deriveDisplayName, deriveKeyRef, deriveRoute, discoveryFailureKind, isValidEndpointBaseURL, layoutOf, modelDrafts, NO_KEY_PLACEHOLDER, normalizeBaseURL, parseModelIds, pathOps, protocolChoices, protocolOrder, providerIdOf, refFor, validateModels, type ProviderRow } from './settings-models-store.ts'
 import { Select } from './select.tsx'
 import type { SelectOption } from '../model/select.ts'
 import { ActivityDots } from './ui/index.ts'
@@ -356,6 +356,7 @@ export function CustomProviderCard(props: {
   /* 连接失败或端点返回空列表后给出手动兜底输入。 */
   const [manual, setManual] = useState(false)
   const [manualIds, setManualIds] = useState('')
+  const [manualFocus] = useState(() => ({ pending: false }))
   const [connecting, setConnecting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -367,6 +368,8 @@ export function CustomProviderCard(props: {
 
   const keyFailure = apiKeyFailure(keyDraft)
   const keyValue = keyDraft.trim()
+  const baseUrlValid = isValidEndpointBaseURL(baseURL, protocol)
+  const connectionValid = baseUrlValid && keyFailure === undefined && (ordered.length === 0 || protocol.trim() !== '')
   const busy = connecting || saving
   /* 本机/局域网地址没有可读的站名;显示名退到带端口的本地化文案。 */
   const defaultName = (normalized: string): string => {
@@ -383,7 +386,8 @@ export function CustomProviderCard(props: {
     return candidate.id.toLowerCase().includes(needle) || name.toLowerCase().includes(needle)
   })
   const manualList = parseModelIds(manualIds)
-  const pickedCount = candidates === undefined ? manualList.length : picked.size
+  const extraManualIds = manual ? manualList.filter((id) => candidates === undefined || !picked.has(id)) : []
+  const pickedCount = (candidates === undefined ? 0 : picked.size) + extraManualIds.length
 
   /* 改连接三件套就作废已取回的清单:候选属于旧的地址/密钥/协议组合。 */
   const dropCandidates = (): void => {
@@ -391,11 +395,15 @@ export function CustomProviderCard(props: {
     setCandidates(undefined)
     setPicked(new Set())
     setFilter('')
+    setManual(false)
   }
   const editConnection = (setter: (value: string) => void) => (value: string): void => {
     setter(value)
     dropCandidates()
     setFailure(undefined)
+    setPinnedRoute(undefined)
+    setCredentialStored(false)
+    setProfileStored(false)
   }
 
   const showFailure = (message: string, code?: string): void => {
@@ -409,9 +417,62 @@ export function CustomProviderCard(props: {
     setManual(true)
   }
 
+  const readLatestState = async (refreshRemote: boolean): Promise<{
+    revision: number
+    liveTaken: string[]
+    allTaken: string[]
+    explicitUsedRefs: Set<string>
+  }> => {
+    const liveSet = new Set<string>()
+    const explicitUsedRefs = new Set<string>()
+    const collectProvidersMap = (nsView: SettingsNamespaceView | undefined) => {
+      for (const layer of [nsView?.user, nsView?.value]) {
+        if (!layer || typeof layer !== 'object' || Array.isArray(layer)) continue
+        const providers = (layer as Record<string, unknown>)['providers']
+        if (!providers || typeof providers !== 'object' || Array.isArray(providers)) continue
+        for (const [id, entry] of Object.entries(providers as Record<string, unknown>)) {
+          liveSet.add(id)
+          if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+            const env = (entry as Record<string, unknown>)['apiKeyEnv']
+            explicitUsedRefs.add(typeof env === 'string' && env.length > 0 ? env : deriveKeyRef(id))
+          }
+        }
+      }
+    }
+    const snap = typeof store.getSnapshot === 'function' ? store.getSnapshot() : undefined
+    if (snap) {
+      for (const row of snap.rows) {
+        const id = providerIdOf(row.entry)
+        liveSet.add(id)
+        explicitUsedRefs.add(row.apiKeyEnv ?? deriveKeyRef(id))
+      }
+      collectProvidersMap(snap.namespaces.get('llm-pi-ai'))
+    }
+    const describeNs = ctx.configForms.describe().getSnapshot().view?.namespaces.find((view) => view.ns === 'llm-pi-ai')
+    collectProvidersMap(describeNs)
+    if (refreshRemote && typeof ctx.remote.llm?.listConfigurableProviders === 'function') {
+      try {
+        const listed = await ctx.remote.llm.listConfigurableProviders()
+        if (listed.ok) {
+          for (const entry of listed.value) {
+            const id = providerIdOf(entry)
+            liveSet.add(id)
+          }
+        }
+      } catch { /* 刷新失败仍沿用本地已知快照 */ }
+    }
+    const allTaken = [...new Set([...taken, ...liveSet])]
+    return {
+      revision: describeNs?.revision ?? revision,
+      liveTaken: [...liveSet],
+      allTaken,
+      explicitUsedRefs,
+    }
+  }
+
   const connect = async (): Promise<void> => {
-    if (readOnly || busy || baseURL.trim() === '' || keyFailure !== undefined) return
-    const normalized = normalizeBaseURL(baseURL)
+    if (readOnly || busy || !connectionValid) return
+    const normalized = normalizeBaseURL(baseURL, protocol)
     setBaseURL(normalized)
     setConnecting(true)
     setFailure(undefined)
@@ -444,30 +505,43 @@ export function CustomProviderCard(props: {
   }
 
   const save = async (): Promise<void> => {
-    if (readOnly || busy || pickedCount === 0) return
-    const normalized = normalizeBaseURL(baseURL)
-    const route = pinnedRoute ?? deriveRoute(normalized, taken)
-    if (pinnedRoute === undefined) setPinnedRoute(route)
+    if (readOnly || busy || !connectionValid || pickedCount === 0) return
+    const normalized = normalizeBaseURL(baseURL, protocol)
     setSaving(true)
     setFailure(undefined)
     try {
-      let models: Record<string, unknown>[]
-      if (candidates === undefined) {
-        models = manualList.map((id) => ({ id }))
-      } else {
-        models = candidates.filter((candidate) => picked.has(candidate.id)).map((candidate) => {
-          const model: Record<string, unknown> = { id: candidate.id }
-          if (typeof candidate.name === 'string' && candidate.name !== candidate.id) model['name'] = candidate.name
-          if (typeof candidate.contextWindow === 'number') model['contextWindow'] = candidate.contextWindow
-          if (typeof candidate.maxTokens === 'number') model['maxTokens'] = candidate.maxTokens
-          const input = candidate['inputModalities']
-          if (Array.isArray(input)) {
-            const kinds = input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image')
-            if (kinds.length > 0) model['input'] = kinds
-          }
-          return model
-        })
+      const latest = await readLatestState(!credentialStored)
+      let route = pinnedRoute !== undefined && (!latest.liveTaken.includes(pinnedRoute) || credentialStored)
+        ? pinnedRoute
+        : deriveRoute(normalized, latest.allTaken)
+      if (pinnedRoute === undefined || (!credentialStored && latest.liveTaken.includes(pinnedRoute))) {
+        const blocked = new Set(latest.allTaken)
+        while (latest.explicitUsedRefs.has(deriveKeyRef(route))) {
+          blocked.add(route)
+          route = deriveRoute(normalized, [...blocked])
+        }
       }
+      if (route !== pinnedRoute) setPinnedRoute(route)
+
+      const discoveredModels = candidates === undefined
+        ? []
+        : candidates.filter((candidate) => picked.has(candidate.id)).map((candidate) => {
+            const model: Record<string, unknown> = { id: candidate.id }
+            if (typeof candidate.name === 'string' && candidate.name !== candidate.id) model['name'] = candidate.name
+            if (typeof candidate.contextWindow === 'number') model['contextWindow'] = candidate.contextWindow
+            if (typeof candidate.maxTokens === 'number') model['maxTokens'] = candidate.maxTokens
+            const input = candidate['inputModalities']
+            if (Array.isArray(input)) {
+              const kinds = input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image')
+              if (kinds.length > 0) model['input'] = kinds
+            }
+            return model
+          })
+      const seenIds = new Set(discoveredModels.map((model) => model['id'] as string))
+      const manualAdditions = manual
+        ? manualList.filter((id) => !seenIds.has(id)).map((id) => ({ id }))
+        : []
+      let models: Record<string, unknown>[] = [...discoveredModels, ...manualAdditions]
       const ids = models.map((model) => model['id'] as string)
       /* models.dev 补空字段;查询失败或查不到就静默沿用发现结果。 */
       try {
@@ -479,14 +553,26 @@ export function CustomProviderCard(props: {
         })
       } catch { /* 补全失败不挡保存 */ }
       const name = displayName.trim() || defaultName(normalized) || route
+      const keyRef = deriveKeyRef(route)
+      let keyExistedBefore = false
+      let wroteCredentialNow = false
       /* 密钥先写:settings.mutate 触发 settings/document-updated,模型目录随
          之刷新;密钥必须在此之前落库,否则目录把这条路由看成缺凭据。 */
       if (!credentialStored) {
-        const credential = await ctx.remote.credentials.set(deriveKeyRef(route), keyValue.length > 0 ? keyValue : NO_KEY_PLACEHOLDER)
+        if (typeof ctx.remote.credentials.describe === 'function') {
+          try {
+            const described = await ctx.remote.credentials.describe([keyRef])
+            if (described.ok && described.value[keyRef]?.configured === true) {
+              keyExistedBefore = true
+            }
+          } catch { /* 忽略预检失败 */ }
+        }
+        const credential = await ctx.remote.credentials.set(keyRef, keyValue.length > 0 ? keyValue : NO_KEY_PLACEHOLDER)
         if (!credential.ok) {
           setFailure(failureMessage(credential))
           return
         }
+        wroteCredentialNow = true
         setCredentialStored(true)
       }
       if (!profileStored) {
@@ -496,17 +582,31 @@ export function CustomProviderCard(props: {
           models,
           cacheRetention: 'long',
           displayName: name,
-          apiKeyEnv: deriveKeyRef(route),
+          apiKeyEnv: keyRef,
         }
         const response = await ctx.remote.settings.mutate(
           'llm-pi-ai',
           [{ op: 'set', path: ['providers', route], value: profile }],
-          revision,
+          latest.revision,
         )
         const result = response
         if (!result.ok) {
-          if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
-          else setFailure(failureMessage(result))
+          if (result.error?.code === 'settings-conflict') {
+            if (typeof store.load === 'function') {
+              await store.load().catch(() => undefined)
+            }
+            const after = await readLatestState(true)
+            if (after.allTaken.includes(route)) {
+              if (wroteCredentialNow && !keyExistedBefore && !after.explicitUsedRefs.has(keyRef) && typeof ctx.remote.credentials.unset === 'function') {
+                await ctx.remote.credentials.unset(keyRef).catch(() => undefined)
+              }
+              setPinnedRoute(undefined)
+              setCredentialStored(false)
+            }
+            setFailure(text().conflict)
+          } else {
+            setFailure(failureMessage(result))
+          }
           return
         }
         store.acceptNamespaceView(result.value)
@@ -538,6 +638,29 @@ export function CustomProviderCard(props: {
     })
   }
   const many = candidates !== undefined && candidates.length > 20
+  const manualInputBlock = (
+    <Flex direction="column" gap="2" className="models-field" minWidth="0">
+      <Text size="2" weight="medium" className="models-field-label">
+        {text().manualModels}
+      </Text>
+      <Input
+        ref={(node) => {
+          if (node && manualFocus.pending) {
+            manualFocus.pending = false
+            node.focus()
+          }
+        }}
+        type="text"
+        className="models-input"
+        value={manualIds}
+        aria-label={text().manualModels}
+        disabled={readOnly || busy}
+        onChange={setManualIds} />
+      <Text size="1" color="gray" className="models-hint">
+        {text().manualModelsHint}
+      </Text>
+    </Flex>
+  )
 
   return (
     <Box className="models-editor" data-testid="dsh-models-add-endpoint">
@@ -602,21 +725,7 @@ export function CustomProviderCard(props: {
           {failure}
         </>
       </Notice> : null}
-      {manual && candidates === undefined ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="2" weight="medium" className="models-field-label">
-          {text().manualModels}
-        </Text>
-        <Input
-          type="text"
-          className="models-input"
-          value={manualIds}
-          aria-label={text().manualModels}
-          disabled={readOnly || busy}
-          onChange={setManualIds} />
-        <Text size="1" color="gray" className="models-hint">
-          {text().manualModelsHint}
-        </Text>
-      </Flex> : null}
+      {manual && candidates === undefined ? manualInputBlock : null}
       {candidates === undefined ? null : <Fragment>
         <Text size="2" weight="medium" className="models-field-label">
           {text().foundModels(candidates.length)}
@@ -660,6 +769,17 @@ export function CustomProviderCard(props: {
           </li>)}
           </ul>
         </Flex>
+        {manual ? manualInputBlock : <Button
+          variant="ghost"
+          size="sm"
+          className="models-button models-manual-toggle"
+          disabled={readOnly || busy}
+          onClick={() => {
+            manualFocus.pending = true
+            setManual(true)
+          }}>
+          {text().manualMore}
+        </Button>}
       </Fragment>}
       {candidates !== undefined || manual ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
         <Text size="2" weight="medium" className="models-field-label">
@@ -669,7 +789,7 @@ export function CustomProviderCard(props: {
           type="text"
           className="models-input"
           value={displayName}
-          placeholder={baseURL.trim() === '' ? text().displayName : defaultName(normalizeBaseURL(baseURL))}
+          placeholder={baseURL.trim() === '' ? text().displayName : defaultName(normalizeBaseURL(baseURL, protocol))}
           aria-label={text().displayName}
           disabled={readOnly || busy}
           onChange={setDisplayName} />
@@ -685,7 +805,7 @@ export function CustomProviderCard(props: {
         {candidates !== undefined ? <Button
           variant="primary"
           className="models-button models-button-primary"
-          disabled={readOnly || busy || pickedCount === 0}
+          disabled={readOnly || busy || !connectionValid || pickedCount === 0}
           onClick={() => void save()}>
           {saving ? <Fragment>
             <ActivityDots />
@@ -696,7 +816,7 @@ export function CustomProviderCard(props: {
           {manual ? <Button
             variant="secondary"
             className="models-button"
-            disabled={readOnly || busy || baseURL.trim() === '' || keyFailure !== undefined}
+            disabled={readOnly || busy || !connectionValid}
             onClick={() => void connect()}>
             {connecting ? <Fragment>
               <ActivityDots />
@@ -706,7 +826,7 @@ export function CustomProviderCard(props: {
           {manual ? <Button
             variant="primary"
             className="models-button models-button-primary"
-            disabled={readOnly || busy || pickedCount === 0}
+            disabled={readOnly || busy || !connectionValid || pickedCount === 0}
             onClick={() => void save()}>
             {saving ? <Fragment>
               <ActivityDots />
@@ -715,7 +835,7 @@ export function CustomProviderCard(props: {
           </Button> : <Button
             variant="primary"
             className="models-button models-button-primary"
-            disabled={readOnly || busy || baseURL.trim() === '' || keyFailure !== undefined}
+            disabled={readOnly || busy || !connectionValid}
             onClick={() => void connect()}>
             {connecting ? <Fragment>
               <ActivityDots />

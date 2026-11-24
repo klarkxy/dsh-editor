@@ -17,7 +17,9 @@ import {
   discoveryFailureKind,
   isAccountRow,
   isLocalNetworkHost,
+  isLoopbackHost,
   isQuoted,
+  isValidEndpointBaseURL,
   joinProviderRows,
   layoutOf,
   modelDrafts,
@@ -668,19 +670,40 @@ describe('normalizeBaseURL', () => {
     expect(normalizeBaseURL('')).toBe('')
   })
 
-  it('prepends https:// for public hosts and http:// for local-network hosts', () => {
+  it('prepends http:// only for loopback hosts and https:// for public and LAN hosts', () => {
     expect(normalizeBaseURL('api.moonshot.cn/v1')).toBe('https://api.moonshot.cn/v1')
     expect(normalizeBaseURL('8.8.8.8/v1')).toBe('https://8.8.8.8/v1')
     expect(normalizeBaseURL('127.0.0.1:3425/v1')).toBe('http://127.0.0.1:3425/v1')
     expect(normalizeBaseURL('localhost:11434')).toBe('http://localhost:11434')
-    expect(normalizeBaseURL('192.168.1.5:8000/v1/chat/completions')).toBe('http://192.168.1.5:8000/v1')
-    expect(normalizeBaseURL('nas:8080/v1')).toBe('http://nas:8080/v1')
+    expect(normalizeBaseURL('192.168.1.5:8000/v1/chat/completions')).toBe('https://192.168.1.5:8000/v1')
+    expect(normalizeBaseURL('nas:8080/v1')).toBe('https://nas:8080/v1')
   })
 
-  it('keeps an explicit scheme untouched, local host or not', () => {
+  it('keeps an explicit scheme untouched, local or LAN host or not', () => {
     expect(normalizeBaseURL('http://localhost:11434/')).toBe('http://localhost:11434')
+    expect(normalizeBaseURL('http://192.168.1.5:8000/v1')).toBe('http://192.168.1.5:8000/v1')
     expect(normalizeBaseURL('https://127.0.0.1:3425')).toBe('https://127.0.0.1:3425')
     expect(normalizeBaseURL('https://api.deepseek.com//')).toBe('https://api.deepseek.com')
+  })
+
+  it('wraps schemeless bare IPv6 hosts in brackets without double-wrapping', () => {
+    expect(normalizeBaseURL('::1/v1')).toBe('http://[::1]/v1')
+    expect(normalizeBaseURL('::1:11434/v1')).toBe('http://[::1]:11434/v1')
+    expect(normalizeBaseURL('[::1]/v1')).toBe('http://[::1]/v1')
+    expect(normalizeBaseURL('[::1]:11434/v1')).toBe('http://[::1]:11434/v1')
+    expect(normalizeBaseURL('2001:db8::1/v1')).toBe('https://[2001:db8::1]/v1')
+    expect(() => new URL(normalizeBaseURL('::1/v1'))).not.toThrow()
+    expect(() => new URL(normalizeBaseURL('::1:11434/v1'))).not.toThrow()
+  })
+
+  it('strips /v1/messages, /messages, and trailing /v1 for anthropic-messages while keeping /v1 for OpenAI-compatible protocols', () => {
+    expect(normalizeBaseURL('https://api.anthropic.com/v1/messages', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://api.anthropic.com/v1', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://api.anthropic.com/messages', 'anthropic-messages')).toBe('https://api.anthropic.com')
+    expect(normalizeBaseURL('https://gateway.example.com/anthropic/v1/messages', 'anthropic-messages')).toBe('https://gateway.example.com/anthropic')
+    expect(normalizeBaseURL('https://gateway.example.com/anthropic/v1/', 'anthropic-messages')).toBe('https://gateway.example.com/anthropic')
+    expect(normalizeBaseURL('https://api.moonshot.cn/v1/messages', 'openai-completions')).toBe('https://api.moonshot.cn/v1')
+    expect(normalizeBaseURL('https://api.moonshot.cn/v1/chat/completions', 'openai-completions')).toBe('https://api.moonshot.cn/v1')
   })
 
   it('strips a trailing API call path, repeatedly and case-insensitively', () => {
@@ -695,6 +718,28 @@ describe('normalizeBaseURL', () => {
 
   it('keeps query strings untouched', () => {
     expect(normalizeBaseURL('https://x.test/v1?key=1')).toBe('https://x.test/v1?key=1')
+  })
+})
+
+describe('isLoopbackHost and isValidEndpointBaseURL', () => {
+  it('recognizes only loopback hosts as loopback', () => {
+    for (const host of ['localhost', 'sub.localhost', '127.0.0.1', '127.55.0.9', '::1', '[::1]']) {
+      expect(isLoopbackHost(host), host).toBe(true)
+    }
+    for (const host of ['', '192.168.1.5', '10.0.0.1', '172.16.0.1', 'nas', 'nas.local', '8.8.8.8', 'api.moonshot.cn']) {
+      expect(isLoopbackHost(host), host).toBe(false)
+    }
+  })
+
+  it('validates HTTP(S) URLs with a non-empty host', () => {
+    expect(isValidEndpointBaseURL('')).toBe(false)
+    expect(isValidEndpointBaseURL('   ')).toBe(false)
+    expect(isValidEndpointBaseURL('http://')).toBe(false)
+    expect(isValidEndpointBaseURL('ftp://example.com/v1')).toBe(false)
+    expect(isValidEndpointBaseURL('not a url')).toBe(false)
+    expect(isValidEndpointBaseURL('::1/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('::1:11434/v1')).toBe(true)
+    expect(isValidEndpointBaseURL('api.anthropic.com/v1', 'anthropic-messages')).toBe(true)
   })
 })
 

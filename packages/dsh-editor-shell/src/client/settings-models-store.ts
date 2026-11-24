@@ -463,9 +463,7 @@ const LISTING_PATH_SUFFIXES = ['/chat/completions', '/completions', '/responses'
 /**
  * Whether a hostname sits on the local network: `localhost`, `*.localhost`,
  * `*.local`, single-label hosts, the IPv6 loopback and the private IPv4
- * ranges (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16). Local gateways
- * almost never terminate TLS, so a scheme-less address pointing at them
- * defaults to `http` rather than `https`.
+ * ranges (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16).
  */
 export function isLocalNetworkHost(hostname: string): boolean {
   let host = hostname.trim().toLowerCase()
@@ -481,30 +479,74 @@ export function isLocalNetworkHost(hostname: string): boolean {
   return !host.includes('.')
 }
 
-/* 没写协议时从输入开头还原主机名:`host:port/path`、`[v6]:port` 和未加方括
-   号的 v6 都先剥掉端口,交给 isLocalNetworkHost 判断。 */
-function hostOfSchemeless(url: string): string {
-  const head = url.split('/')[0] ?? ''
+/**
+ * Only loopback hosts (`localhost`, `*.localhost`, `127/8`, `::1`) auto-default
+ * schemeless inputs to plaintext `http://`. Non-loopback LAN addresses default
+ * to `https://` unless the caller explicitly specifies `http://`.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  let host = hostname.trim().toLowerCase()
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1)
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host === '::1' || host === '0:0:0:0:0:0:0:1' || host === '0000:0000:0000:0000:0000:0000:0000:0001') return true
+  const ip = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ip !== null) {
+    const octets = [Number(ip[1]), Number(ip[2]), Number(ip[3]), Number(ip[4])]
+    return octets[0] === 127 && octets.every((octet) => octet >= 0 && octet <= 255)
+  }
+  return false
+}
+
+function isValidIpv6Literal(candidate: string): boolean {
+  if (!candidate.includes(':')) return false
+  try {
+    const parsed = new URL(`http://[${candidate}]`)
+    return parsed.hostname.startsWith('[') && parsed.hostname.endsWith(']')
+  } catch {
+    return false
+  }
+}
+
+/* 没写协议时从输入开头还原主机名并按需为裸 IPv6 补方括号:`host:port/path`、
+   `[v6]:port`、`::1/v1` 和 `::1:11434/v1` 都可安全交给 URL 解析与 isLoopbackHost。 */
+function parseSchemelessAuthority(url: string): { host: string; authorityWithRest: string } {
+  const sep = url.search(/[/?#]/)
+  const head = sep === -1 ? url : url.slice(0, sep)
+  const rest = sep === -1 ? '' : url.slice(sep)
   if (head.startsWith('[')) {
     const end = head.indexOf(']')
-    return end === -1 ? head.slice(1) : head.slice(1, end)
+    return { host: end === -1 ? head.slice(1) : head.slice(1, end), authorityWithRest: url }
   }
   const first = head.indexOf(':')
-  if (first === -1) return head
-  return head.indexOf(':', first + 1) === -1 ? head.slice(0, first) : head
+  if (first === -1) return { host: head, authorityWithRest: url }
+  const second = head.indexOf(':', first + 1)
+  if (second === -1) return { host: head.slice(0, first), authorityWithRest: url }
+  if (isValidIpv6Literal(head)) return { host: head, authorityWithRest: `[${head}]${rest}` }
+  const last = head.lastIndexOf(':')
+  const addr = head.slice(0, last)
+  const port = head.slice(last + 1)
+  if (/^\d+$/.test(port) && Number(port) >= 1 && Number(port) <= 65535 && isValidIpv6Literal(addr)) {
+    return { host: addr, authorityWithRest: `[${addr}]:${port}${rest}` }
+  }
+  return { host: head, authorityWithRest: url }
 }
 
 /**
  * The Base URL a typed/pasted value denotes. When the scheme is missing it
- * adds `http://` for local-network hosts (see isLocalNetworkHost) and
- * `https://` otherwise, drops trailing slashes, and repeatedly strips a
- * trailing API call path (`/v1/chat/completions` → `/v1`). Query strings
- * are left alone.
+ * adds `http://` only for loopback hosts (see isLoopbackHost) and `https://`
+ * otherwise, wraps schemeless bare IPv6 literals in brackets, drops trailing
+ * slashes, and repeatedly strips a trailing API call path
+ * (`/v1/chat/completions` → `/v1`; for `anthropic-messages`, also strips
+ * trailing `/v1` since the upstream Anthropic client appends `/v1/messages`).
+ * Query strings are left alone.
  */
-export function normalizeBaseURL(raw: string): string {
+export function normalizeBaseURL(raw: string, protocol?: string): string {
   let url = raw.trim()
   if (url === '') return ''
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) url = `${isLocalNetworkHost(hostOfSchemeless(url)) ? 'http' : 'https'}://${url}`
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
+    const { host, authorityWithRest } = parseSchemelessAuthority(url)
+    url = `${isLoopbackHost(host) ? 'http' : 'https'}://${authorityWithRest}`
+  }
   url = url.replace(/\/+$/, '')
   for (;;) {
     const lower = url.toLowerCase()
@@ -512,7 +554,25 @@ export function normalizeBaseURL(raw: string): string {
     if (suffix === undefined) break
     url = url.slice(0, url.length - suffix.length).replace(/\/+$/, '')
   }
+  if (protocol === 'anthropic-messages' && url.toLowerCase().endsWith('/v1')) {
+    url = url.slice(0, url.length - '/v1'.length).replace(/\/+$/, '')
+  }
   return url
+}
+
+/**
+ * Synchronous endpoint URL validity shared between Connect and Save so manual
+ * model mode cannot submit empty, non-HTTP(S), or hostless URLs.
+ */
+export function isValidEndpointBaseURL(raw: string, protocol?: string): boolean {
+  const normalized = normalizeBaseURL(raw, protocol)
+  if (normalized === '') return false
+  try {
+    const parsed = new URL(normalized)
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname.trim() !== ''
+  } catch {
+    return false
+  }
 }
 
 /* 第二级公共后缀:域名像 foo.example.com.cn 时,路由取 example 而不是 com。 */

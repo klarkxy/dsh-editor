@@ -301,6 +301,7 @@ describe('DSH snapshot adapter', () => {
 describe('turnFailureCopy', () => {
   it('names the cause for every mapped failure group', () => {
     expect(turnFailureCopy('INVALID_CREDENTIAL', 'bad key')).toEqual({ text: '模型服务拒绝了这次请求：API 密钥缺失或无效。到「设置 → 模型」检查这个接口的密钥。' })
+    expect(turnFailureCopy('ACCOUNT_TOKEN_INVALID', '')).toEqual({ text: '需要登录 DeepSeek 账号。到「设置 → 模型」登录后重试。' })
     expect(turnFailureCopy('ACCOUNT_SIGNED_OUT', '')).toEqual({ text: '需要登录 DeepSeek 账号。到「设置 → 模型」登录后重试。' })
     expect(turnFailureCopy('QUOTA', '')).toEqual({ text: '模型额度已用完。充值后重试，或到「设置 → 模型」换一个模型。' })
     expect(turnFailureCopy('RATE_LIMIT', 'slow down')).toEqual({ text: '请求太频繁，模型服务暂时拒绝了。稍等一会儿再试。' })

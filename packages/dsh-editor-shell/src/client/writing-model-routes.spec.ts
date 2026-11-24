@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { DEFAULT_WRITING_PREFERENCES, type WritingPreferences } from '../writing-settings.tsx'
 import { resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { WritingModelRoutesView } from './writing-model-routes.tsx'
+import { shouldClearOptimisticRoute, WritingModelRoutesView } from './writing-model-routes.tsx'
 import { carriedReasoningEffort, firstUsableCatalogModel, mergeCatalogOptions, parseRouteKey, routeKey, saveWritingModelRoute, type CatalogModelOption } from '../model/writing-model-routes.ts'
 
 afterEach(resetLocaleForTests)
@@ -89,5 +89,12 @@ describe('native writing routes', () => {
     const failed = render(createElement(WritingModelRoutesView, { snapshot: fixture().scope.getSnapshot(), catalog, writable: true, failure: 'revision conflict', onSave: () => {} }))
     expect(failed).toContain('role="alert"')
     expect(failed).toContain('revision conflict')
+  })
+  it('clears optimistic state on revision bump or when snapshot already matches the target route', () => {
+    const target = { provider: 'p', model: 'a', reasoningEffort: 'high' }
+    const pending = { field: 'chatModel' as const, route: target, revision: 7 }
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: DEFAULT_WRITING_PREFERENCES, revision: 7, writable: true })).toBe(false)
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: DEFAULT_WRITING_PREFERENCES, revision: 8, writable: true })).toBe(true)
+    expect(shouldClearOptimisticRoute(pending, { status: 'ready', value: { ...DEFAULT_WRITING_PREFERENCES, chatModel: target }, revision: 7, writable: true })).toBe(true)
   })
 })

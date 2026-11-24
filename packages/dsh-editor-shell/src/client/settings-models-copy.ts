@@ -90,6 +90,7 @@ export function text() {
   connectFailed: (message: string) => t('models.connectFailed', { message }),
   manualModels: t('models.manualModels'),
   manualModelsHint: t('models.manualModelsHint'),
+  manualMore: t('models.manualMore'),
   foundModels: (n: number) => t('models.foundModels', { n }),
   filterModels: t('models.filterModels'),
   manyModelsHint: t('models.manyModelsHint'),

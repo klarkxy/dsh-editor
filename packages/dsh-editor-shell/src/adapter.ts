@@ -74,7 +74,7 @@ const TURN_FAILURE_KEYS: Record<string, MessageKey> = {
   MISSING_CREDENTIAL: 'chat.failure.credential',
   INVALID_CREDENTIAL: 'chat.failure.credential',
   AUTH: 'chat.failure.credential',
-  ACCOUNT_TOKEN_INVALID: 'chat.failure.credential',
+  ACCOUNT_TOKEN_INVALID: 'chat.failure.signIn',
   ACCOUNT_SIGN_IN_REQUIRED: 'chat.failure.signIn',
   ACCOUNT_SIGNED_OUT: 'chat.failure.signIn',
   QUOTA: 'chat.failure.quota',
