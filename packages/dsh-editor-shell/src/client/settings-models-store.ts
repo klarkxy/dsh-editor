@@ -453,3 +453,167 @@ export function routeFailure(route: string, taken: string[]): 'routeInvalid' | '
   if (taken.includes(route)) return 'routeTaken'
   return undefined
 }
+
+/* ── 添加接口卡片用的纯逻辑：URL 规范化、路由/名称推导、失败分类 ── */
+
+/* 常见兼容网关会把「接口路径」当 Base URL 贴出来；发现请求自己会再拼这些
+   后缀,所以录入时把结尾的调用路径剥掉,只留真正的 Base URL。 */
+const LISTING_PATH_SUFFIXES = ['/chat/completions', '/completions', '/responses', '/messages', '/models']
+
+/**
+ * Whether a hostname sits on the local network: `localhost`, `*.localhost`,
+ * `*.local`, single-label hosts, the IPv6 loopback and the private IPv4
+ * ranges (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16). Local gateways
+ * almost never terminate TLS, so a scheme-less address pointing at them
+ * defaults to `http` rather than `https`.
+ */
+export function isLocalNetworkHost(hostname: string): boolean {
+  let host = hostname.trim().toLowerCase()
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1)
+  if (host === '' || host === '::1') return true
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
+  const ip = host.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/)
+  if (ip !== null) {
+    const a = Number(ip[1])
+    const b = Number(ip[2])
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
+  }
+  return !host.includes('.')
+}
+
+/* 没写协议时从输入开头还原主机名:`host:port/path`、`[v6]:port` 和未加方括
+   号的 v6 都先剥掉端口,交给 isLocalNetworkHost 判断。 */
+function hostOfSchemeless(url: string): string {
+  const head = url.split('/')[0] ?? ''
+  if (head.startsWith('[')) {
+    const end = head.indexOf(']')
+    return end === -1 ? head.slice(1) : head.slice(1, end)
+  }
+  const first = head.indexOf(':')
+  if (first === -1) return head
+  return head.indexOf(':', first + 1) === -1 ? head.slice(0, first) : head
+}
+
+/**
+ * The Base URL a typed/pasted value denotes. When the scheme is missing it
+ * adds `http://` for local-network hosts (see isLocalNetworkHost) and
+ * `https://` otherwise, drops trailing slashes, and repeatedly strips a
+ * trailing API call path (`/v1/chat/completions` → `/v1`). Query strings
+ * are left alone.
+ */
+export function normalizeBaseURL(raw: string): string {
+  let url = raw.trim()
+  if (url === '') return ''
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) url = `${isLocalNetworkHost(hostOfSchemeless(url)) ? 'http' : 'https'}://${url}`
+  url = url.replace(/\/+$/, '')
+  for (;;) {
+    const lower = url.toLowerCase()
+    const suffix = LISTING_PATH_SUFFIXES.find((tail) => lower.endsWith(tail))
+    if (suffix === undefined) break
+    url = url.slice(0, url.length - suffix.length).replace(/\/+$/, '')
+  }
+  return url
+}
+
+/* 第二级公共后缀:域名像 foo.example.com.cn 时,路由取 example 而不是 com。 */
+const SECOND_LEVEL_TLDS: ReadonlySet<string> = new Set(['com', 'co', 'net', 'org', 'ac', 'gov', 'edu'])
+
+/* IPv4 字面量、IPv6(hostname 带冒号)和单段主机名都按本地服务算。 */
+function localHostname(hostname: string): boolean {
+  return hostname === '' || hostname.includes(':') || !hostname.includes('.') || /^\d+(\.\d+){3}$/.test(hostname)
+}
+
+/* 剥掉顶级域和常见的第二级公共后缀后剩下的最后一段。 */
+function hostBaseLabel(hostname: string): string {
+  const labels = hostname.split('.')
+  labels.pop()
+  if (labels.length >= 2 && SECOND_LEVEL_TLDS.has(labels[labels.length - 1]!)) labels.pop()
+  return labels[labels.length - 1] ?? ''
+}
+
+/* 路由 id 必须同时是合法的设置键和凭据名前缀(见 ROUTE_PATTERN 的注释)。 */
+function sanitizeRouteLabel(label: string): string {
+  const cleaned = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  if (cleaned === '') return 'custom'
+  return /^[a-z]/.test(cleaned) ? cleaned : `p-${cleaned}`
+}
+
+/**
+ * The route a new provider gets from its Base URL: the host's base label
+ * (api.moonshot.cn → moonshot, open.bigmodel.cn → bigmodel), `local` for IP
+ * literals and single-label hosts, `custom` when nothing can be derived.
+ * Collisions with `taken` resolve by appending -2, -3, …
+ */
+export function deriveRoute(baseURL: string, taken: string[]): string {
+  let base = 'custom'
+  try {
+    const hostname = new URL(baseURL).hostname.toLowerCase()
+    base = localHostname(hostname) ? 'local' : sanitizeRouteLabel(hostBaseLabel(hostname))
+  } catch { /* unparseable input keeps the custom base */ }
+  let route = base
+  for (let n = 2; taken.includes(route); n += 1) route = `${base}-${n}`
+  return route
+}
+
+/**
+ * The display name prefilled for a new provider: the capitalized host label
+ * (api.moonshot.cn → Moonshot). Returns undefined for local and IP hosts —
+ * a raw `host:port` is no friendlier name, so callers should substitute a
+ * localized service label instead.
+ */
+export function deriveDisplayName(baseURL: string): string | undefined {
+  let url: URL
+  try {
+    url = new URL(baseURL)
+  } catch {
+    return 'Custom'
+  }
+  const hostname = url.hostname.toLowerCase()
+  if (localHostname(hostname)) return undefined
+  const base = hostBaseLabel(hostname)
+  if (base === '') return url.host
+  return base.charAt(0).toUpperCase() + base.slice(1)
+}
+
+/* 兼容 OpenAI/Anthropic 的客户端没有密钥就拒绝发请求,而免密钥的服务(常见
+   于本机网关)会忽略这份值;作者留空密钥时写入占位串,让这类服务也能直接
+   对话。 */
+export const NO_KEY_PLACEHOLDER = 'no-key'
+
+export type DiscoveryFailureKind = 'key' | 'address' | 'network' | 'unsupported' | 'other'
+
+/**
+ * Classify a `discoverModels` failure by the pi-ai adapter's upstream
+ * LlmError wording (src/discovery.ts in dsh-llm-pi-ai) so the card can show
+ * an actionable message instead of the wire text. The RPC may wrap or drop
+ * the upstream code, so both `code` and `message` are consulted.
+ */
+export function discoveryFailureKind(message: string, code?: string): DiscoveryFailureKind {
+  if (code === 'INVALID_CREDENTIAL'
+    || /answered 401|answered 403|check the API key|API key is blank|characters no HTTP header can carry/i.test(message)) {
+    return 'key'
+  }
+  if (code === 'DISCOVERY_UNSUPPORTED' || /has no model listing this build can read/.test(message)) return 'unsupported'
+  if (/answered 404|did not answer with JSON|neither a "data" array|has no "models" array/.test(message)) return 'address'
+  if (/could not reach/.test(message)) return 'network'
+  return 'other'
+}
+
+/** Split a pasted model-id list on commas, whitespace and CJK separators, deduped in order. */
+export function parseModelIds(text: string): string[] {
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const part of text.split(/[\s,，、]+/)) {
+    const id = part.trim()
+    if (id === '' || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+/** Most compatible gateways speak openai-completions; it lists first without reordering the rest. */
+export function protocolOrder(protocols: string[]): string[] {
+  if (!protocols.includes('openai-completions')) return [...protocols]
+  return ['openai-completions', ...protocols.filter((value) => value !== 'openai-completions')]
+}

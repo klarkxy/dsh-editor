@@ -31,7 +31,7 @@ export function text() {
   edit: t('common.edit'),
   delete: t('common.delete'),
   add: t('models.add'),
-  addCustom: t('models.addCustom'),
+  addEndpoint: t('models.addEndpoint'),
   custom: t('common.custom'),
   confirmDeleteTitle: t('models.confirmDeleteTitle'),
   confirmDeleteManage: t('models.confirmDeleteManage'),
@@ -81,13 +81,22 @@ export function text() {
   modelAdvanced: t('models.params'),
   removeModel: t('models.removeModel'),
   deleteProvider: t('common.delete'),
-  customRoute: 'Provider ID',
-  customRouteHint: t('models.routeHint'),
-  customRouteInvalid: t('models.routeHint'),
-  customRouteTaken: t('models.routeTaken'),
-  customNeedsBaseUrl: t('models.needsBaseUrl'),
-  customNeedsModels: t('models.needsModels'),
-  createCustom: t('models.createProvider'),
+  baseUrlHint: t('models.baseUrlHint'),
+  connect: t('models.connect'),
+  connecting: t('models.connecting'),
+  connectKey: t('models.connectKey'),
+  connectAddress: t('models.connectAddress'),
+  connectNetwork: t('models.connectNetwork'),
+  connectFailed: (message: string) => t('models.connectFailed', { message }),
+  manualModels: t('models.manualModels'),
+  manualModelsHint: t('models.manualModelsHint'),
+  foundModels: (n: number) => t('models.foundModels', { n }),
+  filterModels: t('models.filterModels'),
+  manyModelsHint: t('models.manyModelsHint'),
+  addedNote: (name: string, n: number) => t('models.addedNote', { name, n }),
+  keyHint: t('models.keyHint'),
+  localService: (port: string) => t('models.localService', { port }),
+  localServiceNoPort: t('models.localServiceNoPort'),
   saving: t('common.saving'),
   creating: t('common.creating'),
   deleteTitle: t('models.deleteTitle'),
@@ -111,6 +120,17 @@ export function text() {
 
 export function modelFailureLabel(key: 'modelIdRequired' | 'modelIdDuplicate' | 'modelNameInvalid' | 'modelContextInvalid' | 'modelMaxTokensInvalid'): string {
   return text()[key]
+}
+
+/* Friendly protocol labels for the add/edit selects; unknown values pass through. */
+export function protocolLabel(value: string): string {
+  switch (value) {
+    case 'openai-completions': return t('models.protocolOpenaiCompletions')
+    case 'anthropic-messages': return t('models.protocolAnthropic')
+    case 'openai-responses': return t('models.protocolOpenaiResponses')
+    case 'google-generative-ai': return t('models.protocolGemini')
+    default: return value
+  }
 }
 
 export function targetLabel(row: ProviderRow): string {
